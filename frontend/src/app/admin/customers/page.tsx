@@ -1,0 +1,141 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Users, Search } from "lucide-react";
+import { listUsers, updateUserStatus } from "@/lib/api/users";
+import { useAuth } from "@/context/AuthContext";
+import { PageHeader } from "@/components/admin/PageHeader";
+import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { StatusBadge } from "@/components/admin/StatusBadge";
+import { Button } from "@/components/ui/Button";
+import type { ApiUser, Pagination } from "@/types/api";
+
+export default function AdminCustomersPage() {
+  const { user } = useAuth();
+  const canManageStatus = user?.role !== "co_admin";
+
+  const [customers, setCustomers] = useState<ApiUser[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  function load() {
+    setIsLoading(true);
+    listUsers({ role: "customer", search: debouncedSearch || undefined, page, limit: 20 })
+      .then(({ data, pagination: pg }) => {
+        setCustomers(data.users);
+        setPagination(pg ?? null);
+        setError(null);
+      })
+      .catch(() => setError("Could not load customers."))
+      .finally(() => setIsLoading(false));
+  }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(load, [page, debouncedSearch]);
+
+  async function handleToggleStatus(customer: ApiUser) {
+    const action = customer.isActive ? "deactivate" : "reactivate";
+    if (!confirm(`Are you sure you want to ${action} ${customer.name}'s account?`)) return;
+    setUpdatingId(customer._id);
+    try {
+      await updateUserStatus(customer._id, !customer.isActive);
+      load();
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader title="Customers" description="Browse registered customers and manage account access." />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-xs">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brown-500" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or email..."
+            className="h-9 w-full rounded border border-brown-600/20 bg-white pl-8 pr-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <TableSkeleton />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : customers.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No customers found"
+          description="Registered customers will show up here."
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3">Addresses</th>
+                <th className="px-4 py-3">Joined</th>
+                <th className="px-4 py-3">Status</th>
+                {canManageStatus && <th className="px-4 py-3" />}
+              </tr>
+            </thead>
+            <tbody>
+              {customers.map((customer) => (
+                <tr key={customer._id} className="border-b border-brown-600/10 last:border-none">
+                  <td className="px-4 py-3 font-medium text-green-950">{customer.name}</td>
+                  <td className="px-4 py-3 text-brown-600">{customer.email}</td>
+                  <td className="px-4 py-3 text-brown-600">{customer.phone ?? "—"}</td>
+                  <td className="px-4 py-3 text-brown-600">{customer.addresses.length}</td>
+                  <td className="px-4 py-3 text-brown-600">
+                    {new Date(customer.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={customer.isActive ? "active" : "inactive"} />
+                  </td>
+                  {canManageStatus && (
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={updatingId === customer._id}
+                        onClick={() => handleToggleStatus(customer)}
+                      >
+                        {updatingId === customer._id
+                          ? "Updating..."
+                          : customer.isActive
+                            ? "Deactivate"
+                            : "Reactivate"}
+                      </Button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <AdminPagination pagination={pagination} onPageChange={setPage} />
+    </div>
+  );
+}

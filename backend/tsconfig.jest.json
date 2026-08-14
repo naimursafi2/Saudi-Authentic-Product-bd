@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // This TypeScript toolchain no longer auto-scans `node_modules/@types`
+    // for ambient globals unless a package is explicitly listed here (or
+    // pulled in transitively via another package's triple-slash reference,
+    // which is how @types/node ends up available in the main build even
+    // without being listed). Jest's globals (describe/it/expect/jest) need
+    // an explicit entry to be visible in test files.
+    "types": ["node", "jest"]
+  },
+  "exclude": ["node_modules", "dist"]
+}

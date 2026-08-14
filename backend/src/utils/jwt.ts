@@ -1,0 +1,54 @@
+import jwt, { type SignOptions } from "jsonwebtoken";
+import { env } from "../config/env";
+import type { Role } from "../constants/roles";
+
+export interface JwtPayload {
+  sub: string; // user id
+  role: Role;
+  tokenVersion: number;
+}
+
+export function signAccessToken(payload: JwtPayload): string {
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: env.JWT_ACCESS_EXPIRES_IN as SignOptions["expiresIn"],
+  });
+}
+
+export function signRefreshToken(payload: JwtPayload): string {
+  return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+    expiresIn: env.JWT_REFRESH_EXPIRES_IN as SignOptions["expiresIn"],
+  });
+}
+
+export function verifyAccessToken(token: string): JwtPayload {
+  return jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtPayload;
+}
+
+export function verifyRefreshToken(token: string): JwtPayload {
+  return jwt.verify(token, env.JWT_REFRESH_SECRET) as JwtPayload;
+}
+
+export interface PasswordResetPayload {
+  sub: string;
+  tokenVersion: number;
+  purpose: "password_reset";
+}
+
+/**
+ * Short-lived, purpose-scoped token for the forgot-password flow. Signed
+ * with the access secret but carries `tokenVersion` so it's invalidated the
+ * moment the user changes their password or logs out of all devices.
+ */
+export function signPasswordResetToken(payload: Omit<PasswordResetPayload, "purpose">): string {
+  return jwt.sign({ ...payload, purpose: "password_reset" }, env.JWT_ACCESS_SECRET, {
+    expiresIn: "30m",
+  });
+}
+
+export function verifyPasswordResetToken(token: string): PasswordResetPayload {
+  const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as PasswordResetPayload;
+  if (payload.purpose !== "password_reset") {
+    throw new Error("Invalid token purpose");
+  }
+  return payload;
+}

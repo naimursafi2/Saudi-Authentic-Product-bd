@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Brand colors — Saudi Authentic Product */
+  --color-cream-50: #fefdfb;
+  --color-cream-100: #fbf9f5;
+  --color-cream-200: #f5f3ef;
+  --color-cream-300: #efeeea;
+  --color-cream-400: #eae8e4;
+
+  --color-green-950: #012d1d;
+  --color-green-900: #1b4332;
+  --color-green-800: #235240;
+
+  --color-gold-500: #d4af37;
+  --color-gold-600: #b8952b;
+  --color-gold-700: #735c00;
+
+  --color-brown-500: #705a4c;
+  --color-brown-600: #755e50;
+  --color-brown-700: #414844;
+
+  --color-ink-900: #1b1c1a;
+
+  --font-serif: "EB Garamond", "Times New Roman", serif;
+  --font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+}
+
+:root {
+  --background: var(--color-cream-100);
+  --foreground: var(--color-ink-900);
+}
+
+* {
+  border-color: rgba(113, 121, 115, 0.15);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background-color: var(--color-gold-500);
+  color: var(--color-green-950);
+}
+
+/* Hide scrollbar for horizontally scrolling review strip, category rows etc. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

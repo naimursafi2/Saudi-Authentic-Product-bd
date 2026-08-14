@@ -1,0 +1,53 @@
+import { Router } from "express";
+import * as reviewController from "../controllers/review.controller";
+import { authenticate } from "../middlewares/auth.middleware";
+import { authorize } from "../middlewares/rbac.middleware";
+import { validate } from "../middlewares/validate.middleware";
+import {
+  createReviewSchema,
+  listRecentReviewsQuerySchema,
+  listReviewsQuerySchema,
+} from "../validators/review.validator";
+import { mongoIdParamSchema, productIdParamSchema } from "../validators/common.validator";
+
+const router = Router();
+
+// -- Admin / Co-Admin / Super Admin --
+router.get(
+  "/",
+  authenticate,
+  authorize("admin", "super_admin", "co_admin"),
+  validate({ query: listReviewsQuerySchema }),
+  reviewController.listAllReviews
+);
+
+// -- Public --
+router.get(
+  "/recent",
+  validate({ query: listRecentReviewsQuerySchema }),
+  reviewController.listRecentReviews
+);
+router.get(
+  "/product/:productId",
+  validate({ params: productIdParamSchema, query: listReviewsQuerySchema }),
+  reviewController.listReviews
+);
+
+// -- Authenticated customers --
+router.post(
+  "/product/:productId",
+  authenticate,
+  validate({ params: productIdParamSchema, body: createReviewSchema }),
+  reviewController.createReview
+);
+
+// -- Staff only --
+router.delete(
+  "/:id",
+  authenticate,
+  authorize("admin", "super_admin", "co_admin"),
+  validate({ params: mongoIdParamSchema }),
+  reviewController.deleteReview
+);
+
+export default router;
