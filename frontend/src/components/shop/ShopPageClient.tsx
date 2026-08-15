@@ -147,9 +147,9 @@ export function ShopPageClient() {
           />
 
           {isLoading ? (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="aspect-[4/5] w-full animate-pulse rounded-lg bg-cream-300" />
+                <div key={i} className="aspect-[4/3] w-full animate-pulse rounded-lg bg-cream-300" />
               ))}
             </div>
           ) : error ? (
@@ -169,7 +169,7 @@ export function ShopPageClient() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {pageItems.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}

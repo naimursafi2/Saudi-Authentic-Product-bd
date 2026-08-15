@@ -1,6 +1,7 @@
 "use client";
 
 import { ShoppingCart } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { useCart } from "@/context/CartContext";
 
 export function AddToCartButton({
@@ -13,13 +14,16 @@ export function AddToCartButton({
   const { addItem } = useCart();
 
   return (
-    <button
+    <Button
       type="button"
+      variant="primary"
+      size="xs"
       aria-label="Add to cart"
       onClick={() => addItem(productId, variantId, 1)}
-      className="flex size-10 items-center justify-center rounded-full bg-green-900 text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] transition-transform hover:scale-105 hover:bg-green-950"
+      className="w-full gap-2 rounded-full shadow-sm transition-all duration-300 hover:shadow-[0_6px_16px_rgba(1,45,29,0.25)]"
     >
-      <ShoppingCart size={16} />
-    </button>
+      <ShoppingCart size={14} />
+      Add to Cart
+    </Button>
   );
 }

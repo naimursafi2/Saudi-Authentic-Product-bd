@@ -37,7 +37,7 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   }
 
   if (statusCode >= 500) {
-    console.error("💥 Unexpected error:", err);
+    console.error("Unexpected error:", err);
   }
 
   res.status(statusCode).json({

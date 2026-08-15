@@ -3,6 +3,7 @@ import { env } from "../config/env";
 import { UserModel } from "../models/User.model";
 import { CategoryModel } from "../models/Category.model";
 import { ProductModel } from "../models/Product.model";
+import { HomepageSectionModel } from "../models/HomepageSection.model";
 import { slugify } from "../utils/slugify";
 
 const CATEGORIES = [
@@ -151,11 +152,198 @@ const DATE_PRODUCTS = [
       { label: "1kg", priceBDT: 1950, stock: 20, sku: "SUK-1000" },
     ],
   },
+  {
+    name: "Khudri Dates - Everyday Madinah",
+    tagline: "A Madinah household staple, soft and mildly sweet",
+    description:
+      "Khudri dates are a everyday favorite across Saudi Arabia — reddish-brown, semi-soft, and delicately sweet. Versatile enough for daily snacking, baking, or breaking the fast.",
+    origin: "Madinah, Saudi Arabia",
+    badge: "Authentic" as const,
+    highlights: [
+      "Everyday Madinah variety",
+      "Semi-soft, mild sweetness",
+      "Great for cooking & baking",
+    ],
+    storageInstructions:
+      "Store in a cool, dry place. Refrigerate after opening for extended freshness.",
+    variants: [
+      { label: "500g", priceBDT: 850, stock: 55, sku: "KHU-500" },
+      { label: "1kg", priceBDT: 1600, stock: 30, sku: "KHU-1000" },
+    ],
+  },
+  {
+    name: "Anbara Dates - Rare Madinah Reserve",
+    tagline: "Large, exceptionally rare, reserved for connoisseurs",
+    description:
+      "Anbara dates are among the largest and rarest date varieties grown in Madinah, prized for their size, soft chew, and deep sweetness. A reserve-tier gift for those who know dates best.",
+    origin: "Madinah, Saudi Arabia",
+    badge: "Limited" as const,
+    isFeatured: true,
+    highlights: [
+      "Rare, large-format dates",
+      "Reserve-tier Madinah harvest",
+      "Deep, rounded sweetness",
+    ],
+    storageInstructions:
+      "Store in a cool, dry place. Refrigerate after opening for extended freshness.",
+    variants: [
+      {
+        label: "500g",
+        priceBDT: 1500,
+        compareAtPriceBDT: 1750,
+        stock: 20,
+        sku: "ANB-500",
+      },
+      {
+        label: "1kg",
+        priceBDT: 2800,
+        compareAtPriceBDT: 3200,
+        stock: 12,
+        sku: "ANB-1000",
+      },
+    ],
+  },
+  {
+    name: "Segai Dates - Two-Toned Madinah",
+    tagline: "Half golden, half brown — a striking natural bicolor",
+    description:
+      "Segai dates are instantly recognizable by their natural two-tone skin — golden at the crown, deep brown at the base — with a firm bite and balanced sweetness. A conversation-starting addition to any gift box.",
+    origin: "Madinah, Saudi Arabia",
+    badge: "New" as const,
+    isFeatured: true,
+    highlights: [
+      "Naturally two-toned skin",
+      "Firm, balanced sweetness",
+      "Striking gift-box centerpiece",
+    ],
+    storageInstructions:
+      "Store in a cool, dry place. Refrigerate after opening for extended freshness.",
+    variants: [
+      { label: "500g", priceBDT: 1150, stock: 40, sku: "SEG-500" },
+      { label: "1kg", priceBDT: 2150, stock: 22, sku: "SEG-1000" },
+    ],
+  },
+  {
+    name: "Zahidi Dates - Golden Qassim",
+    tagline: "Light, firm, and lightly sweet — the everyday classic",
+    description:
+      "Zahidi dates are a golden-yellow variety from Qassim, firmer and less syrupy than most, with a light, nutty sweetness. A popular everyday choice that pairs well with tea and coffee.",
+    origin: "Qassim, Saudi Arabia",
+    badge: "Authentic" as const,
+    highlights: [
+      "Golden-yellow Qassim variety",
+      "Firm texture, light sweetness",
+      "Pairs well with tea & coffee",
+    ],
+    storageInstructions:
+      "Store in a cool, dry place. Refrigerate after opening for extended freshness.",
+    variants: [
+      {
+        label: "500g",
+        priceBDT: 900,
+        compareAtPriceBDT: 1050,
+        stock: 48,
+        sku: "ZAH-500",
+      },
+      {
+        label: "1kg",
+        priceBDT: 1700,
+        compareAtPriceBDT: 1950,
+        stock: 26,
+        sku: "ZAH-1000",
+      },
+    ],
+  },
+  {
+    name: "Barhi Dates - Soft Honey Dates",
+    tagline: "Caramel-soft with a honeyed finish",
+    description:
+      "Barhi dates are famous for their exceptionally soft, almost custard-like texture and honeyed sweetness. Best enjoyed fresh or lightly chilled — a fast favorite wherever they're introduced.",
+    origin: "Qassim, Saudi Arabia",
+    badge: "Best Seller" as const,
+    isBestSeller: true,
+    isFeatured: true,
+    highlights: [
+      "Exceptionally soft texture",
+      "Honeyed, caramel-like finish",
+      "Best served fresh or chilled",
+    ],
+    storageInstructions:
+      "Refrigerate immediately on arrival — best enjoyed within a few weeks for peak softness.",
+    variants: [
+      { label: "500g", priceBDT: 1300, stock: 32, sku: "BAR-500" },
+      { label: "1kg", priceBDT: 2400, stock: 18, sku: "BAR-1000" },
+    ],
+  },
+  {
+    name: "Khalas Dates - Amber Reserve",
+    tagline: "The Gulf's most celebrated everyday date",
+    description:
+      "Khalas dates are one of the most widely loved varieties across the Gulf — amber-brown, semi-dry, and richly sweet with a subtle toffee note. A pantry essential for any household.",
+    origin: "Al-Ahsa, Saudi Arabia",
+    badge: "New" as const,
+    highlights: [
+      "Amber-brown, semi-dry texture",
+      "Rich sweetness with toffee notes",
+      "A Gulf pantry essential",
+    ],
+    storageInstructions:
+      "Store in a cool, dry place. Refrigerate after opening for extended freshness.",
+    variants: [
+      { label: "500g", priceBDT: 980, stock: 44, sku: "KHA-500" },
+      { label: "1kg", priceBDT: 1850, stock: 24, sku: "KHA-1000" },
+    ],
+  },
+];
+
+const PRODUCT_SHOWCASE_SECTIONS = [
+  {
+    title: "Premium Dates",
+    subtitle: "Our finest Saudi & Madinah dates, handpicked for gifting and everyday indulgence.",
+    productMode: "category" as const,
+    categorySlug: "dates",
+    limit: 8,
+    ctaLabel: "Shop All Dates",
+    ctaHref: "/shop?category=dates",
+    isVisible: true,
+    sortOrder: 3,
+  },
+  {
+    title: "More Saudi Date Varieties",
+    subtitle: "Rare and regional varieties from across the Kingdom.",
+    productMode: "category" as const,
+    categorySlug: "dates",
+    limit: 6,
+    ctaLabel: "View All Varieties",
+    ctaHref: "/shop?category=dates",
+    isVisible: true,
+    sortOrder: 4,
+  },
+  {
+    title: "New Arrivals",
+    subtitle: "The latest additions to our collection.",
+    productMode: "newArrivals" as const,
+    limit: 4,
+    ctaLabel: "Shop New Arrivals",
+    ctaHref: "/shop",
+    isVisible: true,
+    sortOrder: 5,
+  },
+  {
+    title: "Today's Offers",
+    subtitle: "Limited-time savings on select favorites.",
+    productMode: "onSale" as const,
+    limit: 4,
+    ctaLabel: "View All Offers",
+    ctaHref: "/offers",
+    isVisible: true,
+    sortOrder: 6,
+  },
 ];
 
 async function seed() {
   await connectDatabase();
-  console.log("🌱 Seeding database...");
+  console.log("Seeding database...");
 
   // -- Super admin --
   const existingSuperAdmin = await UserModel.findOne({ role: "super_admin" });
@@ -171,9 +359,9 @@ async function seed() {
         designation: "Super Admin",
       },
     });
-    console.log(`✅ Super admin created: ${env.SEED_SUPER_ADMIN_EMAIL}`);
+    console.log(`Super admin created: ${env.SEED_SUPER_ADMIN_EMAIL}`);
   } else {
-    console.log("ℹ️  Super admin already exists, skipping.");
+    console.log("Super admin already exists, skipping.");
   }
 
   // -- Sample staff accounts (admin / co-admin / employees) --
@@ -235,7 +423,7 @@ async function seed() {
     });
   }
   console.log(
-    `✅ Sample staff accounts ready (password for any new ones: ${SAMPLE_STAFF_PASSWORD}).`,
+    `Sample staff accounts ready (password for any new ones: ${SAMPLE_STAFF_PASSWORD}).`,
   );
 
   // -- Categories (upsert by slug) --
@@ -249,7 +437,7 @@ async function seed() {
     );
     categoryIdByName.set(cat.name, doc._id.toString());
   }
-  console.log(`✅ ${CATEGORIES.length} categories upserted.`);
+  console.log(`${CATEGORIES.length} categories upserted.`);
 
   // -- Sample date products --
   const datesCategoryId = categoryIdByName.get("Dates");
@@ -267,15 +455,27 @@ async function seed() {
     createdCount += 1;
   }
   console.log(
-    `✅ ${createdCount} sample products created (${DATE_PRODUCTS.length - createdCount} already existed).`,
+    `${createdCount} sample products created (${DATE_PRODUCTS.length - createdCount} already existed).`,
   );
 
-  console.log("🌱 Seeding complete.");
+  // -- Default homepage product-showcase sections (upsert by title; safe to re-run) --
+  let showcaseCount = 0;
+  for (const section of PRODUCT_SHOWCASE_SECTIONS) {
+    const result = await HomepageSectionModel.findOneAndUpdate(
+      { type: "productShowcase", title: section.title },
+      { $setOnInsert: { ...section, type: "productShowcase" } },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+    if (!result) showcaseCount += 1;
+  }
+  console.log(`${showcaseCount} homepage product-showcase sections created (rest already existed).`);
+
+  console.log("Seeding complete.");
   await disconnectDatabase();
   process.exit(0);
 }
 
 seed().catch((err) => {
-  console.error("❌ Seeding failed:", err);
+  console.error("Seeding failed:", err);
   process.exit(1);
 });

@@ -11,7 +11,7 @@ export async function FeaturedCategories({ section }: { section?: ApiHomepageSec
   const featured = data.categories
     .map(toCategory)
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .slice(0, 4);
+    .slice(0, 6);
 
   if (featured.length === 0) return null;
 
@@ -19,7 +19,7 @@ export async function FeaturedCategories({ section }: { section?: ApiHomepageSec
     <section className="mx-auto max-w-[1200px] px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
       <div className="flex flex-col items-center gap-12">
         <SectionHeading title={section?.title || "Explore Our Collections"} />
-        <div className="grid w-full grid-cols-2 gap-8 sm:grid-cols-4 sm:gap-6">
+        <div className="grid w-full grid-cols-2 gap-8 sm:grid-cols-3 sm:gap-6 lg:grid-cols-6">
           {featured.map((category) => (
             <Link
               key={category.slug}
@@ -33,14 +33,14 @@ export async function FeaturedCategories({ section }: { section?: ApiHomepageSec
                 category.comingSoon && "opacity-80"
               )}
             >
-              <span className="relative flex size-[140px] items-center justify-center rounded-full border border-gold-500/30 p-[9px] shadow-[0_4px_20px_rgba(61,43,31,0.08)] sm:size-[192px]">
+              <span className="relative flex size-[130px] items-center justify-center rounded-full border border-gold-500/30 p-[9px] shadow-[0_4px_20px_rgba(61,43,31,0.08)] sm:size-[160px]">
                 <span className="relative size-full overflow-hidden rounded-full">
                   <ProductMedia
                     src={category.image?.url}
                     fallbackPhoto={category.fallbackPhoto}
                     visual={category.visual}
                     alt={category.name}
-                    sizes="(min-width: 640px) 192px, 140px"
+                    sizes="(min-width: 640px) 160px, 130px"
                     className={cn(
                       "transition-transform duration-500 group-hover:scale-105",
                       category.comingSoon && "saturate-0"

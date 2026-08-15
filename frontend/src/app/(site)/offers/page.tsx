@@ -4,6 +4,7 @@ import { Percent, ShoppingCart } from "lucide-react";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
 import { formatBDT } from "@/lib/utils";
+import { getProductDeals } from "@/lib/productOffers";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
 import { AddToCartButton } from "@/components/shop/AddToCartButton";
@@ -19,16 +20,7 @@ export default async function OffersPage() {
   const { data } = await listProducts({ limit: 100 });
   const products = data.products.map(toProduct);
 
-  const deals = products
-    .map((product) => {
-      const variant = product.variants.find((v) => v.compareAtPriceBDT);
-      if (!variant?.compareAtPriceBDT) return null;
-      const discount = Math.round(
-        ((variant.compareAtPriceBDT - variant.priceBDT) / variant.compareAtPriceBDT) * 100
-      );
-      return { product, variant, discount };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+  const deals = getProductDeals(products);
 
   return (
     <>
@@ -47,7 +39,7 @@ export default async function OffersPage() {
 
       <section className="mx-auto max-w-[1200px] px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
         {deals.length > 0 ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {deals.map(({ product, variant, discount }) => (
               <div
                 key={product.id}
@@ -55,7 +47,7 @@ export default async function OffersPage() {
               >
                 <Link
                   href={`/product/${product.slug}`}
-                  className="relative block aspect-[4/5] w-full"
+                  className="relative block aspect-[4/3] w-full"
                 >
                   <ProductMedia
                     src={product.images[0]?.url}
@@ -64,23 +56,23 @@ export default async function OffersPage() {
                     alt={product.name}
                     sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
                   />
-                  <span className="absolute left-4 top-4 rounded-full bg-[#8a4a3f] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
+                  <span className="absolute left-3 top-3 rounded-full bg-[#8a4a3f] px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
                     {discount}% Off
                   </span>
                 </Link>
-                <div className="flex flex-1 flex-col gap-2 p-6">
+                <div className="flex flex-1 flex-col gap-1 p-3.5">
                   <Link href={`/product/${product.slug}`}>
-                    <h3 className="font-sans text-lg font-semibold text-green-950 hover:text-green-900">
+                    <h3 className="font-sans text-base font-semibold leading-snug text-green-950 hover:text-green-900">
                       {product.name}
                     </h3>
                   </Link>
-                  <p className="line-clamp-2 text-sm text-brown-500">{product.tagline}</p>
-                  <div className="mt-auto flex items-center justify-between pt-3">
+                  <p className="line-clamp-2 text-sm leading-snug text-brown-500">{product.tagline}</p>
+                  <div className="mt-auto flex flex-col gap-2 pt-2">
                     <span className="flex items-baseline gap-2">
-                      <span className="text-lg font-semibold text-green-950">
+                      <span className="text-lg font-semibold leading-none text-green-950">
                         {formatBDT(variant.priceBDT)}
                       </span>
-                      <span className="text-sm text-brown-500/60 line-through">
+                      <span className="text-xs leading-none text-brown-500/60 line-through">
                         {formatBDT(variant.compareAtPriceBDT!)}
                       </span>
                     </span>

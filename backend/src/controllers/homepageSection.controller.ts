@@ -11,9 +11,9 @@ export const listSections = catchAsync(async (req: Request, res: Response) => {
   sendSuccess(res, 200, "Homepage sections fetched", { sections });
 });
 
-export const createPromoBanner = catchAsync(async (req: Request, res: Response) => {
-  const section = await homepageSectionService.createPromoBanner(req.body, req.file);
-  sendSuccess(res, 201, "Promotional banner created", { section });
+export const createSection = catchAsync(async (req: Request, res: Response) => {
+  const section = await homepageSectionService.createSection(req.body, req.file);
+  sendSuccess(res, 201, "Homepage section created", { section });
 });
 
 export const updateSection = catchAsync(async (req: Request, res: Response) => {

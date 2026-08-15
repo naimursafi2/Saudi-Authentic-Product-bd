@@ -49,7 +49,7 @@ Register every new router in `routes/index.ts`.
 | `/inventory` | low-stock list, logs, manual stock adjustment | `admin`,`super_admin`,`co_admin` for everything (router-level) |
 | `/reports` | any staff: `/employee-dashboard`; admin/co-admin: `/dashboard`, `/sales` | dashboard/sales: `admin`,`super_admin`,`co_admin` |
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | `admin`,`super_admin` only |
-| `/homepage-sections` | public list; create (promo banners only)/update/delete of homepage content sections | `admin`,`super_admin` only |
+| `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
 | `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement/contact/footer | `admin`,`super_admin` only |
 
 #### Models (`src/models`)
@@ -63,14 +63,28 @@ admins/super-admins edit the **homepage only** — this is intentionally scoped,
 not a page builder:
 
 - **Hero slides** (`HeroSlide`): freely creatable/orderable/deletable —
-  image, title, subtitle, CTA label/href, sort order, active flag.
-- **Homepage sections** (`HomepageSection`): a **fixed enum** of six types —
-  `hero`, `featuredCategories`, `bestSellers`, `productStory`,
-  `customerReviews`, `promoBanner`. The first five are singleton documents
-  (unique index on `type`), lazily seeded from `HOMEPAGE_SECTION_DEFAULTS`,
-  editable (title/subtitle/description/image/visibility/sort order) but
-  **not creatable or deletable**. Only `promoBanner` is unlimited/freely
-  creatable and deletable, for ad-hoc promotional banners.
+  image, title, subtitle, CTA label/href, sort order, active flag. All
+  active slides render on the homepage as an auto-rotating carousel
+  (`HeroCarousel.tsx`, dots + arrows, pause-on-hover); a single slide (or
+  none — falling back to the `hero` section's text/default photo) renders
+  as a static banner with no controls.
+- **Homepage sections** (`HomepageSection`): a **fixed enum** of seven
+  types — `hero`, `featuredCategories`, `bestSellers`, `productStory`,
+  `customerReviews`, `promoBanner`, `productShowcase`. The first five are
+  singleton documents (unique index on `type`), lazily seeded from
+  `HOMEPAGE_SECTION_DEFAULTS`, editable (title/subtitle/description/image/
+  visibility/sort order) but **not creatable or deletable**. `promoBanner`
+  and `productShowcase` are unlimited/freely creatable and deletable.
+  `promoBanner` is for ad-hoc promotional banners (image/description/CTA).
+  `productShowcase` renders a configurable product grid — `productMode` is
+  `"category"` (paired with `categorySlug`), `"bestSellers"`,
+  `"newArrivals"` (backend `sort=newest`), or `"onSale"` (client-computed
+  from `compareAtPriceBDT`, shared with `/offers` via
+  `lib/productOffers.ts`), plus a `limit`. This is how admins add things
+  like "Premium Dates", additional date-variety showcases, or — once real
+  stock exists — a Watches/Chocolates showcase, with no code change; a
+  showcase for a category with zero active products simply renders nothing
+  rather than a broken/empty section.
 
 There is no arbitrary page/route creation, no rich-text/WYSIWYG block editor,
 and no way to add admin-editable content to any page other than the
@@ -275,7 +289,7 @@ backend:  npm run dev            (tsx watch, http://localhost:5000, API at /api/
           npm run dev:dns-fix    (tsx watch + DNS preload — see below)
           npm run build          (tsc -> dist/)
           npm start              (runs dist/server.js + DNS preload — see below)
-          npm run seed           (creates super admin + sample co_admin/employee accounts + categories + products)
+          npm run seed           (creates super admin + sample co_admin/employee accounts + categories + products + default homepage product-showcase sections)
           npm run typecheck / lint / test
 frontend: npm run dev      (Next.js, http://localhost:3000)
           npm run build / start

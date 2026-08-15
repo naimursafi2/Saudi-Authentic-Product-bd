@@ -23,7 +23,7 @@ router.post(
   authorize("admin", "super_admin"),
   upload.single("image"),
   validate({ body: createHomepageSectionSchema }),
-  homepageSectionController.createPromoBanner
+  homepageSectionController.createSection
 );
 router.patch(
   "/:id",

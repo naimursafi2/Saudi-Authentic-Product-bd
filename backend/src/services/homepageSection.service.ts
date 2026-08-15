@@ -1,4 +1,8 @@
-import { HomepageSectionModel, HOMEPAGE_SECTION_DEFAULTS } from "../models/HomepageSection.model";
+import {
+  HomepageSectionModel,
+  HOMEPAGE_SECTION_DEFAULTS,
+  type HomepageSectionType,
+} from "../models/HomepageSection.model";
 import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import type {
@@ -7,6 +11,7 @@ import type {
 } from "../validators/homepageSection.validator";
 
 const FOLDER = "saudi-authentic-product/homepage";
+const CREATABLE_TYPES: HomepageSectionType[] = ["promoBanner", "productShowcase"];
 
 /** Idempotent — safe to call on every list request. Only inserts docs that don't exist yet. */
 async function ensureDefaultSections() {
@@ -27,11 +32,16 @@ export async function listSections(includeHidden: boolean) {
   return HomepageSectionModel.find(query).sort({ sortOrder: 1 });
 }
 
-export async function createPromoBanner(
+export async function createSection(
   input: CreateHomepageSectionInput,
   imageFile?: Express.Multer.File
 ) {
-  const section = new HomepageSectionModel({ ...input, type: "promoBanner" });
+  const { type, ...rest } = input;
+  if (!CREATABLE_TYPES.includes(type)) {
+    throw ApiError.badRequest(`Homepage sections of type "${type}" can't be created directly`);
+  }
+
+  const section = new HomepageSectionModel({ ...rest, type });
 
   if (imageFile) {
     const uploaded = await uploadBufferToCloudinary(imageFile.buffer, { folder: FOLDER });
@@ -65,7 +75,7 @@ export async function updateSection(
 export async function deleteSection(id: string) {
   const section = await HomepageSectionModel.findById(id);
   if (!section) throw ApiError.notFound("Homepage section not found");
-  if (section.type !== "promoBanner") {
+  if (!CREATABLE_TYPES.includes(section.type)) {
     throw ApiError.badRequest(
       "Fixed homepage sections can't be deleted — hide them instead by turning visibility off."
     );

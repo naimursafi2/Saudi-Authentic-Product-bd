@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import type { ApiHomepageSection, HomepageSectionType } from "@/types/api";
+import type { ApiCategory, ApiHomepageSection, HomepageSectionType, ProductShowcaseMode } from "@/types/api";
 
 export interface HomepageSectionFormValues {
   title: string;
@@ -12,21 +12,35 @@ export interface HomepageSectionFormValues {
   ctaHref: string;
   isVisible: boolean;
   sortOrder: number;
+  categorySlug: string;
+  productMode: ProductShowcaseMode;
+  limit: number;
 }
 
 const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
 const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
 
-/** Which fields are relevant for a given fixed-section type — keeps the form
- * from showing e.g. a CTA field on "Best Sellers", which never renders one. */
-const FIELD_VISIBILITY: Record<HomepageSectionType, { subtitle: boolean; description: boolean; image: boolean; cta: boolean }> = {
-  hero: { subtitle: true, description: false, image: false, cta: false },
-  featuredCategories: { subtitle: false, description: false, image: false, cta: false },
-  bestSellers: { subtitle: false, description: false, image: false, cta: false },
-  productStory: { subtitle: false, description: true, image: true, cta: false },
-  customerReviews: { subtitle: false, description: false, image: false, cta: false },
-  promoBanner: { subtitle: false, description: true, image: true, cta: true },
+const PRODUCT_MODE_LABELS: Record<ProductShowcaseMode, string> = {
+  category: "Products from a category",
+  bestSellers: "Best sellers",
+  newArrivals: "New arrivals",
+  onSale: "On sale / offers",
+};
+
+/** Which fields are relevant for a given section type — keeps the form from
+ * showing e.g. a CTA field on "Best Sellers", which never renders one. */
+const FIELD_VISIBILITY: Record<
+  HomepageSectionType,
+  { subtitle: boolean; description: boolean; image: boolean; cta: boolean; productShowcase: boolean }
+> = {
+  hero: { subtitle: true, description: false, image: false, cta: false, productShowcase: false },
+  featuredCategories: { subtitle: false, description: false, image: false, cta: false, productShowcase: false },
+  bestSellers: { subtitle: false, description: false, image: false, cta: false, productShowcase: false },
+  productStory: { subtitle: false, description: true, image: true, cta: false, productShowcase: false },
+  customerReviews: { subtitle: false, description: false, image: false, cta: false, productShowcase: false },
+  promoBanner: { subtitle: false, description: true, image: true, cta: true, productShowcase: false },
+  productShowcase: { subtitle: true, description: false, image: false, cta: true, productShowcase: true },
 };
 
 export function fromHomepageSection(section?: ApiHomepageSection): HomepageSectionFormValues {
@@ -39,6 +53,9 @@ export function fromHomepageSection(section?: ApiHomepageSection): HomepageSecti
       ctaHref: "",
       isVisible: true,
       sortOrder: 0,
+      categorySlug: "",
+      productMode: "category",
+      limit: 8,
     };
   }
   return {
@@ -49,12 +66,16 @@ export function fromHomepageSection(section?: ApiHomepageSection): HomepageSecti
     ctaHref: section.ctaHref ?? "",
     isVisible: section.isVisible,
     sortOrder: section.sortOrder,
+    categorySlug: section.categorySlug ?? "",
+    productMode: section.productMode ?? "category",
+    limit: section.limit ?? 8,
   };
 }
 
 export function HomepageSectionForm({
   type,
   initial,
+  categories,
   error,
   isSubmitting,
   onSubmit,
@@ -62,6 +83,7 @@ export function HomepageSectionForm({
 }: {
   type: HomepageSectionType;
   initial?: ApiHomepageSection;
+  categories?: ApiCategory[];
   error: string | null;
   isSubmitting: boolean;
   onSubmit: (values: HomepageSectionFormValues, image: File | null) => void;
@@ -108,6 +130,52 @@ export function HomepageSectionForm({
               className={fieldClasses}
             />
           </div>
+        )}
+        {fields.productShowcase && (
+          <>
+            <div>
+              <label className={labelClasses}>Product Source</label>
+              <select
+                value={values.productMode}
+                onChange={(e) => update("productMode", e.target.value as ProductShowcaseMode)}
+                className={fieldClasses}
+              >
+                {Object.entries(PRODUCT_MODE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {values.productMode === "category" && (
+              <div>
+                <label className={labelClasses}>Category</label>
+                <select
+                  value={values.categorySlug}
+                  onChange={(e) => update("categorySlug", e.target.value)}
+                  className={fieldClasses}
+                >
+                  <option value="">Select a category&hellip;</option>
+                  {categories?.map((category) => (
+                    <option key={category.slug} value={category.slug}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className={labelClasses}>Max Products</label>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={values.limit}
+                onChange={(e) => update("limit", Number(e.target.value))}
+                className={fieldClasses}
+              />
+            </div>
+          </>
         )}
         {fields.cta && (
           <>

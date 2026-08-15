@@ -10,11 +10,12 @@ import {
   updateHeroSlide,
 } from "@/lib/api/heroSlides";
 import {
-  createPromoBanner,
+  createHomepageSection,
   deleteHomepageSection,
   listHomepageSections,
   updateHomepageSection,
 } from "@/lib/api/homepageSections";
+import { listCategories } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -26,7 +27,7 @@ import {
   HomepageSectionForm,
   type HomepageSectionFormValues,
 } from "@/components/admin/HomepageSectionForm";
-import type { ApiHeroSlide, ApiHomepageSection, HomepageSectionType } from "@/types/api";
+import type { ApiCategory, ApiHeroSlide, ApiHomepageSection, HomepageSectionType } from "@/types/api";
 
 const SECTION_LABELS: Record<HomepageSectionType, string> = {
   hero: "Hero Banner",
@@ -35,6 +36,7 @@ const SECTION_LABELS: Record<HomepageSectionType, string> = {
   productStory: "Product Story",
   customerReviews: "Customer Reviews",
   promoBanner: "Promotional Banner",
+  productShowcase: "Product Showcase",
 };
 
 function heroSlideFormData(values: HeroSlideFormValues, image: File | null): FormData {
@@ -58,6 +60,9 @@ function sectionFormData(values: HomepageSectionFormValues, image: File | null):
   form.set("ctaHref", values.ctaHref);
   form.set("sortOrder", String(values.sortOrder));
   form.set("isVisible", String(values.isVisible));
+  form.set("categorySlug", values.categorySlug);
+  form.set("productMode", values.productMode);
+  form.set("limit", String(values.limit));
   if (image) form.set("image", image);
   return form;
 }
@@ -65,24 +70,32 @@ function sectionFormData(values: HomepageSectionFormValues, image: File | null):
 export default function AdminHomepagePage() {
   const [slides, setSlides] = useState<ApiHeroSlide[]>([]);
   const [sections, setSections] = useState<ApiHomepageSection[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [editingSlide, setEditingSlide] = useState<ApiHeroSlide | "new" | null>(null);
   const [editingSection, setEditingSection] = useState<ApiHomepageSection | "new" | null>(null);
+  const [newSectionType, setNewSectionType] = useState<HomepageSectionType>("promoBanner");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function load() {
     setIsLoading(true);
-    Promise.all([listHeroSlides(true), listHomepageSections(true)])
-      .then(([slidesRes, sectionsRes]) => {
+    Promise.all([listHeroSlides(true), listHomepageSections(true), listCategories()])
+      .then(([slidesRes, sectionsRes, categoriesRes]) => {
         setSlides(slidesRes.data.slides);
         setSections(sectionsRes.data.sections);
+        setCategories(categoriesRes.data.categories);
         setError(null);
       })
       .catch(() => setError("Could not load homepage content."))
       .finally(() => setIsLoading(false));
+  }
+
+  function openNewSection(type: HomepageSectionType) {
+    setNewSectionType(type);
+    setEditingSection("new");
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -131,7 +144,8 @@ export default function AdminHomepagePage() {
     try {
       const form = sectionFormData(values, image);
       if (editingSection === "new") {
-        await createPromoBanner(form);
+        form.set("type", newSectionType);
+        await createHomepageSection(form);
       } else if (editingSection) {
         await updateHomepageSection(editingSection._id, form);
       }
@@ -145,7 +159,7 @@ export default function AdminHomepagePage() {
   }
 
   async function handleDeleteSection(section: ApiHomepageSection) {
-    if (!confirm(`Delete this promotional banner? This cannot be undone.`)) return;
+    if (!confirm(`Delete this ${SECTION_LABELS[section.type].toLowerCase()}? This cannot be undone.`)) return;
     try {
       await deleteHomepageSection(section._id);
       load();
@@ -285,11 +299,16 @@ export default function AdminHomepagePage() {
       <div>
         <PageHeader
           title="Homepage Sections"
-          description="Toggle visibility, reorder, and edit content for each section. Add promotional banners as needed."
+          description="Toggle visibility, reorder, and edit content for each section. Add promo banners or product showcases as needed."
           action={
-            <Button variant="primary" size="sm" onClick={() => setEditingSection("new")}>
-              <Plus size={14} /> Add Promo Banner
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => openNewSection("productShowcase")}>
+                <Plus size={14} /> Add Product Showcase
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => openNewSection("promoBanner")}>
+                <Plus size={14} /> Add Promo Banner
+              </Button>
+            </div>
           }
         />
 
@@ -345,7 +364,7 @@ export default function AdminHomepagePage() {
                       >
                         <Pencil size={15} />
                       </button>
-                      {section.type === "promoBanner" && (
+                      {(section.type === "promoBanner" || section.type === "productShowcase") && (
                         <button
                           aria-label="Delete"
                           onClick={() => handleDeleteSection(section)}
@@ -377,12 +396,17 @@ export default function AdminHomepagePage() {
 
       {editingSection && (
         <Modal
-          title={editingSection === "new" ? "Add Promotional Banner" : `Edit ${SECTION_LABELS[editingSection.type]}`}
+          title={
+            editingSection === "new"
+              ? `Add ${SECTION_LABELS[newSectionType]}`
+              : `Edit ${SECTION_LABELS[editingSection.type]}`
+          }
           onClose={() => setEditingSection(null)}
         >
           <HomepageSectionForm
-            type={editingSection === "new" ? "promoBanner" : editingSection.type}
+            type={editingSection === "new" ? newSectionType : editingSection.type}
             initial={editingSection === "new" ? undefined : editingSection}
+            categories={categories}
             error={formError}
             isSubmitting={isSubmitting}
             onSubmit={handleSectionSubmit}

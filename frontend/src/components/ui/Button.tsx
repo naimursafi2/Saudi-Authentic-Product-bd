@@ -3,7 +3,7 @@ import Link, { LinkProps } from "next/link";
 import { cn } from "@/lib/utils";
 
 export type ButtonVariant = "primary" | "gold" | "outline" | "ghost";
-export type ButtonSize = "sm" | "md" | "lg";
+export type ButtonSize = "xs" | "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
@@ -16,6 +16,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
+  xs: "h-8 px-3.5 text-[11px]",
   sm: "h-9 px-4 text-xs",
   md: "h-11 px-6 text-sm",
   lg: "h-14 px-10 text-base",

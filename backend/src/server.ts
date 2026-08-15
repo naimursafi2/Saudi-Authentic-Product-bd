@@ -9,7 +9,7 @@ async function main() {
   const app = createApp();
 
   const server = app.listen(env.PORT, () => {
-    console.log(`🚀 Saudi Authentic Product API running on port ${env.PORT} [${env.NODE_ENV}]`);
+    console.log(`Saudi Authentic Product API running on port ${env.PORT} [${env.NODE_ENV}]`);
     console.log(`   API base: http://localhost:${env.PORT}${env.API_PREFIX}`);
   });
 
@@ -23,13 +23,12 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
-
   process.on("unhandledRejection", (reason) => {
-    console.error("💥 Unhandled promise rejection:", reason);
+    console.error("Unhandled promise rejection:", reason);
   });
 }
 
 main().catch((err) => {
-  console.error("❌ Failed to start server:", err);
+  console.error("Failed to start server:", err);
   process.exit(1);
 });

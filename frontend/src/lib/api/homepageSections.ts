@@ -6,7 +6,7 @@ export async function listHomepageSections(includeHidden = false) {
   return api.get<{ sections: ApiHomepageSection[] }>(`/homepage-sections${qs}`);
 }
 
-export async function createPromoBanner(formData: FormData) {
+export async function createHomepageSection(formData: FormData) {
   return api.postForm<{ section: ApiHomepageSection }>("/homepage-sections", formData);
 }
 

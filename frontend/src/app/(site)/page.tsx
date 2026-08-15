@@ -4,6 +4,7 @@ import { BestSellers } from "@/components/home/BestSellers";
 import { ProductStory } from "@/components/home/ProductStory";
 import { CustomerReviews } from "@/components/home/CustomerReviews";
 import { PromoBanner } from "@/components/home/PromoBanner";
+import { ProductShowcase } from "@/components/home/ProductShowcase";
 import { listHomepageSections } from "@/lib/api/homepageSections";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export default async function HomePage() {
             return <CustomerReviews key={section._id} section={section} />;
           case "promoBanner":
             return <PromoBanner key={section._id} section={section} />;
+          case "productShowcase":
+            return <ProductShowcase key={section._id} section={section} />;
           default:
             return null;
         }

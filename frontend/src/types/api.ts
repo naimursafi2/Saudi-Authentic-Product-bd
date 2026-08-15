@@ -127,7 +127,11 @@ export type HomepageSectionType =
   | "bestSellers"
   | "productStory"
   | "customerReviews"
-  | "promoBanner";
+  | "promoBanner"
+  | "productShowcase";
+
+/** `productShowcase` sections only — how the product grid is resolved. */
+export type ProductShowcaseMode = "category" | "bestSellers" | "newArrivals" | "onSale";
 
 export interface ApiHomepageSection {
   _id: string;
@@ -140,6 +144,9 @@ export interface ApiHomepageSection {
   ctaHref?: string;
   isVisible: boolean;
   sortOrder: number;
+  categorySlug?: string;
+  productMode?: ProductShowcaseMode;
+  limit?: number;
   createdAt: string;
   updatedAt: string;
 }

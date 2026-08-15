@@ -55,12 +55,17 @@ form or state-management library — forms/data fetching are hand-rolled with
   check-in/out + attendance history, tasks, leave requests, performance
   history, salary/payment history.
 - **Homepage content management** — admin-editable hero slides (image,
-  title, subtitle, CTA, order) and a fixed set of six homepage section types
-  (hero, featured categories, best sellers, product story, customer reviews,
-  promo banners). The five non-banner sections are visibility/order-editable
-  singletons; only promo banners can be freely created/deleted. This is
-  scoped to the homepage — it is **not** a general CMS or page builder;
-  `/about`, `/contact`, and `/shipping-policy` remain hardcoded static pages.
+  title, subtitle, CTA, order; all active slides render as an auto-rotating
+  carousel) and a fixed set of seven homepage section types (hero, featured
+  categories, best sellers, product story, customer reviews, promo banners,
+  product showcases). The five singleton sections are visibility/order-
+  editable only; promo banners and product showcases can be freely
+  created/deleted. A product showcase pulls a configurable product grid
+  (by category, best sellers, new arrivals, or on-sale) — this is how
+  sections like "Premium Dates" or a future Watches/Chocolates showcase get
+  added with no code change. This is scoped to the homepage — it is **not**
+  a general CMS or page builder; `/about`, `/contact`, and
+  `/shipping-policy` remain hardcoded static pages.
 - SMTP email notifications (fire-and-forget, never block a request): order
   confirmations, staff welcome, leave status, task assignment, password
   reset, and salary/payment notices (paid or pending-reminder copy).
@@ -75,7 +80,7 @@ Requires Node.js 20+ and a MongoDB connection string.
 cd backend
 npm install
 cp .env.example .env   # fill in MongoDB, JWT secrets, Cloudinary, SMTP
-npm run seed            # creates a super admin + sample staff, categories, products
+npm run seed            # creates a super admin + sample staff, categories, products, homepage sections
 npm run dev              # http://localhost:5000 (API at /api/v1)
 ```
 

@@ -6,6 +6,7 @@ import type { Product } from "@/types/product";
 import { formatBDT, cn } from "@/lib/utils";
 import { ProductMedia } from "./ProductMedia";
 import { StarRating } from "./StarRating";
+import { Button } from "./Button";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 
@@ -42,7 +43,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
     >
       <Link
         href={`/product/${product.slug}`}
-        className="relative block aspect-[4/5] w-full overflow-hidden bg-cream-400"
+        className="relative block aspect-[4/3] w-full overflow-hidden bg-cream-400"
       >
         <ProductMedia
           src={product.images[0]?.url}
@@ -52,11 +53,11 @@ export function ProductCard({ product, className }: ProductCardProps) {
           sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
           className="transition-transform duration-500 group-hover:scale-105"
         />
-        <div className="absolute left-4 top-[17px] flex flex-col items-start gap-1.5">
+        <div className="absolute left-3 top-3 flex flex-col items-start gap-1">
           {product.badge && (
             <span
               className={cn(
-                "rounded-full border border-black/5 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em]",
+                "rounded-full border border-black/5 px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]",
                 badgeClasses[product.badge]
               )}
             >
@@ -64,7 +65,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
             </span>
           )}
           {discountPercent != null && (
-            <span className="rounded-full border border-black/5 bg-[#8a4a3f] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
+            <span className="rounded-full border border-black/5 bg-[#8a4a3f] px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
               Save {discountPercent}%
             </span>
           )}
@@ -76,40 +77,41 @@ export function ProductCard({ product, className }: ProductCardProps) {
             e.preventDefault();
             toggleWishlist(product.id);
           }}
-          className="absolute right-4 top-[17px] flex size-8 items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-[#8a4a3f]"
+          className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-[#8a4a3f]"
         >
-          <Heart size={15} className={wishlisted ? "fill-[#8a4a3f] text-[#8a4a3f]" : ""} />
+          <Heart size={14} className={wishlisted ? "fill-[#8a4a3f] text-[#8a4a3f]" : ""} />
         </button>
       </Link>
-      <div className="flex flex-1 flex-col gap-1 p-6">
+      <div className="flex flex-1 flex-col gap-1 p-3.5">
         <Link href={`/product/${product.slug}`}>
-          <h3 className="font-sans text-xl font-semibold text-green-950 hover:text-green-900">
+          <h3 className="font-sans text-base font-semibold leading-snug text-green-950 hover:text-green-900">
             {product.name}
           </h3>
         </Link>
-        <p className="line-clamp-2 text-base text-brown-500">{product.tagline}</p>
-        {product.ratingCount > 0 && (
-          <StarRating rating={product.ratingAverage} size={13} className="mt-1" />
-        )}
-        <div className="mt-auto flex items-center justify-between pt-3">
+        <p className="line-clamp-2 text-sm leading-snug text-brown-500">{product.tagline}</p>
+        {product.ratingCount > 0 && <StarRating rating={product.ratingAverage} size={12} />}
+        <div className="mt-auto flex flex-col gap-2 pt-2">
           <span className="flex items-baseline gap-2">
-            <span className="text-xl font-semibold text-green-950">
+            <span className="text-lg font-semibold leading-none text-green-950">
               {formatBDT(defaultVariant.priceBDT)}
             </span>
             {defaultVariant.compareAtPriceBDT && defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT && (
-              <span className="text-sm text-brown-500/60 line-through">
+              <span className="text-xs leading-none text-brown-500/60 line-through">
                 {formatBDT(defaultVariant.compareAtPriceBDT)}
               </span>
             )}
           </span>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="xs"
             aria-label={`Add ${product.name} to cart`}
             onClick={() => addItem(product.id, defaultVariant.id, 1)}
-            className="flex size-10 items-center justify-center rounded-full bg-green-900 text-white shadow-[0_1px_1px_rgba(0,0,0,0.05)] transition-transform hover:scale-105 hover:bg-green-950"
+            className="w-full gap-2 rounded-full shadow-sm transition-all duration-300 hover:shadow-[0_6px_16px_rgba(1,45,29,0.25)]"
           >
-            <ShoppingCart size={16} />
-          </button>
+            <ShoppingCart size={14} />
+            Add to Cart
+          </Button>
         </div>
       </div>
     </div>
