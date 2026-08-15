@@ -5,6 +5,7 @@ import { Heart, ShoppingCart } from "lucide-react";
 import type { Product } from "@/types/product";
 import { formatBDT, cn } from "@/lib/utils";
 import { ProductMedia } from "./ProductMedia";
+import { StarRating } from "./StarRating";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 
@@ -25,6 +26,12 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const { isWishlisted, toggleWishlist } = useWishlist();
   const defaultVariant = product.variants[0];
   const wishlisted = isWishlisted(product.id);
+  const discountPercent =
+    defaultVariant.compareAtPriceBDT && defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT
+      ? Math.round(
+          ((defaultVariant.compareAtPriceBDT - defaultVariant.priceBDT) / defaultVariant.compareAtPriceBDT) * 100
+        )
+      : null;
 
   return (
     <div
@@ -45,16 +52,23 @@ export function ProductCard({ product, className }: ProductCardProps) {
           sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
           className="transition-transform duration-500 group-hover:scale-105"
         />
-        {product.badge && (
-          <span
-            className={cn(
-              "absolute left-4 top-[17px] rounded-full border border-black/5 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em]",
-              badgeClasses[product.badge]
-            )}
-          >
-            {product.badge}
-          </span>
-        )}
+        <div className="absolute left-4 top-[17px] flex flex-col items-start gap-1.5">
+          {product.badge && (
+            <span
+              className={cn(
+                "rounded-full border border-black/5 px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em]",
+                badgeClasses[product.badge]
+              )}
+            >
+              {product.badge}
+            </span>
+          )}
+          {discountPercent != null && (
+            <span className="rounded-full border border-black/5 bg-[#8a4a3f] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
+              Save {discountPercent}%
+            </span>
+          )}
+        </div>
         <button
           type="button"
           aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
@@ -74,9 +88,19 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </h3>
         </Link>
         <p className="line-clamp-2 text-base text-brown-500">{product.tagline}</p>
+        {product.ratingCount > 0 && (
+          <StarRating rating={product.ratingAverage} size={13} className="mt-1" />
+        )}
         <div className="mt-auto flex items-center justify-between pt-3">
-          <span className="text-xl font-semibold text-green-950">
-            {formatBDT(defaultVariant.priceBDT)}
+          <span className="flex items-baseline gap-2">
+            <span className="text-xl font-semibold text-green-950">
+              {formatBDT(defaultVariant.priceBDT)}
+            </span>
+            {defaultVariant.compareAtPriceBDT && defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT && (
+              <span className="text-sm text-brown-500/60 line-through">
+                {formatBDT(defaultVariant.compareAtPriceBDT)}
+              </span>
+            )}
           </span>
           <button
             type="button"

@@ -108,6 +108,54 @@ export interface ApiProduct {
   updatedAt: string;
 }
 
+export interface ApiHeroSlide {
+  _id: string;
+  title: string;
+  subtitle?: string;
+  image?: { url: string; publicId: string };
+  ctaLabel?: string;
+  ctaHref?: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type HomepageSectionType =
+  | "hero"
+  | "featuredCategories"
+  | "bestSellers"
+  | "productStory"
+  | "customerReviews"
+  | "promoBanner";
+
+export interface ApiHomepageSection {
+  _id: string;
+  type: HomepageSectionType;
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  image?: { url: string; publicId: string };
+  ctaLabel?: string;
+  ctaHref?: string;
+  isVisible: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiSiteSettings {
+  _id: string;
+  siteName: string;
+  logo?: { url: string; publicId: string };
+  announcementText?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  footerTagline?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApiReview {
   _id: string;
   product: string | { _id: string; name: string; slug: string };

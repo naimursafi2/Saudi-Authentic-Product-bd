@@ -1,5 +1,8 @@
-import { CheckCircle2, MapPin, Snowflake } from "lucide-react";
+import { CheckCircle2, MapPin, RotateCcw, Snowflake, Truck } from "lucide-react";
+import Link from "next/link";
 import type { Product } from "@/types/product";
+import { formatBDT } from "@/lib/utils";
+import { SealBadge } from "@/components/ui/SealBadge";
 
 export function ProductDetailsBento({ product }: { product: Product }) {
   return (
@@ -31,8 +34,13 @@ export function ProductDetailsBento({ product }: { product: Product }) {
         </div>
 
         <div className="flex flex-col gap-6 lg:col-span-5">
-          <div className="flex flex-col gap-3 rounded-lg bg-green-900 p-6 text-cream-100">
-            <div className="flex items-center gap-2">
+          <div className="relative flex flex-col gap-3 overflow-hidden rounded-lg bg-green-900 p-6 text-cream-100">
+            <SealBadge
+              size={72}
+              showRoute={false}
+              className="absolute -right-3 -top-3 opacity-90"
+            />
+            <div className="flex items-center gap-2 pr-14">
               <MapPin size={18} className="text-gold-500" />
               <h3 className="font-serif text-lg font-semibold">Product of Saudi Arabia</h3>
             </div>
@@ -55,6 +63,28 @@ export function ProductDetailsBento({ product }: { product: Product }) {
               </p>
             </div>
           )}
+          <div className="flex flex-col gap-4 rounded-lg border border-brown-600/15 bg-cream-300 p-6">
+            <h3 className="font-serif text-lg font-semibold text-green-950">
+              Delivery &amp; Returns
+            </h3>
+            <div className="flex gap-3">
+              <Truck size={18} className="mt-0.5 shrink-0 text-green-900" />
+              <p className="text-sm leading-relaxed text-brown-600">
+                Delivered across Bangladesh in 3–5 business days. Free delivery on orders
+                over {formatBDT(5000)}.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <RotateCcw size={18} className="mt-0.5 shrink-0 text-green-900" />
+              <p className="text-sm leading-relaxed text-brown-600">
+                Unopened items can be returned within 7 days of delivery. See our{" "}
+                <Link href="/shipping-policy" className="font-semibold text-green-950 underline">
+                  shipping &amp; returns policy
+                </Link>{" "}
+                for details.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

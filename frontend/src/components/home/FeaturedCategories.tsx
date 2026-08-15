@@ -4,8 +4,9 @@ import { toCategory } from "@/lib/mappers";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
+import type { ApiHomepageSection } from "@/types/api";
 
-export async function FeaturedCategories() {
+export async function FeaturedCategories({ section }: { section?: ApiHomepageSection }) {
   const { data } = await listCategories();
   const featured = data.categories
     .map(toCategory)
@@ -17,7 +18,7 @@ export async function FeaturedCategories() {
   return (
     <section className="mx-auto max-w-[1200px] px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
       <div className="flex flex-col items-center gap-12">
-        <SectionHeading title="Explore Our Collections" />
+        <SectionHeading title={section?.title || "Explore Our Collections"} />
         <div className="grid w-full grid-cols-2 gap-8 sm:grid-cols-4 sm:gap-6">
           {featured.map((category) => (
             <Link

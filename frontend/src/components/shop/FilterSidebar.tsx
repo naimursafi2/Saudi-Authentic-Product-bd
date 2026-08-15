@@ -88,6 +88,32 @@ export function FilterSidebar({ filters, categories, onChange, onApplyPrice, cla
           ))}
         </ul>
       </div>
+
+      <div>
+        <h3 className="mb-3 text-sm font-bold text-green-950">Availability</h3>
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm text-brown-600 hover:text-green-950">
+          <input
+            type="checkbox"
+            checked={filters.inStockOnly}
+            onChange={() => onChange({ ...filters, inStockOnly: !filters.inStockOnly })}
+            className="size-4 rounded-sm border-brown-500/40 accent-green-900"
+          />
+          In Stock Only
+        </label>
+      </div>
+
+      <div>
+        <h3 className="mb-3 text-sm font-bold text-green-950">Offers</h3>
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm text-brown-600 hover:text-green-950">
+          <input
+            type="checkbox"
+            checked={filters.onSaleOnly}
+            onChange={() => onChange({ ...filters, onSaleOnly: !filters.onSaleOnly })}
+            className="size-4 rounded-sm border-brown-500/40 accent-green-900"
+          />
+          On Sale
+        </label>
+      </div>
     </aside>
   );
 }

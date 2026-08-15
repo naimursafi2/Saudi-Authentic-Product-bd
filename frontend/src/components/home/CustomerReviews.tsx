@@ -2,8 +2,9 @@ import { listRecentReviews } from "@/lib/api/reviews";
 import { toCustomerReview } from "@/lib/mappers";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { StarRating } from "@/components/ui/StarRating";
+import type { ApiHomepageSection } from "@/types/api";
 
-export async function CustomerReviews() {
+export async function CustomerReviews({ section }: { section?: ApiHomepageSection }) {
   const { data } = await listRecentReviews(8);
   const reviews = data.reviews.map(toCustomerReview);
 
@@ -12,7 +13,7 @@ export async function CustomerReviews() {
   return (
     <section className="border-y border-brown-600/10 bg-cream-50 px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
       <div className="mx-auto flex max-w-[1200px] flex-col gap-12">
-        <SectionHeading title="Words from Our Patrons" dividerWidth={64} />
+        <SectionHeading title={section?.title || "Words from Our Patrons"} dividerWidth={64} />
         <div className="no-scrollbar flex snap-x gap-6 overflow-x-auto pb-2">
           {reviews.map((review) => (
             <div

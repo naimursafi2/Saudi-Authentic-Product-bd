@@ -6,6 +6,8 @@ export interface ShopFilters {
   minPrice: number | null;
   maxPrice: number | null;
   minRating: number;
+  inStockOnly: boolean;
+  onSaleOnly: boolean;
   sort: SortOption;
 }
 
@@ -15,6 +17,8 @@ export const DEFAULT_FILTERS: ShopFilters = {
   minPrice: null,
   maxPrice: null,
   minRating: 0,
+  inStockOnly: false,
+  onSaleOnly: false,
   sort: "featured",
 };
 

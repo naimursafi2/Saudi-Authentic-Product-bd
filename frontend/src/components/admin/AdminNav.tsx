@@ -17,6 +17,8 @@ import {
   Wallet,
   Boxes,
   BarChart3,
+  LayoutPanelTop,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/types/api";
@@ -43,6 +45,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/salary", label: "Salary & Payments", icon: Wallet, roles: ["admin", "super_admin"] },
   { href: "/admin/inventory", label: "Inventory", icon: Boxes },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
+  { href: "/admin/homepage", label: "Homepage", icon: LayoutPanelTop, roles: ["admin", "super_admin"] },
+  { href: "/admin/settings", label: "Settings", icon: Settings, roles: ["admin", "super_admin"] },
 ];
 
 export function AdminNav({ role }: { role: Role }) {

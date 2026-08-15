@@ -76,6 +76,16 @@ export function ShopPageClient() {
       list = list.filter((p) => p.ratingAverage >= filters.minRating);
     }
 
+    if (filters.inStockOnly) {
+      list = list.filter((p) => p.variants[0].stock > 0);
+    }
+
+    if (filters.onSaleOnly) {
+      list = list.filter(
+        (p) => p.variants[0].compareAtPriceBDT != null && p.variants[0].compareAtPriceBDT > p.variants[0].priceBDT
+      );
+    }
+
     switch (filters.sort) {
       case "price-asc":
         list.sort((a, b) => a.variants[0].priceBDT - b.variants[0].priceBDT);
