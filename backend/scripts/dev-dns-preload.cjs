@@ -9,10 +9,16 @@
  * Windows DNS-server enumeration — not an app, Atlas, or network problem.
  *
  * This preload script points Node's resolver at public DNS servers so local
- * `npm run dev` can connect while the underlying Windows config is cleaned
- * up separately. It is loaded via `-r` BEFORE any application code runs, so
- * it must stay outside `src/` — do not import it from app code, and do not
- * wire it into `npm start` / production.
+ * dev/start can connect while the underlying Windows config is cleaned up
+ * separately. It is loaded BEFORE any application code runs (either via a
+ * `require()` at the top of a launcher script, or via `-r` on NODE_OPTIONS),
+ * so it must stay outside `src/` — do not import it from app code.
+ *
+ * Wired into both `npm run dev:dns-fix` (scripts/dev-dns-fix.cjs) and
+ * `npm start` (scripts/start.cjs) on this machine, since both need to reach
+ * MongoDB Atlas locally. It is still a machine-local workaround, not a
+ * real production fix — a deployment on a host without this DNS bug
+ * doesn't need it.
  */
 const dns = require("dns");
 
