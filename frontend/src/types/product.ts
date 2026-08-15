@@ -40,6 +40,8 @@ export interface Category {
   name: string;
   description?: string;
   image?: ProductImage;
+  /** Curated local photo, used when there's no uploaded image but we have real photography. */
+  fallbackPhoto?: string;
   /** Deterministic fallback used until the category has a real uploaded image. */
   visual: ProductVisual;
   comingSoon: boolean;
@@ -63,6 +65,8 @@ export interface Product {
   origin: string;
   categories: CategoryRef[];
   images: ProductImage[];
+  /** Curated local photo, used when there are no uploaded photos but we have real photography. */
+  fallbackPhoto?: string;
   /** Deterministic fallback used until the product has real uploaded photos. */
   visual: ProductVisual;
   badge?: "Authentic" | "Best Seller" | "New" | "Limited";

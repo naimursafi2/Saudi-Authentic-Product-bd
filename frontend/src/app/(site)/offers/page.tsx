@@ -4,7 +4,7 @@ import { Percent, ShoppingCart } from "lucide-react";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
 import { formatBDT } from "@/lib/utils";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
 import { AddToCartButton } from "@/components/shop/AddToCartButton";
 
@@ -57,7 +57,13 @@ export default async function OffersPage() {
                   href={`/product/${product.slug}`}
                   className="relative block aspect-[4/5] w-full"
                 >
-                  <ProductVisual {...product.visual} />
+                  <ProductMedia
+                    src={product.images[0]?.url}
+                    fallbackPhoto={product.fallbackPhoto}
+                    visual={product.visual}
+                    alt={product.name}
+                    sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
+                  />
                   <span className="absolute left-4 top-4 rounded-full bg-[#8a4a3f] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
                     {discount}% Off
                   </span>

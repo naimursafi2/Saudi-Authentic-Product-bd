@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import { StarRating } from "@/components/ui/StarRating";
 import { cn } from "@/lib/utils";
 import type { Category } from "@/types/product";
 import type { ShopFilters } from "./types";
@@ -80,10 +81,7 @@ export function FilterSidebar({ filters, categories, onChange, onApplyPrice, cla
                   }
                   className="size-4 accent-green-900"
                 />
-                <span className="flex items-center gap-0.5 text-gold-500">
-                  {"★".repeat(rating)}
-                  <span className="text-brown-500/30">{"★".repeat(5 - rating)}</span>
-                </span>
+                <StarRating rating={rating} size={14} />
                 <span>&amp; Up</span>
               </label>
             </li>

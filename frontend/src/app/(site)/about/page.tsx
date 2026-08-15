@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { BadgeCheck, Globe, HandCoins, ShieldCheck } from "lucide-react";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { ButtonLink } from "@/components/ui/Button";
@@ -40,18 +41,30 @@ export default function AboutPage() {
   return (
     <>
       <section className="bg-cream-200 px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
-        <div className="mx-auto flex max-w-[820px] flex-col items-center gap-6 text-center">
-          <SectionHeading title="Our Story" size="lg" />
-          <p className="text-base leading-relaxed text-brown-600 sm:text-lg">
-            Saudi Authentic Product was founded with a simple belief: the people of
-            Bangladesh deserve access to genuine, unadulterated Saudi heritage — from
-            the sacred date orchards of Madinah to the artisans of the Kingdom.
-          </p>
-          <p className="text-base leading-relaxed text-brown-600 sm:text-lg">
-            What began as a small effort to bring premium Ajwa dates home for family
-            and friends has grown into a curated marketplace, built on the same
-            principle every single day: authenticity first, always.
-          </p>
+        <div className="mx-auto grid max-w-[1100px] grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          <div className="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left">
+            <SectionHeading title="Our Story" size="lg" />
+            <p className="text-base leading-relaxed text-brown-600 sm:text-lg">
+              Saudi Authentic Product was founded with a simple belief: the people of
+              Bangladesh deserve access to genuine, unadulterated Saudi heritage — from
+              the sacred date orchards of Madinah to the artisans of the Kingdom.
+            </p>
+            <p className="text-base leading-relaxed text-brown-600 sm:text-lg">
+              What began as a small effort to bring premium Ajwa dates home for family
+              and friends has grown into a curated marketplace, built on the same
+              principle every single day: authenticity first, always.
+            </p>
+          </div>
+          <div className="relative mx-auto aspect-square w-full max-w-[420px] overflow-hidden rounded-lg border border-gold-500/25 bg-cream-50 shadow-[0_8px_30px_rgba(61,43,31,0.12)]">
+            <Image
+              src="/images/editorial/mashruk-dates.webp"
+              alt="Assorted premium Saudi dates"
+              fill
+              sizes="(min-width: 1024px) 420px, (min-width: 640px) 60vw, 90vw"
+              className="object-cover"
+              priority
+            />
+          </div>
         </div>
       </section>
 

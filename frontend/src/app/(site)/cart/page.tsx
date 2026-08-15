@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatBDT } from "@/lib/utils";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 
@@ -55,9 +55,16 @@ export default function CartPage() {
             <li key={`${item.product.id}-${item.variant.id}`} className="flex gap-4 p-5 sm:gap-6 sm:p-6">
               <Link
                 href={`/product/${item.product.slug}`}
-                className="size-24 shrink-0 overflow-hidden rounded sm:size-28"
+                className="relative size-24 shrink-0 overflow-hidden rounded sm:size-28"
               >
-                <ProductVisual {...item.product.visual} pattern={false} />
+                <ProductMedia
+                  src={item.product.images[0]?.url}
+                  fallbackPhoto={item.product.fallbackPhoto}
+                  visual={item.product.visual}
+                  alt={item.product.name}
+                  sizes="112px"
+                  pattern={false}
+                />
               </Link>
               <div className="flex flex-1 flex-col gap-2">
                 <div className="flex items-start justify-between gap-3">

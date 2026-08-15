@@ -10,6 +10,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { Modal } from "@/components/admin/Modal";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
+import { StarRating } from "@/components/ui/StarRating";
 import { PerformanceReviewForm, type PerformanceReviewFormValues } from "@/components/admin/PerformanceReviewForm";
 import type { ApiPerformanceReview } from "@/types/hr";
 import type { ApiUser, Pagination } from "@/types/api";
@@ -104,7 +105,9 @@ export default function AdminPerformancePage() {
                 <tr key={review._id} className="border-b border-brown-600/10 last:border-none">
                   <td className="px-4 py-3 font-medium text-green-950">{personName(review.employee)}</td>
                   <td className="px-4 py-3 text-brown-600">{review.period}</td>
-                  <td className="px-4 py-3 font-semibold text-gold-600">{"★".repeat(review.rating)}</td>
+                  <td className="px-4 py-3">
+                    <StarRating rating={review.rating} size={14} />
+                  </td>
                   <td className="max-w-xs truncate px-4 py-3 text-brown-600">{review.notes || "—"}</td>
                   <td className="px-4 py-3 text-brown-600">{personName(review.reviewer)}</td>
                 </tr>

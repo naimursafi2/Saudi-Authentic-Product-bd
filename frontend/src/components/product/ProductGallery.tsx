@@ -3,15 +3,21 @@
 import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import type { Product } from "@/types/product";
 
 export function ProductGallery({ product }: { product: Product }) {
   const [active, setActive] = useState(0);
   const hasImages = product.images.length > 0;
-  // With real photos, show exactly what's uploaded; with none yet, fall back
-  // to a few tiles of the decorative visual so the gallery still feels full.
-  const thumbnailCount = hasImages ? product.images.length : 3;
+  // With real photos, show exactly what's uploaded. With a single curated photo
+  // there's nothing to switch between, so the strip is hidden rather than
+  // repeating the same shot four times. With neither, fall back to a few tiles
+  // of the decorative visual so the gallery still feels full.
+  const thumbnailCount = hasImages
+    ? product.images.length
+    : product.fallbackPhoto
+      ? 0
+      : 3;
 
   return (
     <div className="flex flex-col gap-4">
@@ -21,19 +27,17 @@ export function ProductGallery({ product }: { product: Product }) {
             {product.badge}
           </span>
         )}
-        {hasImages ? (
-          <Image
-            src={product.images[active]?.url ?? product.images[0].url}
-            alt={product.name}
-            fill
-            sizes="(min-width: 1024px) 50vw, 100vw"
-            className="object-cover"
-            priority
-          />
-        ) : (
-          <ProductVisual {...product.visual} variant={active} />
-        )}
+        <ProductMedia
+          src={hasImages ? (product.images[active]?.url ?? product.images[0].url) : undefined}
+          fallbackPhoto={product.fallbackPhoto}
+          visual={product.visual}
+          variant={active}
+          alt={product.name}
+          sizes="(min-width: 1024px) 50vw, 100vw"
+          priority
+        />
       </div>
+      {thumbnailCount > 0 && (
       <div className="grid grid-cols-4 gap-3">
         {Array.from({ length: thumbnailCount }).map((_, i) => (
           <button
@@ -54,11 +58,18 @@ export function ProductGallery({ product }: { product: Product }) {
                 className="object-cover"
               />
             ) : (
-              <ProductVisual {...product.visual} variant={i} pattern={i === active} />
+              <ProductMedia
+                visual={product.visual}
+                variant={i}
+                pattern={i === active}
+                alt=""
+                sizes="120px"
+              />
             )}
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }

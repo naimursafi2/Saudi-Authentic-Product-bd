@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { listCategories } from "@/lib/api/categories";
 import { listProducts } from "@/lib/api/products";
 import { toCategory, toProduct } from "@/lib/mappers";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
 
@@ -43,20 +42,14 @@ export default async function CategoriesPage() {
           const content = (
             <>
               <div className="relative aspect-[4/3] w-full overflow-hidden">
-                {category.image ? (
-                  <Image
-                    src={category.image.url}
-                    alt={category.name}
-                    fill
-                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                    className={cn("object-cover", category.comingSoon && "saturate-0")}
-                  />
-                ) : (
-                  <ProductVisual
-                    {...category.visual}
-                    className={cn(category.comingSoon && "saturate-0")}
-                  />
-                )}
+                <ProductMedia
+                  src={category.image?.url}
+                  fallbackPhoto={category.fallbackPhoto}
+                  visual={category.visual}
+                  alt={category.name}
+                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                  className={cn(category.comingSoon && "saturate-0")}
+                />
                 {category.comingSoon && (
                   <span className="absolute inset-0 flex items-center justify-center bg-black/15 backdrop-blur-[1px]">
                     <span className="rounded-full border border-black/10 bg-cream-200/90 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.1em] text-brown-500">

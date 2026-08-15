@@ -5,6 +5,7 @@ import { TrendingUp } from "lucide-react";
 import { listMyPerformanceReviews } from "@/lib/api/performance";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
+import { StarRating } from "@/components/ui/StarRating";
 import type { ApiPerformanceReview } from "@/types/hr";
 
 export default function EmployeePerformancePage() {
@@ -42,10 +43,7 @@ export default function EmployeePerformancePage() {
               <div key={review._id} className="rounded-lg border border-brown-600/10 bg-white p-6">
                 <div className="mb-2 flex items-center justify-between">
                   <p className="font-semibold text-green-950">{review.period}</p>
-                  <span className="text-gold-500">
-                    {"★".repeat(review.rating)}
-                    <span className="text-brown-500/30">{"★".repeat(5 - review.rating)}</span>
-                  </span>
+                  <StarRating rating={review.rating} size={15} />
                 </div>
                 {review.notes && <p className="text-sm text-brown-600">{review.notes}</p>}
                 <p className="mt-2 text-xs text-brown-500">Reviewed by {reviewer}</p>

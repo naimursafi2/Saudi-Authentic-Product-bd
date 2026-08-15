@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Heart, ShoppingCart } from "lucide-react";
 import type { Product } from "@/types/product";
 import { formatBDT, cn } from "@/lib/utils";
-import { ProductVisual } from "./ProductVisual";
+import { ProductMedia } from "./ProductMedia";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 
@@ -38,20 +37,14 @@ export function ProductCard({ product, className }: ProductCardProps) {
         href={`/product/${product.slug}`}
         className="relative block aspect-[4/5] w-full overflow-hidden bg-cream-400"
       >
-        {product.images.length > 0 ? (
-          <Image
-            src={product.images[0].url}
-            alt={product.name}
-            fill
-            sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <ProductVisual
-            {...product.visual}
-            className="transition-transform duration-500 group-hover:scale-105"
-          />
-        )}
+        <ProductMedia
+          src={product.images[0]?.url}
+          fallbackPhoto={product.fallbackPhoto}
+          visual={product.visual}
+          alt={product.name}
+          sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
+          className="transition-transform duration-500 group-hover:scale-105"
+        />
         {product.badge && (
           <span
             className={cn(

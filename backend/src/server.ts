@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { env } from "./config/env";
 import { connectDatabase } from "./config/db";
 
+
 async function main() {
   await connectDatabase();
 

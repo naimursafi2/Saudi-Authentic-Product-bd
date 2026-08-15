@@ -9,7 +9,7 @@ import { createOrder } from "@/lib/api/orders";
 import { ApiClientError } from "@/lib/api/client";
 import { formatBDT, cn } from "@/lib/utils";
 import { bdDistricts } from "@/data/bd-districts";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { FormSection, FieldLabel, inputClasses } from "./FormSection";
 
@@ -299,7 +299,14 @@ export function CheckoutClient() {
             {items.map((item) => (
               <li key={`${item.product.id}-${item.variant.id}`} className="flex gap-3">
                 <span className="relative size-14 shrink-0 overflow-hidden rounded">
-                  <ProductVisual {...item.product.visual} pattern={false} />
+                  <ProductMedia
+                    src={item.product.images[0]?.url}
+                    fallbackPhoto={item.product.fallbackPhoto}
+                    visual={item.product.visual}
+                    alt={item.product.name}
+                    sizes="56px"
+                    pattern={false}
+                  />
                   <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-green-900 text-[10px] font-bold text-white">
                     {item.quantity}
                   </span>

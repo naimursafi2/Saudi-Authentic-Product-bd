@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listCategories } from "@/lib/api/categories";
 import { toCategory } from "@/lib/mappers";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/utils";
 
@@ -34,8 +34,12 @@ export async function FeaturedCategories() {
             >
               <span className="relative flex size-[140px] items-center justify-center rounded-full border border-gold-500/30 p-[9px] shadow-[0_4px_20px_rgba(61,43,31,0.08)] sm:size-[192px]">
                 <span className="relative size-full overflow-hidden rounded-full">
-                  <ProductVisual
-                    {...category.visual}
+                  <ProductMedia
+                    src={category.image?.url}
+                    fallbackPhoto={category.fallbackPhoto}
+                    visual={category.visual}
+                    alt={category.name}
+                    sizes="(min-width: 640px) 192px, 140px"
                     className={cn(
                       "transition-transform duration-500 group-hover:scale-105",
                       category.comingSoon && "saturate-0"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ListFilter, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
 import { getSalesSummary } from "@/lib/api/reports";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -55,6 +56,7 @@ export default function AdminReportsPage() {
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={fieldClasses} />
         </div>
         <Button type="submit" variant="primary" size="sm">
+          <ListFilter size={15} />
           Apply
         </Button>
       </form>
@@ -70,9 +72,13 @@ export default function AdminReportsPage() {
       ) : summary ? (
         <>
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatTile label="Total Revenue" value={formatBDT(summary.totalRevenueBDT)} />
-            <StatTile label="Total Orders" value={String(summary.totalOrders)} />
-            <StatTile label="Average Order Value" value={formatBDT(summary.averageOrderValueBDT)} />
+            <StatTile icon={TrendingUp} label="Total Revenue" value={formatBDT(summary.totalRevenueBDT)} />
+            <StatTile icon={ShoppingBag} label="Total Orders" value={String(summary.totalOrders)} />
+            <StatTile
+              icon={Receipt}
+              label="Average Order Value"
+              value={formatBDT(summary.averageOrderValueBDT)}
+            />
           </div>
 
           <div className="mb-8 rounded-lg border border-brown-600/10 bg-white p-5">
@@ -125,11 +131,24 @@ export default function AdminReportsPage() {
   );
 }
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof TrendingUp;
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="rounded-lg border border-brown-600/10 bg-white p-5">
-      <p className="text-xs font-bold uppercase tracking-[0.06em] text-brown-500">{label}</p>
-      <p className="mt-1 font-serif text-2xl text-green-950">{value}</p>
+    <div className="flex items-center gap-4 rounded-lg border border-brown-600/10 bg-white p-5">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
+        <Icon size={18} />
+      </span>
+      <span>
+        <p className="text-xs font-bold uppercase tracking-[0.06em] text-brown-500">{label}</p>
+        <p className="mt-1 font-serif text-2xl text-green-950">{value}</p>
+      </span>
     </div>
   );
 }

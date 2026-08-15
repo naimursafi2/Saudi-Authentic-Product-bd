@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatBDT } from "@/lib/utils";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
 
 export function CartDrawer() {
@@ -60,9 +60,16 @@ export function CartDrawer() {
                   <Link
                     href={`/product/${item.product.slug}`}
                     onClick={closeDrawer}
-                    className="size-20 shrink-0 overflow-hidden rounded"
+                    className="relative size-20 shrink-0 overflow-hidden rounded"
                   >
-                    <ProductVisual {...item.product.visual} pattern={false} />
+                    <ProductMedia
+                      src={item.product.images[0]?.url}
+                      fallbackPhoto={item.product.fallbackPhoto}
+                      visual={item.product.visual}
+                      alt={item.product.name}
+                      sizes="80px"
+                      pattern={false}
+                    />
                   </Link>
                   <div className="flex flex-1 flex-col gap-1">
                     <div className="flex items-start justify-between gap-2">

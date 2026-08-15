@@ -1,5 +1,6 @@
 import type { ApiCategory, ApiProduct, ApiReview } from "@/types/api";
 import type { Category, CustomerReview, Product, ProductVisual } from "@/types/product";
+import { getCategoryPhoto, getProductPhoto } from "./productPhotos";
 
 const TONES: ProductVisual["tone"][] = ["green", "cream", "gold", "brown", "plum"];
 const ICONS: ProductVisual["icon"][] = ["Package", "Gift", "Droplet", "Watch", "Leaf", "Sparkles", "Nut"];
@@ -34,6 +35,7 @@ export function toProduct(api: ApiProduct): Product {
       typeof c === "string" ? { id: c, name: "", slug: "" } : { id: c._id, name: c.name, slug: c.slug }
     ),
     images: api.images,
+    fallbackPhoto: getProductPhoto(api.slug),
     visual: getFallbackVisual(api.slug),
     badge: api.badge,
     ratingAverage: api.ratingAverage,
@@ -59,6 +61,7 @@ export function toCategory(api: ApiCategory): Category {
     name: api.name,
     description: api.description,
     image: api.image ? { url: api.image.url, publicId: api.image.publicId } : undefined,
+    fallbackPhoto: getCategoryPhoto(api.slug),
     visual: getFallbackVisual(api.slug),
     comingSoon: api.isComingSoon,
     sortOrder: api.sortOrder,

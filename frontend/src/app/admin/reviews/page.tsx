@@ -6,6 +6,7 @@ import { listAllReviews, deleteReview } from "@/lib/api/reviews";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { StarRating } from "@/components/ui/StarRating";
 import type { ApiReview, Pagination } from "@/types/api";
 
 export default function AdminReviewsPage() {
@@ -69,8 +70,8 @@ export default function AdminReviewsPage() {
                   <tr key={review._id} className="border-b border-brown-600/10 last:border-none">
                     <td className="px-4 py-3 font-medium text-green-950">{productName}</td>
                     <td className="px-4 py-3 text-brown-600">{customerName}</td>
-                    <td className="px-4 py-3 text-gold-500">
-                      {"★".repeat(review.rating) + "☆".repeat(5 - review.rating)}
+                    <td className="px-4 py-3">
+                      <StarRating rating={review.rating} size={14} />
                     </td>
                     <td className="max-w-xs px-4 py-3 text-brown-600">
                       <p className="line-clamp-2">{review.comment}</p>

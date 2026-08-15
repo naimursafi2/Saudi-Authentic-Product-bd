@@ -7,7 +7,7 @@ import { Search, X } from "lucide-react";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
 import { formatBDT } from "@/lib/utils";
-import { ProductVisual } from "@/components/ui/ProductVisual";
+import { ProductMedia } from "@/components/ui/ProductMedia";
 import type { Product } from "@/types/product";
 
 interface SearchOverlayProps {
@@ -130,8 +130,15 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                       onClick={handleClose}
                       className="flex items-center gap-3 rounded-md p-2 hover:bg-green-950/5"
                     >
-                      <span className="size-12 shrink-0 overflow-hidden rounded">
-                        <ProductVisual {...product.visual} pattern={false} />
+                      <span className="relative size-12 shrink-0 overflow-hidden rounded">
+                        <ProductMedia
+                          src={product.images[0]?.url}
+                          fallbackPhoto={product.fallbackPhoto}
+                          visual={product.visual}
+                          alt={product.name}
+                          sizes="48px"
+                          pattern={false}
+                        />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-green-950">
