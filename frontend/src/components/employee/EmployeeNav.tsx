@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { href: "/employee/salary", label: "Salary", icon: Wallet },
 ];
 
-export function EmployeeNav() {
+export function EmployeeNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
@@ -25,12 +25,26 @@ export function EmployeeNav() {
           <Link
             key={item.href}
             href={item.href}
+            onClick={onNavigate}
             className={cn(
-              "flex items-center gap-3 rounded px-3 py-2 text-sm font-medium transition-colors",
-              active ? "bg-green-900 text-white" : "text-cream-100/80 hover:bg-white/10"
+              "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+              active ? "bg-white/10 text-white" : "text-cream-100/65 hover:bg-white/5 hover:text-white"
             )}
           >
-            <item.icon size={16} />
+            <span
+              className={cn(
+                "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-gold-500 transition-opacity duration-150",
+                active ? "opacity-100" : "opacity-0"
+              )}
+            />
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
+                active ? "bg-gold-500/15 text-gold-500" : "text-cream-100/50 group-hover:text-gold-500/80"
+              )}
+            >
+              <item.icon size={16} />
+            </span>
             {item.label}
           </Link>
         );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle2,
@@ -15,6 +16,7 @@ import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Button } from "@/components/ui/Button";
 import { trackOrder } from "@/lib/api/orders";
 import { ApiClientError } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import { cn, formatBDT } from "@/lib/utils";
 import type { ApiOrder, OrderStatus } from "@/types/api";
 
@@ -41,21 +43,30 @@ function formatDateTime(value: string) {
   });
 }
 
-export default function TrackOrderPage() {
-  const [orderNumber, setOrderNumber] = useState("");
+function TrackOrderForm() {
+  const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const [orderNumber, setOrderNumber] = useState(searchParams.get("orderNumber") ?? "");
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const autoSubmitted = useRef(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  // Prefill from the logged-in customer's own account, but never overwrite
+  // something the visitor already typed themselves.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (user?.email && !email) setEmail(user.email);
+  }, [user, email]);
+
+  async function performSearch(orderNumberValue: string, emailValue: string) {
     setIsLoading(true);
     setError(null);
     setOrder(null);
     try {
-      const { data } = await trackOrder(orderNumber.trim(), email.trim());
+      const { data } = await trackOrder(orderNumberValue.trim(), emailValue.trim());
       setOrder(data.order);
     } catch (err) {
       const message =
@@ -67,6 +78,20 @@ export default function TrackOrderPage() {
       setIsLoading(false);
       setHasSearched(true);
     }
+  }
+
+  // Auto-run the search when both fields are already known (e.g. arriving
+  // here via a "Track Order" link from an order card in the account page).
+  useEffect(() => {
+    if (!autoSubmitted.current && orderNumber.trim() && email.trim()) {
+      autoSubmitted.current = true;
+      void performSearch(orderNumber, email);
+    }
+  }, [orderNumber, email]);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    void performSearch(orderNumber, email);
   }
 
   const currentStepIndex = order ? STATUS_STEPS.findIndex((s) => s.status === order.status) : -1;
@@ -293,5 +318,13 @@ export default function TrackOrderPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TrackOrderPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-[900px] px-6 py-24" />}>
+      <TrackOrderForm />
+    </Suspense>
   );
 }

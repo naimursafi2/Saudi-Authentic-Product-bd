@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { UserModel, type IUser } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
 import {
@@ -8,6 +9,7 @@ import {
   verifyPasswordResetToken,
 } from "../utils/jwt";
 import { sendPasswordResetEmail } from "./email.service";
+import { verifyGoogleIdToken } from "../config/google";
 import type { LoginInput, RegisterInput } from "../validators/auth.validator";
 
 function issueTokens(user: IUser) {
@@ -19,9 +21,16 @@ function issueTokens(user: IUser) {
 }
 
 export async function registerCustomer(input: RegisterInput) {
-  const existing = await UserModel.findOne({ email: input.email });
-  if (existing) {
+  const existingEmail = await UserModel.findOne({ email: input.email });
+  if (existingEmail) {
     throw ApiError.conflict("An account with this email already exists");
+  }
+
+  if (input.phone) {
+    const existingPhone = await UserModel.findOne({ phone: input.phone });
+    if (existingPhone) {
+      throw ApiError.conflict("An account with this phone number already exists");
+    }
   }
 
   const user = await UserModel.create({
@@ -30,7 +39,47 @@ export async function registerCustomer(input: RegisterInput) {
     password: input.password,
     phone: input.phone,
     role: "customer",
+    addresses: input.address
+      ? [
+          {
+            label: "Home",
+            fullAddress: input.address.fullAddress,
+            district: input.address.district,
+            cityArea: input.address.cityArea,
+            phone: input.phone!,
+            isDefault: true,
+          },
+        ]
+      : [],
   });
+
+  return { user, tokens: issueTokens(user) };
+}
+
+/**
+ * Verifies a Google "Continue with Google" credential and either logs the
+ * matching account in or provisions a new customer account for it — reuses
+ * the same User model, JWT session tokens and cookies as password login, no
+ * separate auth system. The generated password is never surfaced to the
+ * user; they can set a real one later via forgot-password if they ever want
+ * to sign in with a password instead of Google.
+ */
+export async function googleAuth(idToken: string) {
+  const profile = await verifyGoogleIdToken(idToken);
+
+  let user = await UserModel.findOne({ email: profile.email });
+  if (user) {
+    if (!user.isActive) {
+      throw ApiError.forbidden("This account has been deactivated. Contact an administrator.");
+    }
+  } else {
+    user = await UserModel.create({
+      name: profile.name,
+      email: profile.email,
+      password: crypto.randomBytes(32).toString("hex"),
+      role: "customer",
+    });
+  }
 
   return { user, tokens: issueTokens(user) };
 }

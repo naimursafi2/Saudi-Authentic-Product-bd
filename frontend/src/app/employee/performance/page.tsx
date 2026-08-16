@@ -40,13 +40,23 @@ export default function EmployeePerformancePage() {
           {reviews.map((review) => {
             const reviewer = typeof review.reviewer === "string" ? "Manager" : review.reviewer.name;
             return (
-              <div key={review._id} className="rounded-lg border border-brown-600/10 bg-white p-6">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="font-semibold text-green-950">{review.period}</p>
-                  <StarRating rating={review.rating} size={15} />
+              <div
+                key={review._id}
+                className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow duration-150 hover:shadow-md sm:flex-row sm:items-start sm:gap-5"
+              >
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-sm font-bold text-green-900">
+                  {reviewer.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-serif text-lg text-green-950">{review.period}</p>
+                    <StarRating rating={review.rating} size={15} showValue />
+                  </div>
+                  {review.notes && <p className="mt-2 text-sm leading-relaxed text-brown-600">{review.notes}</p>}
+                  <p className="mt-3 text-xs font-medium uppercase tracking-wide text-brown-500">
+                    Reviewed by {reviewer}
+                  </p>
                 </div>
-                {review.notes && <p className="text-sm text-brown-600">{review.notes}</p>}
-                <p className="mt-2 text-xs text-brown-500">Reviewed by {reviewer}</p>
               </div>
             );
           })}

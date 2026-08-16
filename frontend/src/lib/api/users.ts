@@ -14,8 +14,33 @@ export async function addAddress(payload: AddAddressPayload) {
   return api.post<{ user: ApiUser }>("/users/me/addresses", payload);
 }
 
+export type UpdateAddressPayload = Partial<AddAddressPayload>;
+
+export async function updateAddress(addressId: string, payload: UpdateAddressPayload) {
+  return api.patch<{ user: ApiUser }>(`/users/me/addresses/${addressId}`, payload);
+}
+
 export async function removeAddress(addressId: string) {
   return api.delete<{ user: ApiUser }>(`/users/me/addresses/${addressId}`);
+}
+
+export interface UpdateMyProfilePayload {
+  name?: string;
+  phone?: string;
+}
+
+export async function updateMyProfile(payload: UpdateMyProfilePayload) {
+  return api.patch<{ user: ApiUser }>("/users/me", payload);
+}
+
+export async function updateMyAvatar(file: File) {
+  const formData = new FormData();
+  formData.append("avatar", file);
+  return api.patchForm<{ user: ApiUser }>("/users/me/avatar", formData);
+}
+
+export async function removeMyAvatar() {
+  return api.delete<{ user: ApiUser }>("/users/me/avatar");
 }
 
 export interface CreateStaffPayload {

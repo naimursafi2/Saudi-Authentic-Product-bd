@@ -3,10 +3,13 @@ import * as userController from "../controllers/user.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
+import { upload } from "../middlewares/upload.middleware";
 import {
   addAddressSchema,
   createStaffSchema,
   listUsersQuerySchema,
+  updateAddressSchema,
+  updateMyProfileSchema,
   updateStaffMetaSchema,
   updateUserRoleSchema,
   updateUserStatusSchema,
@@ -17,8 +20,16 @@ const router = Router();
 
 router.use(authenticate);
 
-// -- Customer's own addresses --
+// -- Customer's own profile / avatar / addresses --
+router.patch("/me", validate({ body: updateMyProfileSchema }), userController.updateMyProfile);
+router.patch("/me/avatar", upload.single("avatar"), userController.updateMyAvatar);
+router.delete("/me/avatar", userController.removeMyAvatar);
 router.post("/me/addresses", validate({ body: addAddressSchema }), userController.addAddress);
+router.patch(
+  "/me/addresses/:addressId",
+  validate({ body: updateAddressSchema }),
+  userController.updateMyAddress
+);
 router.delete("/me/addresses/:addressId", userController.removeAddress);
 
 // -- Staff management (Super Admin / Admin only) --

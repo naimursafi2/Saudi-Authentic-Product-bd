@@ -40,6 +40,24 @@ export const addAddressSchema = z.object({
   isDefault: z.boolean().optional().default(false),
 });
 
+// Every field optional (partial edit) — `isDefault` intentionally has no
+// `.default()` here, unlike `addAddressSchema`, so an update that omits it
+// leaves the address's existing default flag untouched instead of resetting
+// it to false.
+export const updateAddressSchema = z.object({
+  label: z.string().trim().min(1).max(60).optional(),
+  fullAddress: z.string().trim().min(3).max(300).optional(),
+  district: z.string().trim().min(1).max(80).optional(),
+  cityArea: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().min(6).max(20).optional(),
+  isDefault: z.boolean().optional(),
+});
+
+export const updateMyProfileSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  phone: z.string().trim().min(6).max(20).optional(),
+});
+
 export const listUsersQuerySchema = z.object({
   role: z.enum(ROLES).optional(),
   search: z.string().trim().optional(),
@@ -49,4 +67,6 @@ export const listUsersQuerySchema = z.object({
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>;
 export type AddAddressInput = z.infer<typeof addAddressSchema>;
+export type UpdateAddressInput = z.infer<typeof updateAddressSchema>;
 export type UpdateStaffMetaInput = z.infer<typeof updateStaffMetaSchema>;
+export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;

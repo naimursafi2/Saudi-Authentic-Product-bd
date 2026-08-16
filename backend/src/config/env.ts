@@ -32,6 +32,8 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional().default(""),
   SMTP_FROM: z.string().optional().default(""),
 
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
+
   SEED_SUPER_ADMIN_NAME: z.string().default("Super Admin"),
   SEED_SUPER_ADMIN_EMAIL: z
     .string()
@@ -74,3 +76,5 @@ export const isCloudinaryConfigured = Boolean(
 export const isSmtpConfigured = Boolean(
   env.SMTP_SERVICE && env.SMTP_USER && env.SMTP_PASS,
 );
+
+export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);

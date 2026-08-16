@@ -18,6 +18,12 @@ export const login = catchAsync(async (req: Request, res: Response) => {
   sendSuccess(res, 200, "Logged in successfully", { user, accessToken: tokens.accessToken });
 });
 
+export const googleAuth = catchAsync(async (req: Request, res: Response) => {
+  const { user, tokens } = await authService.googleAuth(req.body.idToken);
+  setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+  sendSuccess(res, 200, "Signed in with Google", { user, accessToken: tokens.accessToken });
+});
+
 export const refresh = catchAsync(async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.refreshToken;
   if (!refreshToken) throw ApiError.unauthorized("No refresh token provided");

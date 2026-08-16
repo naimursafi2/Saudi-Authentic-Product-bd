@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { sendSuccess } from "../utils/ApiResponse";
+import { ApiError } from "../utils/ApiError";
 import { paramStr } from "../utils/params";
 import * as userService from "../services/user.service";
 
@@ -45,7 +46,28 @@ export const addAddress = catchAsync(async (req: Request, res: Response) => {
   sendSuccess(res, 201, "Address added", { user });
 });
 
+export const updateMyAddress = catchAsync(async (req: Request, res: Response) => {
+  const user = await userService.updateAddress(req.user!.id, paramStr(req.params.addressId), req.body);
+  sendSuccess(res, 200, "Address updated", { user });
+});
+
 export const removeAddress = catchAsync(async (req: Request, res: Response) => {
   const user = await userService.removeAddress(req.user!.id, paramStr(req.params.addressId));
   sendSuccess(res, 200, "Address removed", { user });
+});
+
+export const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
+  const user = await userService.updateMyProfile(req.user!.id, req.body);
+  sendSuccess(res, 200, "Profile updated", { user });
+});
+
+export const updateMyAvatar = catchAsync(async (req: Request, res: Response) => {
+  if (!req.file) throw ApiError.badRequest("A profile picture image is required");
+  const user = await userService.updateMyAvatar(req.user!.id, req.file);
+  sendSuccess(res, 200, "Profile picture updated", { user });
+});
+
+export const removeMyAvatar = catchAsync(async (req: Request, res: Response) => {
+  const user = await userService.removeMyAvatar(req.user!.id);
+  sendSuccess(res, 200, "Profile picture removed", { user });
 });

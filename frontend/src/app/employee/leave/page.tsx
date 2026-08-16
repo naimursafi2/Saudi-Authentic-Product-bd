@@ -82,36 +82,45 @@ export default function EmployeeLeavePage() {
       ) : error ? (
         <ErrorState message={error} />
       ) : leaves.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="No leave requests yet" />
+        <EmptyState
+          icon={CalendarClock}
+          title="No leave requests yet"
+          description="Submit a request when you need time off."
+          action={
+            <Button variant="outline" size="sm" onClick={() => setShowForm(true)} className="mt-2">
+              <Plus size={14} /> Request Leave
+            </Button>
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-brown-600/10 bg-white shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Dates</th>
-                <th className="px-4 py-3">Reason</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
+              <tr className="border-b border-brown-600/10 bg-cream-200/40 text-xs uppercase tracking-wide text-brown-500">
+                <th className="px-5 py-3.5">Type</th>
+                <th className="px-5 py-3.5">Dates</th>
+                <th className="px-5 py-3.5">Reason</th>
+                <th className="px-5 py-3.5">Status</th>
+                <th className="px-5 py-3.5" />
               </tr>
             </thead>
             <tbody>
               {leaves.map((leave) => (
-                <tr key={leave._id} className="border-b border-brown-600/10 last:border-none">
-                  <td className="px-4 py-3 capitalize text-green-950">{leave.type}</td>
-                  <td className="px-4 py-3 text-brown-600">
+                <tr key={leave._id} className="border-b border-brown-600/10 transition-colors last:border-none hover:bg-cream-100/60">
+                  <td className="px-5 py-3.5 capitalize font-medium text-green-950">{leave.type}</td>
+                  <td className="px-5 py-3.5 text-brown-600">
                     {new Date(leave.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} –{" "}
                     {new Date(leave.endDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                   </td>
-                  <td className="max-w-xs truncate px-4 py-3 text-brown-600">{leave.reason}</td>
-                  <td className="px-4 py-3">
+                  <td className="max-w-xs truncate px-5 py-3.5 text-brown-600">{leave.reason}</td>
+                  <td className="px-5 py-3.5">
                     <StatusBadge status={leave.status} />
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     {leave.status === "pending" && (
                       <button
                         onClick={() => handleCancel(leave._id)}
-                        className="text-xs font-bold uppercase text-brown-500 hover:text-[#8a4a3f]"
+                        className="text-xs font-bold uppercase tracking-wide text-brown-500 transition-colors hover:text-[#8a4a3f]"
                       >
                         Cancel
                       </button>

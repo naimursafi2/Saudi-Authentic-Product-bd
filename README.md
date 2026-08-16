@@ -35,16 +35,36 @@ form or state-management library — forms/data fetching are hand-rolled with
 
 - **Customer storefront** (`frontend/src/app/(site)`): home, shop (filterable
   catalog), product detail, categories, offers (discounted variants), cart,
-  wishlist, account (login/register + orders/addresses/profile), password
-  reset, a public order-tracking page (`/track-order` — look up any order by
-  order number + checkout email, no login required), about, contact,
-  shipping policy, plus a standalone `/checkout` flow — all backed by the
-  live API and Cloudinary imagery. Cart and wishlist are **client-side only**
+  wishlist, a sidebar-driven account dashboard (login/register; a persistent
+  nav — Dashboard/My Orders/Wishlist/Address/Manage Profile/Logout — next to
+  stat cards, recent-orders and wishlist-preview panels, profile photo
+  upload via Cloudinary, editable name/phone/password, and a full address
+  book with add/edit/delete/set-default), password reset, a public
+  order-tracking page (`/track-order` — look up any order by order number +
+  checkout email, no login required, auto-prefilled for signed-in
+  customers), about, contact, shipping policy, plus a standalone `/checkout`
+  flow — all backed by the live API and Cloudinary imagery. The navbar shows
+  a personalized "My Account" entry (account icon + the signed-in
+  customer's first name) that links straight into the dashboard, replacing
+  the Sign In prompt shown to logged-out visitors. Cart and wishlist are
+  **client-side only**
   (`localStorage`), not synced to the account or across devices — there is
   no server-side cart/wishlist model.
 - Secure authentication (JWT via httpOnly access/refresh cookies,
   logout-all via token versioning), role-based access control across five
   roles: `customer`, `employee`, `co_admin`, `admin`, `super_admin`.
+  Registration enforces a strong-password policy (8+ characters, upper +
+  lower case, a digit) with a live strength meter and a required
+  confirm-password match, checks both email *and* phone for duplicates, and
+  can save an optional first delivery address in the same request. A single
+  Sign In / Register / Forgot Password form (`/account`) serves every
+  role — there's no separate staff login page. Forgot/reset password is one
+  flow that works identically for all five roles: a time-limited, single-use
+  emailed link that invalidates itself (and every other active session) once
+  used. Optional "Continue with Google" sign-in/registration is wired
+  end-to-end via Google Identity Services (`POST /auth/google`,
+  `google-auth-library`) but stays inactive — button hidden, endpoint 503s —
+  until a `GOOGLE_CLIENT_ID` is configured (see Environment variables).
 - **Admin / Co-Admin / Super Admin portal** (`frontend/src/app/admin`,
   fully built): dashboard (live stats), products, categories, orders,
   customers, reviews, employees, attendance, leave, tasks, performance,
@@ -168,13 +188,15 @@ missing/malformed):
 | `COOKIE_DOMAIN` | domain for the auth cookies |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | image uploads; blank → upload endpoints return 503, rest of the app still works |
 | `SMTP_SERVICE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | staff/customer email notifications; blank → sends become a silent logged no-op |
+| `GOOGLE_CLIENT_ID` | Google Sign-In OAuth Client ID; blank → `/auth/google` returns 503 and the frontend button stays hidden. Not a secret — see `backend/.env.example` for how to obtain one |
 | `SEED_SUPER_ADMIN_NAME` / `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` | bootstrap super-admin account used by `npm run seed` |
 
-**Frontend** (`frontend/.env.example`) — just one variable:
+**Frontend** (`frontend/.env.example`):
 
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_API_URL` | backend API base URL including prefix; defaults to `http://localhost:5000/api/v1` if unset |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | must match the backend's `GOOGLE_CLIENT_ID`; blank hides the "Continue with Google" button |
 
 ## Known limitations
 
@@ -190,9 +212,21 @@ missing/malformed):
 - No `frontend/src/middleware.ts` — admin/employee route protection is
   client-side only (`RoleGuard`); the backend is the real authorization
   boundary.
+- No silent access-token refresh in the frontend API client — the access
+  token cookie expires after `JWT_ACCESS_EXPIRES_IN` (15m by default) with
+  no automatic `POST /auth/refresh` retry, so a session left open past that
+  gets silently signed out on its next request even though the 30-day
+  refresh-token cookie is still valid. See `CLAUDE.md`'s Known limitations
+  for detail.
 - The homepage content system (hero slides + homepage sections) is scoped
   to the homepage only — it is not a general CMS/page builder; other static
   pages aren't admin-editable.
+- Google Sign-In is fully implemented but inactive on this machine — no
+  `GOOGLE_CLIENT_ID` has been provisioned yet (see Environment variables).
+- No SMS gateway is configured anywhere, so there's no phone-OTP
+  registration/verification or phone-based login — `phone` is only ever a
+  supplementary, duplicate-checked contact field alongside the required
+  email login identifier.
 - `frontend/src/app/(site)/contact/page.tsx` still has a placeholder phone
   number (`+880 1XXX-XXXXXX`) pending real contact info.
 

@@ -9,7 +9,6 @@ import {
   Heart,
   LogOut,
   Menu,
-  Package,
   Search,
   ShoppingCart,
   Truck,
@@ -180,65 +179,18 @@ export function Header() {
               )}
             </Link>
 
-            {/* Account dropdown — auth-aware, same hover/focus pattern as Categories. */}
-            <div className="group relative hidden sm:flex sm:items-stretch">
-              <Link href="/account" aria-label="Account" className={cn(ICON_BUTTON_CLASS, "flex items-center gap-1")}>
-                <User size={19} />
-              </Link>
-              <div className="invisible absolute right-0 top-full z-10 w-52 pt-3 opacity-0 transition-all duration-200 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
-                <div className="flex flex-col overflow-hidden rounded-lg border border-gold-500/25 bg-cream-50 py-2 shadow-[0_12px_30px_rgba(1,45,29,0.15)]">
-                  {status === "authenticated" && user ? (
-                    <>
-                      <div className="px-4 py-2">
-                        <p className="truncate text-sm font-semibold text-green-950">{user.name}</p>
-                        <p className="truncate text-xs text-brown-500">{user.email}</p>
-                      </div>
-                      <div className="my-1 h-px bg-green-900/10" />
-                      <Link
-                        href="/account"
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-brown-600 hover:bg-green-950/5 hover:text-green-950"
-                      >
-                        <Package size={14} /> My Orders
-                      </Link>
-                      <Link
-                        href="/track-order"
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-brown-600 hover:bg-green-950/5 hover:text-green-950"
-                      >
-                        <Truck size={14} /> Track Order
-                      </Link>
-                      <button
-                        onClick={logout}
-                        className="flex items-center gap-2 px-4 py-2 text-left text-sm text-brown-600 hover:bg-green-950/5 hover:text-green-950"
-                      >
-                        <LogOut size={14} /> Sign Out
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link
-                        href="/account"
-                        className="px-4 py-2 text-sm font-semibold text-green-950 hover:bg-green-950/5"
-                      >
-                        Sign In
-                      </Link>
-                      <Link
-                        href="/account"
-                        className="px-4 py-2 text-sm text-brown-600 hover:bg-green-950/5 hover:text-green-950"
-                      >
-                        Create Account
-                      </Link>
-                      <div className="my-1 h-px bg-green-900/10" />
-                      <Link
-                        href="/track-order"
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-brown-600 hover:bg-green-950/5 hover:text-green-950"
-                      >
-                        <Truck size={14} /> Track Order
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+            {/* My Account — direct link into the customer dashboard; shows the
+                signed-in customer's first name beside the icon. */}
+            <Link
+              href="/account"
+              aria-label="My Account"
+              className={cn(ICON_BUTTON_CLASS, "hidden items-center gap-1.5 sm:flex")}
+            >
+              <User size={19} />
+              <span className="max-w-[7rem] truncate text-xs font-bold uppercase tracking-[0.06em]">
+                {status === "authenticated" && user ? user.name.split(" ")[0] : "Sign In"}
+              </span>
+            </Link>
 
             <button aria-label="Open cart" onClick={openDrawer} className={ICON_BUTTON_CLASS}>
               <ShoppingCart size={19} />
@@ -306,7 +258,7 @@ export function Header() {
               onClick={() => setMobileOpen(false)}
               className="flex items-center gap-2 rounded px-2 py-3 text-sm font-bold uppercase tracking-[0.1em] text-green-950 hover:bg-green-950/5"
             >
-              <User size={16} /> {status === "authenticated" ? "My Account" : "Sign In"}
+              <User size={16} /> {status === "authenticated" && user ? user.name.split(" ")[0] : "Sign In"}
             </Link>
             {status === "authenticated" && (
               <button

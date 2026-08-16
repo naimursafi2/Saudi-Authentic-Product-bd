@@ -2,9 +2,14 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { KeyRound } from "lucide-react";
 import { resetPassword } from "@/lib/api/auth";
 import { ApiClientError } from "@/lib/api/client";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+import { PasswordStrengthMeter } from "@/components/ui/PasswordStrengthMeter";
+import { meetsPasswordRequirements } from "@/lib/passwordStrength";
+import { cn } from "@/lib/utils";
 
 const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3.5 py-2.5 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
@@ -14,19 +19,36 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!meetsPasswordRequirements(password)) {
+      setError("Password must be at least 8 characters and include an uppercase letter, a lowercase letter and a number.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await resetPassword(token, password);
+      await resetPassword(token, password, confirmPassword);
       setDone(true);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not reset your password.");
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not reset your password. The link may have expired — please request a new one."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -61,7 +83,11 @@ function ResetPasswordForm() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
       <div className="text-center">
+        <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-green-950 text-gold-500">
+          <KeyRound size={24} />
+        </span>
         <h1 className="font-serif text-3xl text-green-950">Set a New Password</h1>
+        <p className="mt-2 text-sm text-brown-500">Choose a strong password you haven&apos;t used before.</p>
       </div>
       <form
         onSubmit={handleSubmit}
@@ -71,15 +97,29 @@ function ResetPasswordForm() {
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600">
             New Password
           </label>
-          <input
+          <PasswordInput
             required
-            type="password"
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className={fieldClasses}
+            inputClassName={fieldClasses}
           />
+          <PasswordStrengthMeter password={password} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600">
+            Confirm New Password
+          </label>
+          <PasswordInput
+            required
+            minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            inputClassName={cn(fieldClasses, passwordsMismatch && "border-[#8a4a3f]/50")}
+          />
+          {passwordsMismatch && <p className="mt-1 text-xs text-[#8a4a3f]">Passwords do not match.</p>}
         </div>
         {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
         <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" disabled={isSubmitting}>

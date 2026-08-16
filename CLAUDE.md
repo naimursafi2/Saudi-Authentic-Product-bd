@@ -35,8 +35,8 @@ Register every new router in `routes/index.ts`.
 
 | Base path | Purpose | Role restrictions (beyond `authenticate`) |
 | --- | --- | --- |
-| `/auth` | register/login/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password. Login/register/refresh/forgot/reset are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password` require auth |
-| `/users` | customer address CRUD (`/me/addresses`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin` |
+| `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password. Login/register/google/refresh/forgot/reset are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password` require auth; `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
+| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin`; all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status; `GET /:id` ownership-checked in controller | list-all/status-update: `admin`,`super_admin`,`co_admin`(+`employee` for list); `/track` is public (mounted before the router's `authenticate`) |
@@ -127,6 +127,52 @@ allowed roles via `authorize(...)`, matching existing convention. Convention:
 co_admin can run day-to-day HR (attendance/leave/tasks/performance) but never
 touches salary, staff role/status, or deletes — those are admin/super_admin only.
 
+**Registration** (`auth.validator.ts#registerSchema`, `auth.service.ts#registerCustomer`):
+`name`, `email` (unique), `password`+`confirmPassword` (must match; password
+must be 8+ chars with an uppercase letter, a lowercase letter and a digit —
+same regex enforced client-side live in `lib/passwordStrength.ts`), optional
+`phone` (also checked for uniqueness — a second registration with an
+already-used phone number 409s just like a duplicate email) and an optional
+`address` object (`fullAddress`/`district`/`cityArea`) that, if present,
+requires `phone` and is saved as the new customer's first (default) address
+in the same request — no separate follow-up call. There is no phone-based
+*login* or SMS-OTP verification (the reference design's "Signup with Mobile
+Number + OTP" panel was deliberately not built — no SMS gateway is
+configured anywhere in this project); phone is only ever a supplementary
+contact field alongside the required email login identifier.
+
+**Forgot / reset password** (`auth.service.ts#forgotPassword`/`resetPassword`,
+`utils/jwt.ts#signPasswordResetToken`) works identically for **every role**
+(customer, employee, co_admin, admin, super_admin) — it's a single flow keyed
+by email against the shared `User` model, not a per-role system. `POST
+/auth/forgot-password` always responds success without revealing whether the
+email exists, and (best-effort, fire-and-forget) emails a link
+`{CLIENT_ORIGIN}/account/reset-password?token=...` carrying a JWT signed with
+a `purpose: "password_reset"` claim and a 30-minute expiry. `POST
+/auth/reset-password` requires `newPassword`+`confirmPassword` (same
+strength/match rules as registration) and verifies the token's `purpose` and
+`tokenVersion`; on success it bumps the user's `tokenVersion`, which both
+sets the new password **and** invalidates the token (and every other active
+session) so it cannot be replayed. Same "Forgot password?" link and reset
+page serve all five roles — there's no separate admin/employee login screen
+(see `/account` below), so no extra wiring was needed for staff roles.
+
+**Google Sign-In** (`config/google.ts`, `POST /auth/google`): verifies the ID
+token from Google Identity Services' "Continue with Google" button
+server-side via `google-auth-library`, using it to find-or-create a
+`customer` user by email (a first-time Google sign-in gets a random unusable
+password so it still satisfies the `User` schema — reuses the same JWT
+session issuance as password login, not a separate auth system). Gated by
+`isGoogleConfigured` (`Boolean(env.GOOGLE_CLIENT_ID)`) — mirrors the
+Cloudinary/SMTP pattern exactly: unset → the endpoint 503s with a clear
+message and the frontend's `GoogleAuthButton` renders nothing, so the rest of
+the app is unaffected. `GOOGLE_CLIENT_ID` is a public client identifier (not
+a secret); the same value must also be set as the frontend's
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID`. See `backend/.env.example` for the Google
+Cloud Console setup steps — an OAuth Client ID has not been provisioned on
+this machine, so Google Sign-In is wired end-to-end but inactive until one is
+added.
+
 **Uploads**: `multer` (memory storage) → `uploadBufferToCloudinary()` in
 `config/cloudinary.ts`. Guarded by `isCloudinaryConfigured`; returns a clear
 503 if Cloudinary env vars are unset rather than a confusing SDK error.
@@ -192,15 +238,42 @@ types/product.ts       Storefront view-model types (Product, Category, ProductVa
 `/` (homepage, composed from admin-managed hero slides + homepage sections),
 `/shop` (filterable catalog), `/product/[slug]` (detail, `force-dynamic`),
 `/categories`, `/offers` (products with a `compareAtPriceBDT` discount),
-`/cart`, `/wishlist`, `/account` (combined login/register + orders/addresses/
-profile tabs for customers; staff roles see a redirect card to `/admin` or
-`/employee` instead), `/account/reset-password`, `/track-order` (public
-order-tracking form — order number + checkout email, no login required; see
-"Public order tracking" above), `/about`, `/contact`,
-`/shipping-policy`. There is no standalone `/reviews` page — reviews render
-inline on the product page and homepage, and are moderated from
-`/admin/reviews`. `/checkout` is a separate top-level route (see folder
+`/cart`, `/wishlist`, `/account` (customer dashboard — a persistent left
+sidebar, `CustomerSidebar.tsx` — user card (avatar/name/email) + Dashboard /
+My Orders / Wishlist / Address / Manage Profile nav + Logout, all in the
+site's green-950/gold-500 palette — next to a content pane keyed off the
+active tab: `DashboardOverview.tsx` (six real-data stat cards — total/
+running orders, cart items, wishlist items, amount spent, saved addresses —
+plus dark-header "Recent Orders" and "Wishlist Items" summary panels with
+their own "All Orders"/"View More" shortcuts) or the existing `OrderHistory`
+/ `AddressBook` / `ProfileSection` components, plus a Wishlist tab reusing
+the same `ProductCard` grid as the standalone `/wishlist` page. Sidebar items
+are deliberately scoped to features the API actually has — no
+promo-code/payment-method/support-ticket nav items were added since no
+backend exists for them. Staff roles see a redirect card to `/admin` or
+`/employee` instead of the dashboard; when signed out, renders `AuthForms` —
+the single Sign In / Register / Forgot Password form shared by **every**
+role, see "Registration" and "Forgot / reset password" above), `/account/reset-password` (Set a New
+Password — Confirm Password field + live strength meter, see above),
+`/track-order` (public order-tracking form — order number + checkout email,
+no login required; auto-prefills from a logged-in customer's own email and
+from an `?orderNumber=` query param when arrived at via the "Track Order"
+link on an order card; see "Public order tracking" above), `/about`,
+`/contact`, `/shipping-policy`. There is no standalone `/reviews` page —
+reviews render inline on the product page and homepage, and are moderated
+from `/admin/reviews`. `/checkout` is a separate top-level route (see folder
 structure above), not part of `(site)`.
+
+**`AuthForms`** (`components/account/AuthForms.tsx`) is the single Sign In /
+Register / Forgot Password form used by customers *and* staff alike (there is
+no separate admin/employee login page — see "Forgot / reset password"
+above). Shared pieces reused elsewhere too: `components/ui/PasswordInput.tsx`
+(show/hide eye-icon toggle, used on every password field across login,
+register, reset-password), `components/ui/PasswordStrengthMeter.tsx` +
+`lib/passwordStrength.ts` (live strength bar/label, same rule the backend
+enforces), and `components/account/GoogleAuthButton.tsx` (renders Google's
+official button via Google Identity Services, calls `/auth/google`; renders
+nothing when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is unset).
 
 #### Admin portal (`app/admin`) — fully built, not stubbed
 
@@ -307,22 +380,26 @@ frontend: npm run dev      (Next.js, http://localhost:3000)
           npm run typecheck / lint
 ```
 
-`frontend/.env.example` documents the single var it needs,
-`NEXT_PUBLIC_API_URL` (defaults to `http://localhost:5000/api/v1` if unset —
-fine for local dev, matches the backend's default `PORT`/`API_PREFIX`).
+`frontend/.env.example` documents `NEXT_PUBLIC_API_URL` (defaults to
+`http://localhost:5000/api/v1` if unset — fine for local dev, matches the
+backend's default `PORT`/`API_PREFIX`) and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+(public, not secret — blank hides the "Continue with Google" button; must
+match the backend's `GOOGLE_CLIENT_ID`).
 
 `backend/.env.example` documents: `NODE_ENV`, `PORT`, `API_PREFIX`,
 `CLIENT_ORIGIN` (CORS), `MONGODB_URI`, `JWT_ACCESS_SECRET` /
 `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_SECRET` / `JWT_REFRESH_EXPIRES_IN`,
 `COOKIE_DOMAIN`, `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` /
 `CLOUDINARY_API_SECRET`, `SMTP_SERVICE` / `SMTP_USER` / `SMTP_PASS` /
-`SMTP_FROM`, `SEED_SUPER_ADMIN_NAME` / `SEED_SUPER_ADMIN_EMAIL` /
+`SMTP_FROM`, `GOOGLE_CLIENT_ID` (Google Sign-In, see above), `SEED_SUPER_ADMIN_NAME` / `SEED_SUPER_ADMIN_EMAIL` /
 `SEED_SUPER_ADMIN_PASSWORD`. All validated by a Zod schema in
 `src/config/env.ts` — the app fails fast on startup if a required var
 (JWT secrets, Mongo URI) is missing or malformed, except a relaxed default
 for JWT secrets under `NODE_ENV=test`. Blank Cloudinary vars → upload
 endpoints return a clear 503 (everything else still works); blank SMTP vars
-→ email sending becomes a silent logged no-op (`isSmtpConfigured`).
+→ email sending becomes a silent logged no-op (`isSmtpConfigured`); blank
+`GOOGLE_CLIENT_ID` → `/auth/google` 503s and the frontend button hides itself
+(`isGoogleConfigured`).
 
 ### Sandbox/local DNS workaround (`backend/scripts/`)
 
@@ -396,6 +473,27 @@ need it.
 - **No `frontend/src/middleware.ts`** — route protection is entirely
   client-side (`RoleGuard`) plus real backend authorization; there's no
   server-side redirect before the page ships to the browser.
+- **No silent access-token refresh on the frontend** — `JWT_ACCESS_EXPIRES_IN`
+  defaults to 15 minutes, and `lib/api/client.ts` has no interceptor that
+  calls `POST /auth/refresh` on a 401; once the access-token cookie expires
+  mid-session, the next mutating request (e.g. placing an order) fails with
+  401 and the user is silently signed out (`AuthContext`'s next `GET
+  /auth/me` also 401s), even though the 30-day `refreshToken` cookie is
+  still valid. Confirmed by hitting this live: `POST /orders` 401'd after a
+  session sat open past the access-token TTL, requiring a fresh sign-in.
+  Not something to silently "fix" as a drive-by — it changes the auth
+  client's architecture — but worth knowing if a customer reports being
+  logged out mid-checkout.
+- **Google Sign-In is wired end-to-end but inactive** — no `GOOGLE_CLIENT_ID`
+  has been provisioned on this machine, so `POST /auth/google` 503s and the
+  frontend's "Continue with Google" button doesn't render. See "Google
+  Sign-In" above for the exact setup steps; nothing else needs to change once
+  a Client ID is added to both `.env` files.
+- **No SMS/phone-based registration verification** — registration collects
+  an optional `phone` field (validated + checked for duplicates) but there is
+  no SMS gateway configured anywhere in this project, so there is no
+  phone-OTP signup flow or phone-based login; email remains the only login
+  identifier.
 - Static content pages (`/about`, `/contact`, `/shipping-policy`) are
   hardcoded JSX, not admin-editable — only the homepage has editable
   content (see "Homepage content management").

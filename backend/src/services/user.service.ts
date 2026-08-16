@@ -1,7 +1,14 @@
 import { UserModel } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
+import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import { sendStaffWelcomeEmail } from "./email.service";
-import type { AddAddressInput, CreateStaffInput, UpdateStaffMetaInput } from "../validators/user.validator";
+import type {
+  AddAddressInput,
+  CreateStaffInput,
+  UpdateAddressInput,
+  UpdateMyProfileInput,
+  UpdateStaffMetaInput,
+} from "../validators/user.validator";
 import type { Role } from "../constants/roles";
 
 export async function createStaffAccount(input: CreateStaffInput) {
@@ -101,10 +108,62 @@ export async function addAddress(userId: string, input: AddAddressInput) {
   return user;
 }
 
+export async function updateAddress(userId: string, addressId: string, input: UpdateAddressInput) {
+  const user = await UserModel.findById(userId);
+  if (!user) throw ApiError.notFound("User not found");
+
+  const address = user.addresses.find((a) => a._id?.toString() === addressId);
+  if (!address) throw ApiError.notFound("Address not found");
+
+  if (input.isDefault) {
+    user.addresses.forEach((a) => {
+      a.isDefault = false;
+    });
+  }
+  Object.assign(address, input);
+  await user.save();
+  return user;
+}
+
 export async function removeAddress(userId: string, addressId: string) {
   const user = await UserModel.findById(userId);
   if (!user) throw ApiError.notFound("User not found");
   user.addresses = user.addresses.filter((a) => a._id?.toString() !== addressId);
+  await user.save();
+  return user;
+}
+
+export async function updateMyProfile(userId: string, input: UpdateMyProfileInput) {
+  const user = await UserModel.findById(userId);
+  if (!user) throw ApiError.notFound("User not found");
+  Object.assign(user, input);
+  await user.save();
+  return user;
+}
+
+export async function updateMyAvatar(userId: string, file: Express.Multer.File) {
+  const user = await UserModel.findById(userId);
+  if (!user) throw ApiError.notFound("User not found");
+
+  if (user.avatar?.publicId) {
+    await deleteCloudinaryImage(user.avatar.publicId);
+  }
+  const uploaded = await uploadBufferToCloudinary(file.buffer, {
+    folder: "saudi-authentic-product/avatars",
+  });
+  user.avatar = { url: uploaded.url, publicId: uploaded.publicId };
+  await user.save();
+  return user;
+}
+
+export async function removeMyAvatar(userId: string) {
+  const user = await UserModel.findById(userId);
+  if (!user) throw ApiError.notFound("User not found");
+
+  if (user.avatar?.publicId) {
+    await deleteCloudinaryImage(user.avatar.publicId);
+  }
+  user.avatar = undefined;
   await user.save();
   return user;
 }
