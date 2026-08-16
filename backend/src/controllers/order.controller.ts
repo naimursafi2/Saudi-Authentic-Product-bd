@@ -28,6 +28,12 @@ export const listOrders = catchAsync(async (req: Request, res: Response) => {
   sendSuccess(res, 200, "Orders fetched", { orders }, { pagination });
 });
 
+export const trackOrder = catchAsync(async (req: Request, res: Response) => {
+  const { orderNumber, email } = req.query as unknown as { orderNumber: string; email: string };
+  const order = await orderService.trackOrder(orderNumber, email);
+  sendSuccess(res, 200, "Order found", { order });
+});
+
 export const getOrder = catchAsync(async (req: Request, res: Response) => {
   const order = await orderService.getOrderById(paramStr(req.params.id));
 

@@ -36,10 +36,12 @@ form or state-management library — forms/data fetching are hand-rolled with
 - **Customer storefront** (`frontend/src/app/(site)`): home, shop (filterable
   catalog), product detail, categories, offers (discounted variants), cart,
   wishlist, account (login/register + orders/addresses/profile), password
-  reset, about, contact, shipping policy, plus a standalone `/checkout` flow
-  — all backed by the live API and Cloudinary imagery. Cart and wishlist are
-  **client-side only** (`localStorage`), not synced to the account or across
-  devices — there is no server-side cart/wishlist model.
+  reset, a public order-tracking page (`/track-order` — look up any order by
+  order number + checkout email, no login required), about, contact,
+  shipping policy, plus a standalone `/checkout` flow — all backed by the
+  live API and Cloudinary imagery. Cart and wishlist are **client-side only**
+  (`localStorage`), not synced to the account or across devices — there is
+  no server-side cart/wishlist model.
 - Secure authentication (JWT via httpOnly access/refresh cookies,
   logout-all via token versioning), role-based access control across five
   roles: `customer`, `employee`, `co_admin`, `admin`, `super_admin`.

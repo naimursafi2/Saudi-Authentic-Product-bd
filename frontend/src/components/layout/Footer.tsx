@@ -14,6 +14,7 @@ const linkColumns = [
   {
     heading: "Support",
     links: [
+      { href: "/track-order", label: "Track Order" },
       { href: "/shipping-policy", label: "Shipping Policy" },
       { href: "/contact", label: "Contact Us" },
     ],

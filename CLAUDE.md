@@ -39,7 +39,7 @@ Register every new router in `routes/index.ts`.
 | `/users` | customer address CRUD (`/me/addresses`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin` |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
-| `/orders` | customer creates/lists own (`/mine`); staff lists all + updates status; `GET /:id` ownership-checked in controller | list-all/status-update: `admin`,`super_admin`,`co_admin`(+`employee` for list) |
+| `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status; `GET /:id` ownership-checked in controller | list-all/status-update: `admin`,`super_admin`,`co_admin`(+`employee` for list); `/track` is public (mounted before the router's `authenticate`) |
 | `/reviews` | public: recent reviews, reviews by product; customer creates one review per product; staff lists all/deletes | list-all/delete: `admin`,`super_admin`,`co_admin` |
 | `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
 | `/leaves` | employee creates/lists own/cancels; staff lists all + approves/rejects | review/list-all: `admin`,`super_admin`,`co_admin` |
@@ -51,6 +51,15 @@ Register every new router in `routes/index.ts`.
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | `admin`,`super_admin` only |
 | `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
 | `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement/contact/footer | `admin`,`super_admin` only |
+
+**Public order tracking** (`GET /orders/track?orderNumber=...&email=...`,
+`order.service.ts#trackOrder`): unauthenticated customers look up an order by
+its human-readable `orderNumber` (e.g. `SAP-20260816-1234`) plus the email
+used at checkout — both must match or the endpoint 404s with a generic "no
+order found" message, so a guessed/leaked order number alone can't be used
+to pull up someone else's order. Powers the storefront's `/track-order` page
+(`frontend/src/app/(site)/track-order/page.tsx`); it is the only unauthenticated
+route under `/orders` (mounted before the router's `router.use(authenticate)`).
 
 #### Models (`src/models`)
 
@@ -185,7 +194,9 @@ types/product.ts       Storefront view-model types (Product, Category, ProductVa
 `/categories`, `/offers` (products with a `compareAtPriceBDT` discount),
 `/cart`, `/wishlist`, `/account` (combined login/register + orders/addresses/
 profile tabs for customers; staff roles see a redirect card to `/admin` or
-`/employee` instead), `/account/reset-password`, `/about`, `/contact`,
+`/employee` instead), `/account/reset-password`, `/track-order` (public
+order-tracking form — order number + checkout email, no login required; see
+"Public order tracking" above), `/about`, `/contact`,
 `/shipping-policy`. There is no standalone `/reviews` page — reviews render
 inline on the product page and homepage, and are moderated from
 `/admin/reviews`. `/checkout` is a separate top-level route (see folder

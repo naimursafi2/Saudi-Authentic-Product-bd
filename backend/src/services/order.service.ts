@@ -108,6 +108,22 @@ export async function getOrderById(id: string) {
   return order;
 }
 
+/**
+ * Public order-tracking lookup — no auth. Requires both the order number and
+ * the email used at checkout so a guessed/leaked order number alone can't be
+ * used to pull up someone else's order details.
+ */
+export async function trackOrder(orderNumber: string, email: string) {
+  const order = await OrderModel.findOne({
+    orderNumber: orderNumber.trim().toUpperCase(),
+    "shippingAddress.email": email.trim().toLowerCase(),
+  });
+  if (!order) {
+    throw ApiError.notFound("No order found for that Order ID and email. Please check and try again.");
+  }
+  return order;
+}
+
 export async function listMyOrders(customerId: string, page: number, limit: number) {
   const skip = (page - 1) * limit;
   const filter = { customer: customerId };

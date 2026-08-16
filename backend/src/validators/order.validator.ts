@@ -35,4 +35,10 @@ export const listOrdersQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const trackOrderQuerySchema = z.object({
+  orderNumber: z.string().trim().min(1).max(40),
+  email: z.string().trim().email(),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type TrackOrderQuery = z.infer<typeof trackOrderQuerySchema>;

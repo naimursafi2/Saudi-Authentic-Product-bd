@@ -6,11 +6,15 @@ import { validate } from "../middlewares/validate.middleware";
 import {
   createOrderSchema,
   listOrdersQuerySchema,
+  trackOrderQuerySchema,
   updateOrderStatusSchema,
 } from "../validators/order.validator";
 import { mongoIdParamSchema } from "../validators/common.validator";
 
 const router = Router();
+
+// -- Public --
+router.get("/track", validate({ query: trackOrderQuerySchema }), orderController.trackOrder);
 
 router.use(authenticate);
 

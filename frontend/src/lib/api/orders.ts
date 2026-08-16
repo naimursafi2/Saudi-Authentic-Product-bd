@@ -20,6 +20,11 @@ export async function getOrder(id: string) {
   return api.get<{ order: ApiOrder }>(`/orders/${id}`);
 }
 
+export async function trackOrder(orderNumber: string, email: string) {
+  const search = new URLSearchParams({ orderNumber, email });
+  return api.get<{ order: ApiOrder }>(`/orders/track?${search.toString()}`);
+}
+
 export async function listOrders(params: { status?: OrderStatus; page?: number; limit?: number } = {}) {
   const search = new URLSearchParams();
   if (params.status) search.set("status", params.status);
