@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as reviewController from "../controllers/review.controller";
-import { authenticate } from "../middlewares/auth.middleware";
+import { authenticate, requireEmailVerified } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
@@ -37,6 +37,7 @@ router.get(
 router.post(
   "/product/:productId",
   authenticate,
+  requireEmailVerified,
   validate({ params: productIdParamSchema, body: createReviewSchema }),
   reviewController.createReview
 );

@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/homepageSections";
 import { listCategories } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -68,6 +69,9 @@ function sectionFormData(values: HomepageSectionFormValues, image: File | null):
 }
 
 export default function AdminHomepagePage() {
+  const { user } = useAuth();
+  const isRestricted = user?.role === "co_admin";
+
   const [slides, setSlides] = useState<ApiHeroSlide[]>([]);
   const [sections, setSections] = useState<ApiHomepageSection[]>([]);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
@@ -205,6 +209,19 @@ export default function AdminHomepagePage() {
 
   const sortedSlides = [...slides].sort((a, b) => a.sortOrder - b.sortOrder);
   const sortedSections = [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  if (isRestricted) {
+    return (
+      <div>
+        <PageHeader title="Homepage" />
+        <EmptyState
+          icon={LayoutPanelTop}
+          title="Access restricted"
+          description="Homepage content management is available to Admin and Super Admin only."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-10">

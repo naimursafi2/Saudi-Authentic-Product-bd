@@ -19,6 +19,7 @@ import {
   BarChart3,
   LayoutPanelTop,
   Settings,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/types/api";
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/admin/coupons", label: "Coupons", icon: Tag, roles: ["admin", "super_admin"] },
   { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/reviews", label: "Reviews", icon: Star },
   { href: "/admin/employees", label: "Employees", icon: UserCog },

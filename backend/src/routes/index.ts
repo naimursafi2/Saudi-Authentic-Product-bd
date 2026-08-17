@@ -15,6 +15,7 @@ import reportRoutes from "./report.routes";
 import heroSlideRoutes from "./heroSlide.routes";
 import homepageSectionRoutes from "./homepageSection.routes";
 import siteSettingsRoutes from "./siteSettings.routes";
+import couponRoutes from "./coupon.routes";
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use("/reports", reportRoutes);
 router.use("/hero-slides", heroSlideRoutes);
 router.use("/homepage-sections", homepageSectionRoutes);
 router.use("/site-settings", siteSettingsRoutes);
+router.use("/coupons", couponRoutes);
 
 export default router;

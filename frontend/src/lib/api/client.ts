@@ -27,13 +27,63 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+// Auth endpoints where a 401 means "these credentials/this token were
+// rejected", not "the access token expired" — retrying them after a silent
+// refresh would be pointless (or, for /auth/refresh itself, recursive).
+const NO_REFRESH_RETRY_PATHS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/google",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/verify-email",
+  "/auth/resend-verification",
+];
+
+/**
+ * Silently exchanges the httpOnly refreshToken cookie for a new access
+ * token via `POST /auth/refresh`. Concurrent 401s share one in-flight
+ * refresh instead of each firing their own — the shared promise is cleared
+ * once it settles so the next expiry starts a fresh refresh.
+ */
+let refreshPromise: Promise<boolean> | null = null;
+function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+// Lets AuthContext react immediately when a refresh attempt itself fails
+// (the refresh token is expired/invalid too) instead of waiting for the
+// next `getMe()` poll — set once by AuthProvider on mount.
+let onAuthFailure: (() => void) | null = null;
+export function setAuthFailureHandler(handler: (() => void) | null) {
+  onAuthFailure = handler;
+}
+
 /**
  * Thin wrapper around fetch matching the backend's `{success, message, data,
  * pagination?}` envelope. Always sends cookies (`credentials: "include"`) so
  * the httpOnly accessToken/refreshToken cookies set by the API are used
- * automatically — the frontend never touches the tokens directly.
+ * automatically — the frontend never touches the tokens directly. A 401 on
+ * anything other than the auth endpoints above triggers one silent
+ * refresh-and-retry; if the refresh itself fails, the original 401 is
+ * thrown as usual and `onAuthFailure` fires so the UI drops out of its
+ * signed-in state right away.
  */
-async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
+async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<ApiResult<T>> {
   const { method = "GET", body, isFormData = false, signal } = options;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -52,6 +102,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   const payload = isJson ? ((await res.json()) as ApiEnvelope<T>) : null;
 
   if (!res.ok || !payload?.success) {
+    if (res.status === 401 && !isRetry && !NO_REFRESH_RETRY_PATHS.some((p) => path.startsWith(p))) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        return request<T>(path, options, true);
+      }
+      onAuthFailure?.();
+    }
     throw new ApiClientError(
       res.status,
       payload?.message ?? `Request failed with status ${res.status}`,

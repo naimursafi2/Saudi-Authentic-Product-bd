@@ -4,6 +4,7 @@ const PALETTE: Record<string, string> = {
   // neutral / pending
   pending: "bg-cream-300 text-brown-600",
   todo: "bg-cream-300 text-brown-600",
+  scheduled: "bg-cream-300 text-brown-600",
   // in-progress / informational
   processing: "bg-[#fcf8ee] text-[#735c00]",
   in_progress: "bg-[#fcf8ee] text-[#735c00]",
@@ -23,6 +24,8 @@ const PALETTE: Record<string, string> = {
   absent: "bg-[#fbeceb] text-[#8a4a3f]",
   inactive: "bg-[#fbeceb] text-[#8a4a3f]",
   leave: "bg-[#fbeceb] text-[#8a4a3f]",
+  expired: "bg-[#fbeceb] text-[#8a4a3f]",
+  disabled: "bg-[#fbeceb] text-[#8a4a3f]",
 };
 
 export function StatusBadge({ status }: { status: string }) {

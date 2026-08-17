@@ -6,7 +6,7 @@ import morgan from "morgan";
 import compression from "compression";
 import hpp from "hpp";
 
-import { env, isProduction } from "./config/env";
+import { clientOrigins, env, isProduction } from "./config/env";
 import { apiLimiter } from "./middlewares/rateLimit.middleware";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware";
 import { sanitizeRequest } from "./middlewares/sanitize.middleware";
@@ -22,7 +22,18 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.CLIENT_ORIGIN,
+      // `clientOrigins` is an allow-list (one origin, or several
+      // comma-separated in `CLIENT_ORIGIN`) — requests from any other
+      // origin are rejected. `!origin` covers non-browser/same-origin
+      // requests (curl, server-to-server, the `/health` check) which don't
+      // send an `Origin` header at all.
+      origin(origin, callback) {
+        if (!origin || clientOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
       credentials: true,
     })
   );

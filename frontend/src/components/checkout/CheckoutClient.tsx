@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CreditCard, Lock, ShieldCheck, Truck, Wallet } from "lucide-react";
+import { CreditCard, Lock, ShieldCheck, Tag, Truck, Wallet, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { createOrder } from "@/lib/api/orders";
+import { validateCoupon } from "@/lib/api/coupons";
 import { ApiClientError } from "@/lib/api/client";
 import { formatBDT, cn } from "@/lib/utils";
 import { bdDistricts } from "@/data/bd-districts";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { EmailVerificationBanner } from "@/components/account/EmailVerificationBanner";
 import { FormSection, FieldLabel, inputClasses } from "./FormSection";
 
 type DeliveryOption = "standard" | "express";
@@ -30,8 +32,36 @@ export function CheckoutClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountBDT: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
   const shipping = DELIVERY_FEES[delivery];
-  const total = subtotal + shipping;
+  const discount = appliedCoupon?.discountBDT ?? 0;
+  const total = Math.max(0, subtotal + shipping - discount);
+
+  async function handleApplyCoupon() {
+    const code = couponInput.trim();
+    if (!code) return;
+    setCouponError(null);
+    setIsApplyingCoupon(true);
+    try {
+      const { data } = await validateCoupon(code, subtotal);
+      setAppliedCoupon({ code: data.code, discountBDT: data.discountBDT });
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(err instanceof ApiClientError ? err.message : "Could not apply this coupon.");
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponError(null);
+    setCouponInput("");
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -56,6 +86,7 @@ export function CheckoutClient() {
         },
         deliveryMethod: delivery,
         paymentMethod: payment,
+        couponCode: appliedCoupon?.code,
       });
       setOrderNumber(data.order.orderNumber);
       clearCart();
@@ -94,6 +125,17 @@ export function CheckoutClient() {
         <ButtonLink href="/account" variant="primary" size="md" className="mt-2">
           Sign In
         </ButtonLink>
+      </div>
+    );
+  }
+
+  if (user && !user.isEmailVerified) {
+    return (
+      <div className="mx-auto max-w-lg px-6 py-24">
+        <EmailVerificationBanner email={user.email} />
+        <p className="text-center text-sm text-brown-500">
+          Verify your email address to complete checkout, then come back to place your order.
+        </p>
       </div>
     );
   }
@@ -327,7 +369,45 @@ export function CheckoutClient() {
             ))}
           </ul>
 
-          <div className="mt-5 flex flex-col gap-2 border-t border-brown-600/15 pt-4 text-sm">
+          <div className="mt-5 border-t border-brown-600/15 pt-4">
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between rounded border border-green-900/20 bg-green-950/5 px-3 py-2 text-sm">
+                <span className="flex items-center gap-1.5 font-semibold text-green-950">
+                  <Tag size={14} /> {appliedCoupon.code}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  aria-label="Remove coupon"
+                  className="text-brown-500 hover:text-green-950"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  placeholder="Coupon code"
+                  className={cn(inputClasses, "flex-1")}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleApplyCoupon}
+                  disabled={isApplyingCoupon || !couponInput.trim()}
+                >
+                  {isApplyingCoupon ? "Applying..." : "Apply"}
+                </Button>
+              </div>
+            )}
+            {couponError && <p className="mt-1.5 text-xs text-[#8a4a3f]">{couponError}</p>}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2 border-t border-brown-600/15 pt-4 text-sm">
             <div className="flex items-center justify-between text-brown-600">
               <span>Subtotal</span>
               <span>{formatBDT(subtotal)}</span>
@@ -336,6 +416,12 @@ export function CheckoutClient() {
               <span>Shipping ({delivery === "standard" ? "Standard" : "Express"})</span>
               <span>{formatBDT(shipping)}</span>
             </div>
+            {discount > 0 && (
+              <div className="flex items-center justify-between text-green-900">
+                <span>Discount ({appliedCoupon?.code})</span>
+                <span>-{formatBDT(discount)}</span>
+              </div>
+            )}
           </div>
           <div className="mt-4 flex items-center justify-between border-t border-brown-600/15 pt-4">
             <span className="font-serif text-lg text-green-950">Total</span>

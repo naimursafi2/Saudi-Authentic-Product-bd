@@ -22,6 +22,7 @@ export const createOrderSchema = z.object({
   }),
   deliveryMethod: z.enum(["standard", "express"]),
   paymentMethod: z.enum(["cod", "bkash", "nagad"]),
+  couponCode: z.string().trim().min(1).max(30).optional(),
 });
 
 export const updateOrderStatusSchema = z.object({

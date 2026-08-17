@@ -6,6 +6,7 @@ export interface CreateOrderPayload {
   shippingAddress: ApiShippingAddress;
   deliveryMethod: DeliveryMethod;
   paymentMethod: PaymentMethod;
+  couponCode?: string;
 }
 
 export async function createOrder(payload: CreateOrderPayload) {

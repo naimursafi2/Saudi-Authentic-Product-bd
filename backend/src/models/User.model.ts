@@ -29,6 +29,7 @@ export interface IUser extends Document {
   phone?: string;
   avatar?: { url: string; publicId: string };
   isActive: boolean;
+  isEmailVerified: boolean;
   tokenVersion: number;
   addresses: IAddress[];
   staffMeta?: IStaffMeta;
@@ -79,6 +80,7 @@ const userSchema = new Schema<IUser>(
       publicId: { type: String },
     },
     isActive: { type: Boolean, default: true },
+    isEmailVerified: { type: Boolean, default: false },
     tokenVersion: { type: Number, default: 0 },
     addresses: { type: [addressSchema], default: [] },
     staffMeta: { type: staffMetaSchema },

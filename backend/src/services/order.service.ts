@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError";
 import { computeShippingFee } from "../constants/shipping";
 import { recordStockChange } from "./inventory.service";
 import { sendOrderConfirmationEmail } from "./email.service";
+import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
 import type { CreateOrderInput } from "../validators/order.validator";
 
 async function generateOrderNumber(): Promise<string> {
@@ -52,7 +53,19 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
   }
 
   const shippingFeeBDT = computeShippingFee(input.deliveryMethod, subtotalBDT);
-  const totalBDT = subtotalBDT + shippingFeeBDT;
+
+  // Re-validated from scratch here regardless of any earlier
+  // `/coupons/validate` preview — a client-submitted discount amount is
+  // never trusted, only the coupon *code*.
+  let discountBDT = 0;
+  let appliedCoupon: Awaited<ReturnType<typeof validateCouponForOrder>>["coupon"] | undefined;
+  if (input.couponCode) {
+    const result = await validateCouponForOrder(input.couponCode, subtotalBDT);
+    discountBDT = result.discountBDT;
+    appliedCoupon = result.coupon;
+  }
+
+  const totalBDT = Math.max(0, subtotalBDT + shippingFeeBDT - discountBDT);
   const orderNumber = await generateOrderNumber();
 
   const order = await OrderModel.create({
@@ -64,10 +77,16 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
     shippingFeeBDT,
     paymentMethod: input.paymentMethod,
     subtotalBDT,
+    couponCode: appliedCoupon?.code,
+    discountBDT,
     totalBDT,
     status: "pending",
     statusHistory: [{ status: "pending", at: new Date() }],
   });
+
+  if (appliedCoupon) {
+    await applyCouponUsage(appliedCoupon._id.toString(), appliedCoupon.usageLimit);
+  }
 
   // Decrement stock for each purchased variant and record an audit trail entry.
   await Promise.all(

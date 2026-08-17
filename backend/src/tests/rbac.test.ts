@@ -10,14 +10,14 @@ const res = {} as Response;
 
 describe("authorize middleware", () => {
   it("calls next() with no error when the user has an allowed role", () => {
-    const req = mockReq({ id: "u1", role: "admin", tokenVersion: 0 });
+    const req = mockReq({ id: "u1", role: "admin", tokenVersion: 0, isEmailVerified: true });
     const next = jest.fn();
     authorize("admin", "super_admin")(req, res, next as NextFunction);
     expect(next).toHaveBeenCalledWith();
   });
 
   it("calls next() with a 403 ApiError when the role is not allowed", () => {
-    const req = mockReq({ id: "u1", role: "customer", tokenVersion: 0 });
+    const req = mockReq({ id: "u1", role: "customer", tokenVersion: 0, isEmailVerified: true });
     const next = jest.fn();
     authorize("admin", "super_admin")(req, res, next as NextFunction);
     expect(next).toHaveBeenCalledTimes(1);

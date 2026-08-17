@@ -21,6 +21,9 @@ export async function createStaffAccount(input: CreateStaffInput) {
     password: input.password,
     phone: input.phone,
     role: input.role,
+    // Staff accounts are provisioned directly by an admin who already knows
+    // the email is correct — no self-registration email-verification loop.
+    isEmailVerified: true,
     staffMeta: input.staffMeta ? { ...input.staffMeta, joinedAt: new Date() } : undefined,
   });
 

@@ -67,3 +67,15 @@ export const resetPassword = catchAsync(async (req: Request, res: Response) => {
   await authService.resetPassword(token, newPassword);
   sendSuccess(res, 200, "Password reset successfully — you can now log in");
 });
+
+export const verifyEmail = catchAsync(async (req: Request, res: Response) => {
+  const status = await authService.verifyEmail(req.body.token);
+  const message =
+    status === "already-verified" ? "Your email is already verified — you can log in." : "Email verified successfully.";
+  sendSuccess(res, 200, message, { status });
+});
+
+export const resendVerification = catchAsync(async (req: Request, res: Response) => {
+  await authService.resendVerification(req.body.email);
+  sendSuccess(res, 200, "If an account with that email needs verifying, a new link has been sent.");
+});

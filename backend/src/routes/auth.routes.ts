@@ -9,7 +9,9 @@ import {
   googleAuthSchema,
   loginSchema,
   registerSchema,
+  resendVerificationSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
 } from "../validators/auth.validator";
 
 const router = Router();
@@ -38,6 +40,18 @@ router.post(
   authLimiter,
   validate({ body: resetPasswordSchema }),
   authController.resetPassword
+);
+router.post(
+  "/verify-email",
+  authLimiter,
+  validate({ body: verifyEmailSchema }),
+  authController.verifyEmail
+);
+router.post(
+  "/resend-verification",
+  authLimiter,
+  validate({ body: resendVerificationSchema }),
+  authController.resendVerification
 );
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as orderController from "../controllers/order.controller";
-import { authenticate } from "../middlewares/auth.middleware";
+import { authenticate, requireEmailVerified } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
@@ -19,7 +19,12 @@ router.get("/track", validate({ query: trackOrderQuerySchema }), orderController
 router.use(authenticate);
 
 // -- Customer --
-router.post("/", validate({ body: createOrderSchema }), orderController.createOrder);
+router.post(
+  "/",
+  requireEmailVerified,
+  validate({ body: createOrderSchema }),
+  orderController.createOrder
+);
 router.get("/mine", orderController.listMyOrders);
 
 // -- Staff (Admin / Co-Admin / Super Admin / Employee) --

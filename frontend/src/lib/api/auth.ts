@@ -47,3 +47,13 @@ export async function forgotPassword(email: string) {
 export async function resetPassword(token: string, newPassword: string, confirmPassword: string) {
   return api.post<null>("/auth/reset-password", { token, newPassword, confirmPassword });
 }
+
+export type VerifyEmailStatus = "verified" | "already-verified";
+
+export async function verifyEmail(token: string) {
+  return api.post<{ status: VerifyEmailStatus }>("/auth/verify-email", { token });
+}
+
+export async function resendVerification(email: string) {
+  return api.post<null>("/auth/resend-verification", { email });
+}

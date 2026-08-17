@@ -68,6 +68,18 @@ export async function sendPasswordResetEmail(to: string, name: string, token: st
   await safeSend(to, "Reset your password — Saudi Authentic Product", html);
 }
 
+export async function sendVerificationEmail(to: string, name: string, token: string): Promise<void> {
+  const verifyUrl = `${FRONTEND_URL}/account/verify-email?token=${token}`;
+  const html = layout(
+    "Verify your email address",
+    `<p>Hi ${name},</p>
+     <p>Welcome to Saudi Authentic Product! Please confirm your email address to activate your account. This link expires in 24 hours.</p>
+     ${button("Verify Email", verifyUrl)}
+     <p style="margin-top:24px;font-size:13px;color:#705a4c;">If you didn't create this account, you can safely ignore this email.</p>`
+  );
+  await safeSend(to, "Verify your email — Saudi Authentic Product", html);
+}
+
 export async function sendStaffWelcomeEmail(
   to: string,
   name: string,

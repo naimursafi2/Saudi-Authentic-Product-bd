@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import * as authApi from "@/lib/api/auth";
+import { setAuthFailureHandler } from "@/lib/api/client";
 import type { ApiUser } from "@/types/api";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -37,6 +38,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshUser();
   }, [refreshUser]);
+
+  // Only fires when the API client tried a silent token refresh and the
+  // refresh itself failed (refresh token expired/invalid too) — a normal
+  // 401 that gets successfully refreshed-and-retried never reaches here, so
+  // this never signs the user out just because one request happened to 401.
+  useEffect(() => {
+    setAuthFailureHandler(() => {
+      setUser(null);
+      setStatus("unauthenticated");
+    });
+    return () => setAuthFailureHandler(null);
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.login(email, password);

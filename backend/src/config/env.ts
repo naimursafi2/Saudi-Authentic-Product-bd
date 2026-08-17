@@ -78,3 +78,13 @@ export const isSmtpConfigured = Boolean(
 );
 
 export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);
+
+/**
+ * `CLIENT_ORIGIN` may be a single origin or a comma-separated list (e.g. a
+ * local dev server plus a deployed preview URL). Trimmed and empty entries
+ * dropped so a trailing comma or stray whitespace doesn't produce a blank
+ * "allowed origin".
+ */
+export const clientOrigins: string[] = env.CLIENT_ORIGIN.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);

@@ -42,37 +42,50 @@ form or state-management library — forms/data fetching are hand-rolled with
   book with add/edit/delete/set-default), password reset, a public
   order-tracking page (`/track-order` — look up any order by order number +
   checkout email, no login required, auto-prefilled for signed-in
-  customers), about, contact, shipping policy, plus a standalone `/checkout`
-  flow — all backed by the live API and Cloudinary imagery. The navbar shows
+  customers), about, contact (phone/email sourced from the admin-editable
+  `SiteSettings` singleton), shipping policy, plus a standalone `/checkout`
+  flow with a coupon-code field (server-validated discount preview, applied
+  total, never a client-trusted amount) — all backed by the live API and
+  Cloudinary imagery. The navbar shows
   a personalized "My Account" entry (account icon + the signed-in
   customer's first name) that links straight into the dashboard, replacing
   the Sign In prompt shown to logged-out visitors. Cart and wishlist are
   **client-side only**
   (`localStorage`), not synced to the account or across devices — there is
   no server-side cart/wishlist model.
-- Secure authentication (JWT via httpOnly access/refresh cookies,
-  logout-all via token versioning), role-based access control across five
-  roles: `customer`, `employee`, `co_admin`, `admin`, `super_admin`.
-  Registration enforces a strong-password policy (8+ characters, upper +
-  lower case, a digit) with a live strength meter and a required
-  confirm-password match, checks both email *and* phone for duplicates, and
-  can save an optional first delivery address in the same request. A single
-  Sign In / Register / Forgot Password form (`/account`) serves every
-  role — there's no separate staff login page. Forgot/reset password is one
-  flow that works identically for all five roles: a time-limited, single-use
-  emailed link that invalidates itself (and every other active session) once
-  used. Optional "Continue with Google" sign-in/registration is wired
-  end-to-end via Google Identity Services (`POST /auth/google`,
+- Secure authentication (JWT via httpOnly access/refresh cookies — the
+  frontend API client silently refreshes and retries once on a 401 rather
+  than signing the user out mid-session, only dropping the session if the
+  refresh itself fails — logout-all via token versioning), role-based access
+  control across five roles: `customer`, `employee`, `co_admin`, `admin`,
+  `super_admin`. Registration enforces a strong-password policy (8+
+  characters, upper + lower case, a digit) with a live strength meter and a
+  required confirm-password match, checks both email *and* phone for
+  duplicates, and can save an optional first delivery address in the same
+  request. A newly-registered customer must verify their email (a timed link
+  emailed on signup, `/account/verify-email`, with resend) before placing
+  orders or posting reviews — staff and Google Sign-In accounts are exempt.
+  A single Sign In / Register / Forgot Password form (`/account`) serves
+  every role — there's no separate staff login page. Forgot/reset password
+  is one flow that works identically for all five roles: a time-limited,
+  single-use emailed link that invalidates itself (and every other active
+  session) once used. Optional "Continue with Google" sign-in/registration
+  is wired end-to-end via Google Identity Services (`POST /auth/google`,
   `google-auth-library`) but stays inactive — button hidden, endpoint 503s —
   until a `GOOGLE_CLIENT_ID` is configured (see Environment variables).
 - **Admin / Co-Admin / Super Admin portal** (`frontend/src/app/admin`,
   fully built): dashboard (live stats), products, categories, orders,
-  customers, reviews, employees, attendance, leave, tasks, performance,
-  salary & payments (admin/super_admin only), inventory (stock adjustments +
-  audit log), reports (sales summary), homepage content (hero slides +
-  homepage sections, admin/super_admin only), site settings (admin/super_admin
+  coupons (percentage/fixed discounts, scheduling window, minimum order
+  amount, usage limit — admin/super_admin only), customers, reviews,
+  employees, attendance, leave, tasks, performance, salary & payments
+  (admin/super_admin only), inventory (stock adjustments + audit log),
+  reports (sales summary), homepage content (hero slides + homepage
+  sections, admin/super_admin only), site settings (admin/super_admin
   only). Route access is guarded client-side (`RoleGuard`) and enforced for
-  real by the backend's `authorize(...)` on every route.
+  real by the backend's `authorize(...)` on every route; the four
+  admin/super_admin-only pages (coupons, salary, homepage, settings) show a
+  friendly "Access restricted" state for a co_admin who navigates there
+  directly instead of a broken page shell.
 - **Employee portal** (`frontend/src/app/employee`, fully built):
   check-in/out + attendance history, tasks, leave requests, performance
   history, salary/payment history.
@@ -148,7 +161,7 @@ Run from inside `backend/` or `frontend/` respectively:
 | `npm run start`        | ✅ run built `dist/` + DNS preload | ✅ run production build |
 | `npm run typecheck`    | ✅ `tsc --noEmit` | ✅ `tsc --noEmit` |
 | `npm run lint`         | ✅ ESLint | ✅ ESLint |
-| `npm test`             | ✅ Jest (unit tests only, see Testing below) | — (no test runner configured) |
+| `npm test`             | ✅ Jest (unit + integration, see Testing below) | ✅ Vitest + RTL (`npm run test:watch` for watch mode) |
 | `npm run seed`         | ✅ bootstrap DB | — |
 
 `npm start` and `npm run dev:dns-fix` both load `backend/scripts/dev-dns-preload.cjs`
@@ -161,10 +174,18 @@ machine.
   `backend/src/tests/*.test.ts` — 10 unit-style specs covering `ApiError`,
   app bootstrap, the `booleanish` zod helper, `notFoundHandler`, JWT utils,
   `paramStr`, the `authorize` RBAC middleware, shipping-fee calculation,
-  `slugify`, and the `validate` middleware. There are **no
-  integration/e2e tests** against a real or in-memory MongoDB yet.
-- **Frontend**: no automated test runner is configured (no Jest/Vitest/
-  Playwright). Verify UI changes manually in a browser.
+  `slugify`, and the `validate` middleware — plus `backend/src/tests/
+  integration/*.integration.test.ts`, real end-to-end HTTP specs (auth,
+  catalog RBAC/creation, order creation/stock/tracking) run with `supertest`
+  against an actual in-memory MongoDB via `mongodb-memory-server`. Coverage
+  is still partial, not exhaustive.
+- **Frontend**: `npm test` runs Vitest (`vitest.config.mts`, jsdom
+  environment) with React Testing Library. Covers pure-logic modules
+  (`lib/utils`, `lib/passwordStrength`, `lib/mappers`), one component
+  (`PasswordStrengthMeter`), and `CartContext` (add/remove/quantity/
+  localStorage persistence, with `lib/api/products` mocked). No
+  Playwright/e2e browser testing exists — verify visual/UI changes manually
+  in a browser.
 
 ## Environment variables
 
@@ -200,24 +221,29 @@ missing/malformed):
 
 ## Known limitations
 
-- No backend integration/e2e tests, no frontend automated tests at all —
-  see Testing above.
+- Test coverage is basic on both sides (a handful of backend integration
+  specs, a handful of frontend Vitest specs) — not comprehensive. No
+  Playwright/e2e browser testing exists. See Testing above.
+- No payment gateway integration — `bkash`/`nagad` are selectable at
+  checkout and stored as the order's `paymentMethod`, but nothing actually
+  charges the customer, verifies a payment signature, or flips
+  `Order.isPaid` for them; only a `cod` order marked `delivered` gets marked
+  paid. Treat non-COD checkout as UI-only until a real gateway is wired up.
 - Cart and wishlist are `localStorage`-only; they don't persist server-side
   or follow a customer across devices/browsers.
-- Co-admin's `/admin/salary`, `/admin/homepage`, and `/admin/settings` nav
-  links are hidden in the UI, but the route guard itself admits all three
-  admin-tier roles — a co_admin navigating there directly gets a page shell
-  whose API calls then 403, rather than a redirect. Not a security hole
-  (the backend correctly blocks it), but a rough UX edge.
+- Co-admin's `/admin/salary`, `/admin/coupons`, `/admin/homepage`, and
+  `/admin/settings` nav links are hidden in the UI, and the layout's role
+  guard still admits all four admin-tier roles at the route level — but each
+  of those four pages now checks the role itself and shows a friendly
+  "Access restricted" state instead of attempting to load data, so a
+  co_admin navigating there directly no longer sees a broken page shell
+  with failed API calls.
 - No `frontend/src/middleware.ts` — admin/employee route protection is
   client-side only (`RoleGuard`); the backend is the real authorization
   boundary.
-- No silent access-token refresh in the frontend API client — the access
-  token cookie expires after `JWT_ACCESS_EXPIRES_IN` (15m by default) with
-  no automatic `POST /auth/refresh` retry, so a session left open past that
-  gets silently signed out on its next request even though the 30-day
-  refresh-token cookie is still valid. See `CLAUDE.md`'s Known limitations
-  for detail.
+- Storefront registration requires email verification for placing orders
+  and posting reviews (`isEmailVerified`); staff and Google Sign-In accounts
+  are exempt.
 - The homepage content system (hero slides + homepage sections) is scoped
   to the homepage only — it is not a general CMS/page builder; other static
   pages aren't admin-editable.
@@ -227,8 +253,10 @@ missing/malformed):
   registration/verification or phone-based login — `phone` is only ever a
   supplementary, duplicate-checked contact field alongside the required
   email login identifier.
-- `frontend/src/app/(site)/contact/page.tsx` still has a placeholder phone
-  number (`+880 1XXX-XXXXXX`) pending real contact info.
+- `/contact`'s phone/email now come from the admin-editable `SiteSettings`
+  singleton (same one the footer uses) instead of a hardcoded placeholder;
+  the phone row just doesn't render until an admin sets one in
+  `/admin/settings`.
 
 ## Notes
 

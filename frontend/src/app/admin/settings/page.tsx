@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Settings } from "lucide-react";
 import { getSiteSettings, updateSiteSettings } from "@/lib/api/siteSettings";
 import { ApiClientError } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
-import { TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
+import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { SiteSettingsForm, type SiteSettingsFormValues } from "@/components/admin/SiteSettingsForm";
 import type { ApiSiteSettings } from "@/types/api";
 
 export default function AdminSettingsPage() {
+  const { user } = useAuth();
+  const isRestricted = user?.role === "co_admin";
+
   const [settings, setSettings] = useState<ApiSiteSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +52,19 @@ export default function AdminSettingsPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (isRestricted) {
+    return (
+      <div>
+        <PageHeader title="Settings" />
+        <EmptyState
+          icon={Settings}
+          title="Access restricted"
+          description="Site settings is available to Admin and Super Admin only."
+        />
+      </div>
+    );
   }
 
   return (

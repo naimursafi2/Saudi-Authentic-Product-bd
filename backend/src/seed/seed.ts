@@ -353,6 +353,7 @@ async function seed() {
       email: env.SEED_SUPER_ADMIN_EMAIL,
       password: env.SEED_SUPER_ADMIN_PASSWORD,
       role: "super_admin",
+      isEmailVerified: true,
       staffMeta: {
         employeeId: "EMP-0001",
         department: "Management",
@@ -413,6 +414,7 @@ async function seed() {
       email: staff.email,
       password: SAMPLE_STAFF_PASSWORD,
       role: staff.role,
+      isEmailVerified: true,
       staffMeta: {
         employeeId: staff.employeeId,
         department: staff.department,

@@ -47,6 +47,7 @@ export interface ApiUser {
   phone?: string;
   avatar?: { url: string; publicId: string };
   isActive: boolean;
+  isEmailVerified: boolean;
   addresses: ApiAddress[];
   staffMeta?: ApiStaffMeta;
   createdAt: string;
@@ -209,9 +210,31 @@ export interface ApiOrder {
   paymentMethod: PaymentMethod;
   isPaid: boolean;
   subtotalBDT: number;
+  couponCode?: string;
+  discountBDT: number;
   totalBDT: number;
   status: OrderStatus;
   statusHistory: { status: OrderStatus; at: string; note?: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CouponDiscountType = "percentage" | "fixed";
+export type CouponStatus = "scheduled" | "active" | "expired" | "disabled";
+
+export interface ApiCoupon {
+  _id: string;
+  code: string;
+  description?: string;
+  discountType: CouponDiscountType;
+  discountValue: number;
+  minOrderAmountBDT: number;
+  startsAt: string;
+  expiresAt: string;
+  usageLimit?: number;
+  usageCount: number;
+  isActive: boolean;
+  status: CouponStatus;
   createdAt: string;
   updatedAt: string;
 }

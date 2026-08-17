@@ -23,7 +23,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
     const payload = verifyAccessToken(token);
 
-    const user = await UserModel.findById(payload.sub).select("role isActive tokenVersion");
+    const user = await UserModel.findById(payload.sub).select("role isActive isEmailVerified tokenVersion");
     if (!user || !user.isActive) {
       throw ApiError.unauthorized("Your account is no longer active");
     }
@@ -31,7 +31,12 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw ApiError.unauthorized("Session expired, please log in again");
     }
 
-    req.user = { id: user._id.toString(), role: user.role, tokenVersion: user.tokenVersion };
+    req.user = {
+      id: user._id.toString(),
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+      isEmailVerified: user.isEmailVerified,
+    };
     next();
   } catch (err) {
     if (err instanceof ApiError) return next(err);
@@ -49,12 +54,38 @@ export async function attachUserIfPresent(req: Request, _res: Response, next: Ne
 
   try {
     const payload = verifyAccessToken(token);
-    const user = await UserModel.findById(payload.sub).select("role isActive tokenVersion");
+    const user = await UserModel.findById(payload.sub).select("role isActive isEmailVerified tokenVersion");
     if (user && user.isActive && user.tokenVersion === payload.tokenVersion) {
-      req.user = { id: user._id.toString(), role: user.role, tokenVersion: user.tokenVersion };
+      req.user = {
+        id: user._id.toString(),
+        role: user.role,
+        tokenVersion: user.tokenVersion,
+        isEmailVerified: user.isEmailVerified,
+      };
     }
   } catch {
     // ignore invalid token — request proceeds unauthenticated
   }
   next();
+}
+
+/**
+ * Gates customer-only write actions (placing an order, posting a review)
+ * behind a verified email. Must run after `authenticate`. Staff roles are
+ * always exempt — this policy exists for the storefront registration flow,
+ * not internal accounts (which are provisioned directly by an admin and
+ * marked verified at creation time).
+ */
+export function requireEmailVerified(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) {
+    return next(ApiError.unauthorized("You must be logged in to perform this action"));
+  }
+  if (req.user.role !== "customer" || req.user.isEmailVerified) {
+    return next();
+  }
+  next(
+    ApiError.forbidden(
+      "Please verify your email address before placing orders or posting reviews. Check your inbox for the verification link, or request a new one."
+    )
+  );
 }

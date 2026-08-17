@@ -41,6 +41,8 @@ export interface IOrder extends Document {
   paymentMethod: PaymentMethod;
   isPaid: boolean;
   subtotalBDT: number;
+  couponCode?: string;
+  discountBDT: number;
   totalBDT: number;
   status: OrderStatus;
   statusHistory: { status: OrderStatus; at: Date; note?: string }[];
@@ -91,6 +93,8 @@ const orderSchema = new Schema<IOrder>(
     paymentMethod: { type: String, enum: ["cod", "bkash", "nagad"], required: true },
     isPaid: { type: Boolean, default: false },
     subtotalBDT: { type: Number, required: true, min: 0 },
+    couponCode: { type: String, trim: true, uppercase: true },
+    discountBDT: { type: Number, default: 0, min: 0 },
     totalBDT: { type: Number, required: true, min: 0 },
     status: {
       type: String,

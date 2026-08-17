@@ -7,8 +7,10 @@ import {
   verifyRefreshToken,
   signPasswordResetToken,
   verifyPasswordResetToken,
+  signEmailVerificationToken,
+  verifyEmailVerificationToken,
 } from "../utils/jwt";
-import { sendPasswordResetEmail } from "./email.service";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email.service";
 import { verifyGoogleIdToken } from "../config/google";
 import type { LoginInput, RegisterInput } from "../validators/auth.validator";
 
@@ -39,6 +41,7 @@ export async function registerCustomer(input: RegisterInput) {
     password: input.password,
     phone: input.phone,
     role: "customer",
+    isEmailVerified: false,
     addresses: input.address
       ? [
           {
@@ -52,6 +55,9 @@ export async function registerCustomer(input: RegisterInput) {
         ]
       : [],
   });
+
+  const verificationToken = signEmailVerificationToken(user._id.toString());
+  void sendVerificationEmail(user.email, user.name, verificationToken);
 
   return { user, tokens: issueTokens(user) };
 }
@@ -78,6 +84,8 @@ export async function googleAuth(idToken: string) {
       email: profile.email,
       password: crypto.randomBytes(32).toString("hex"),
       role: "customer",
+      // Google has already verified ownership of this email address.
+      isEmailVerified: true,
     });
   }
 
@@ -164,4 +172,50 @@ export async function resetPassword(token: string, newPassword: string): Promise
   user.password = newPassword;
   user.tokenVersion += 1; // invalidate the reset token and all other sessions
   await user.save();
+}
+
+export type VerifyEmailResult = "verified" | "already-verified";
+
+/**
+ * Verifies a registration email-verification link. Distinguishes an
+ * already-used (but still cryptographically valid) link from a genuinely
+ * expired/invalid one so the frontend can show the right state — an
+ * already-verified account isn't an error, it's a harmless re-click of an
+ * old email.
+ */
+export async function verifyEmail(token: string): Promise<VerifyEmailResult> {
+  let payload;
+  try {
+    payload = verifyEmailVerificationToken(token);
+  } catch (err) {
+    if (err instanceof Error && err.name === "TokenExpiredError") {
+      throw ApiError.badRequest("This verification link has expired. Please request a new one.");
+    }
+    throw ApiError.badRequest("This verification link is invalid.");
+  }
+
+  const user = await UserModel.findById(payload.sub);
+  if (!user) {
+    throw ApiError.badRequest("This verification link is invalid.");
+  }
+  if (user.isEmailVerified) {
+    return "already-verified";
+  }
+
+  user.isEmailVerified = true;
+  await user.save();
+  return "verified";
+}
+
+/**
+ * Always resolves without revealing whether the email exists, mirroring
+ * `forgotPassword` — silently no-ops for an unknown email or an
+ * already-verified account.
+ */
+export async function resendVerification(email: string): Promise<void> {
+  const user = await UserModel.findOne({ email });
+  if (!user || user.isEmailVerified) return;
+
+  const token = signEmailVerificationToken(user._id.toString());
+  void sendVerificationEmail(user.email, user.name, token);
 }

@@ -35,7 +35,7 @@ Register every new router in `routes/index.ts`.
 
 | Base path | Purpose | Role restrictions (beyond `authenticate`) |
 | --- | --- | --- |
-| `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password. Login/register/google/refresh/forgot/reset are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password` require auth; `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
+| `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification. Login/register/google/refresh/forgot/reset/verify-email/resend-verification are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password` require auth; `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
 | `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin`; all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
@@ -51,6 +51,36 @@ Register every new router in `routes/index.ts`.
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | `admin`,`super_admin` only |
 | `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
 | `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement/contact/footer | `admin`,`super_admin` only |
+| `/coupons` | `POST /validate` (authenticated customer, preview a discount); admin CRUD (`GET /`, `POST /`, `PATCH /:id`, `DELETE /:id`) | `admin`,`super_admin` only for CRUD — deliberately excludes `co_admin`, matching the `/site-settings`/`/homepage-sections`/`/salary-payments` restriction pattern; `/validate` just requires `authenticate` |
+
+**Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
+`validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
+(`"percentage"` capped at 100, or `"fixed"` BDT), `minOrderAmountBDT`,
+`startsAt`/`expiresAt`, an optional `usageLimit`, and `usageCount`. A
+coupon's `status` (`scheduled`/`active`/`expired`/`disabled`) is **derived**
+on every read (`computeCouponStatus()`), not stored, so it's never stale —
+`isActive: false` means `disabled` regardless of dates; otherwise it's
+`scheduled` before `startsAt`, `expired` after `expiresAt`, else `active`.
+`POST /coupons/validate` (any authenticated customer) is a **preview only**
+— it never mutates `usageCount`. The discount that actually gets charged is
+always recomputed from scratch inside `order.service.ts#createOrder` (via
+the same `validateCouponForOrder()` the preview endpoint uses), keyed off
+the order's own server-computed `subtotalBDT` — a client-submitted discount
+amount is never trusted, only the coupon *code* string
+(`createOrderSchema`'s optional `couponCode`). If validation fails at
+order-creation time (expired/disabled/exhausted/unknown/below minimum),
+`createOrder` throws before the order document is created, so nothing is
+charged and no stock is touched. On success, `Order.couponCode`/
+`discountBDT` are stored on the order and `applyCouponUsage()` atomically
+increments `usageCount` — guarded with `usageCount: { $lt: usageLimit }` in
+the update filter so two concurrent orders can't both redeem the last use of
+a limited coupon. Frontend: `CheckoutClient.tsx` has a coupon-code field in
+the order summary (`lib/api/coupons.ts#validateCoupon`) showing a live
+discount preview and updated total before submit; `/admin/coupons` is full
+CRUD (list/create/edit/delete) restricted the same way as
+salary/homepage/settings — a `co_admin` who navigates there directly sees
+the same friendly "Access restricted" state (see "Co-admin admin-portal UX"
+below), not a broken page, since the backend route already 403s them.
 
 **Public order tracking** (`GET /orders/track?orderNumber=...&email=...`,
 `order.service.ts#trackOrder`): unauthenticated customers look up an order by
@@ -63,7 +93,7 @@ route under `/orders` (mounted before the router's `router.use(authenticate)`).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton).
+`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`, optional `couponCode`/`discountBDT`), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton).
 
 #### Homepage content management (not a general CMS)
 
@@ -105,7 +135,8 @@ this is it — don't imply more editability exists than this.
 
 #### Middlewares (`src/middlewares`)
 
-- `authenticate` — JWT from `accessToken` cookie or `Authorization: Bearer`; checks `isActive` + `tokenVersion`. `attachUserIfPresent` — same but non-failing (optional auth).
+- `authenticate` — JWT from `accessToken` cookie or `Authorization: Bearer`; checks `isActive` + `tokenVersion`, and attaches `isEmailVerified` onto `req.user` alongside `id`/`role`/`tokenVersion`. `attachUserIfPresent` — same but non-failing (optional auth).
+- `requireEmailVerified` — must run after `authenticate`; 403s a `customer` whose `isEmailVerified` is `false`, exempts every staff role. Applied to `POST /orders` and `POST /reviews/product/:productId` — see "Email verification" below.
 - `authorize(...roles)` / `authorizeSelfOrRoles(getOwnerId, ...staffRoles)` — role gating (`rbac.middleware.ts`); most routes use inline `authorize(...)`, ownership checks are otherwise done ad hoc inside controllers/services.
 - `validate({body,query,params})` — zod-parses and **replaces** the field via `Object.defineProperty` (Express 5 `req.query` gotcha, see below).
 - `sanitizeRequest` — `express-mongo-sanitize` on body/params/query, same `Object.defineProperty` fix.
@@ -139,7 +170,43 @@ in the same request — no separate follow-up call. There is no phone-based
 *login* or SMS-OTP verification (the reference design's "Signup with Mobile
 Number + OTP" panel was deliberately not built — no SMS gateway is
 configured anywhere in this project); phone is only ever a supplementary
-contact field alongside the required email login identifier.
+contact field alongside the required email login identifier. A new customer
+is created with `isEmailVerified: false` and is still logged in immediately
+(cookies set on the register response, same as before) — see "Email
+verification" below for what that gates.
+
+**Email verification** (`User.model.ts#isEmailVerified`,
+`utils/jwt.ts#signEmailVerificationToken`/`verifyEmailVerificationToken`,
+`auth.service.ts#verifyEmail`/`resendVerification`,
+`middlewares/auth.middleware.ts#requireEmailVerified`): registering fires a
+(best-effort, fire-and-forget) email with a link
+`{CLIENT_ORIGIN}/account/verify-email?token=...` carrying a JWT signed with a
+`purpose: "email_verification"` claim and a 24-hour expiry — no
+`tokenVersion` binding, since verifying isn't a session-invalidating action.
+`POST /auth/verify-email` distinguishes three outcomes: a genuinely expired
+token (`jsonwebtoken`'s `TokenExpiredError`) vs. any other invalid/malformed
+token vs. a valid-but-already-verified account (`data.status:
+"already-verified"`, not an error — a harmless re-click of an old email).
+`POST /auth/resend-verification` mirrors `forgot-password`'s
+existence-hiding pattern: always responds success, silently no-ops for an
+unknown email or an already-verified account. `requireEmailVerified`
+(applied after `authenticate`) blocks the two customer-only write actions —
+`POST /orders` and `POST /reviews/product/:productId` — for a `customer`
+whose `isEmailVerified` is still `false`; staff roles are always exempt.
+Staff accounts (`user.service.ts#createStaffAccount`), Google Sign-In
+accounts (Google already verified the email), and every seeded account
+(`seed/seed.ts`) are created with `isEmailVerified: true` — the gate only
+ever applies to the self-service storefront registration flow.
+`GET /auth/me`'s `user.isEmailVerified` drives the frontend: `/account`
+shows a persistent `EmailVerificationBanner` (with a resend button) above
+the dashboard for an unverified customer, and `/checkout`
+(`CheckoutClient.tsx`) shows the same banner instead of the order form —
+both disappear automatically once `AuthContext` re-fetches `/auth/me` with
+`isEmailVerified: true`. `frontend/src/app/(site)/account/verify-email/page.tsx`
+handles the link itself, distinguishing verified / already-verified /
+expired / invalid / missing-token states, with a resend form (plain email
+input, works whether or not the visitor is logged in) on the two error
+states.
 
 **Forgot / reset password** (`auth.service.ts#forgotPassword`/`resetPassword`,
 `utils/jwt.ts#signPasswordResetToken`) works identically for **every role**
@@ -203,12 +270,18 @@ new middleware that needs to modify `req.query`.
 
 **Testing**: `backend/src/tests/*.test.ts` — 10 unit-style spec files
 (`apiError`, `app`, `booleanish`, `errorMiddleware`, `jwt`, `params`, `rbac`,
-`shipping`, `slugify`, `validateMiddleware`). Jest + ts-jest
-(`backend/jest.config.js`, uses `tsconfig.jest.json` since the main
-`tsconfig.json` excludes `src/tests/**/*` from the build). No
-integration/e2e tests against a real or in-memory MongoDB exist yet — that's
-a real coverage gap, not an oversight to "fix" silently; flag it if asked
-about test coverage.
+`shipping`, `slugify`, `validateMiddleware`), plus `backend/src/tests/
+integration/*.integration.test.ts` — real HTTP-through-Mongoose integration
+specs (`auth`, `catalog`, `order`) run against an actual in-memory MongoDB
+via `mongodb-memory-server` (`tests/integration/setup.ts` starts/stops it
+and wipes collections between tests; `tests/integration/helpers.ts` creates
+a DB-backed user and signs a bearer token for it, bypassing `authLimiter` so
+RBAC-focused tests aren't rate-limited). They exercise `createApp()` with
+`supertest` end-to-end: register/login/`me`/logout, category+product RBAC
+and creation, and order creation/stock-decrement/tracking/ownership. Both
+suites run together via `npm test` (Jest + ts-jest, `backend/jest.config.js`,
+`tsconfig.jest.json` since the main `tsconfig.json` excludes `src/tests/**/*`
+from the build).
 
 ### Frontend (`frontend/src`)
 
@@ -285,20 +358,28 @@ modal forms via `Modal.tsx`, `PageHeader`, `StatusBadge`,
 
 `/admin` (dashboard: revenue/orders/customers/active-products/low-stock/
 pending-leaves stat cards, today's attendance, top products), `/admin/products`,
-`/admin/categories`, `/admin/orders`, `/admin/customers`, `/admin/reviews`,
+`/admin/categories`, `/admin/orders`, `/admin/coupons` (nav-hidden from
+co_admin), `/admin/customers`, `/admin/reviews`,
 `/admin/employees`, `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
 `/admin/inventory`, `/admin/reports`, `/admin/homepage` (hero slides +
 homepage sections — nav-hidden from co_admin), `/admin/settings` (site
 settings — nav-hidden from co_admin).
 
-Co-admin nav restriction (`AdminNav.tsx`) is **UI-level only** — the layout's
-`RoleGuard` accepts the whole `["co_admin","admin","super_admin"]` union, so
-a co_admin who navigates directly to `/admin/salary` (or `/homepage`,
-`/settings`) still renders the page shell; the backend then 403s the actual
-API calls (those routes require `admin`/`super_admin`). This matches the
-backend's real authorization boundary but means the co_admin sees a broken
-page rather than being redirected — a known UX gap, not a security hole.
+**Co-admin admin-portal UX**: the layout's `RoleGuard` (`app/admin/layout.tsx`)
+accepts the whole `["co_admin","admin","super_admin"]` union — it's a role
+gate, not a per-page one — so a co_admin who navigates directly to
+`/admin/salary`, `/admin/coupons`, `/admin/homepage`, or `/admin/settings`
+still reaches the page shell (`AdminNav.tsx` only hides the link, it doesn't
+block the route). Each of those four pages handles this itself with a
+page-level check — `const isRestricted = user?.role === "co_admin"` — that
+renders a friendly `EmptyState` ("Access restricted... available to Admin
+and Super Admin only") instead of attempting to load data, rather than
+letting the page render its normal shell and have every API call inside it
+403. This is UX polish on top of the backend's real authorization boundary
+(those routes already reject co_admin server-side) — not a substitute for
+it, and not a security fix, since the API was never reachable by co_admin
+in the first place.
 
 #### Employee portal (`app/employee`) — fully built, not stubbed
 
@@ -321,6 +402,27 @@ routes are guarded **client-side only** via `components/admin/RoleGuard.tsx`
 `/account` if unauthenticated or the role doesn't match) — **there is no
 `frontend/src/middleware.ts`**; the guard is UX-only (avoids a flash of admin
 UI), and the API enforces the real authorization server-side.
+
+**Silent access-token refresh** (`lib/api/client.ts`): the shared `request()`
+helper behind every `api.get/post/patch/delete/postForm/patchForm` call
+transparently handles the access-token cookie expiring mid-session
+(`JWT_ACCESS_EXPIRES_IN`, 15 minutes by default) — a 401 on any endpoint
+other than the auth ones that are 401-by-design (login, register, google,
+refresh itself, logout, forgot/reset-password, verify-email/
+resend-verification) triggers one `POST /auth/refresh` and, if that
+succeeds, a single retry of the original request; concurrent 401s across
+multiple in-flight requests share one refresh call instead of each firing
+their own. Only when the refresh itself fails (the 30-day refresh-token
+cookie is also expired/invalid) does `AuthContext` drop out of its
+signed-in state — via `setAuthFailureHandler()`, a small callback registry
+`client.ts` exposes so `AuthContext` can react immediately instead of
+waiting for its next `GET /auth/me` poll. A session that sits open past the
+access-token TTL now survives transparently instead of 401ing the next
+mutating request (e.g. placing an order) and silently signing the user out
+— confirmed live: registered a customer with a temporarily-shortened
+`JWT_ACCESS_EXPIRES_IN=5s`, waited past expiry, and the next request
+(`GET /auth/me`) 401'd, silently refreshed, and retried successfully with no
+redirect to sign-in.
 
 **Cart & wishlist are client-side only**: `CartContext` and `WishlistContext`
 persist to `localStorage` (`sap:cart`, `sap:wishlist` keys) and resolve full
@@ -357,11 +459,18 @@ hand-rolled with `useState`/`useEffect` + the custom `lib/api` client — no
 react-hook-form, no SWR/React Query, no Redux/Zustand. Match this pattern for
 new forms/pages rather than introducing a new library.
 
-**Testing**: no automated test runner is configured for the frontend
-(`package.json` has `dev`/`build`/`start`/`lint`/`typecheck` only, no
-`test` script, no Jest/Vitest/Playwright config). Verification is manual/
-browser-based — see "For UI or frontend changes" in the Doing Tasks
-guidance at the top of the harness system prompt.
+**Testing**: Vitest + React Testing Library (`vitest.config.mts`,
+`vitest.setup.ts` — jsdom environment, `@/*` alias resolved to `src/`,
+`@testing-library/jest-dom` matchers). `npm test` runs `vitest run`,
+`npm run test:watch` for the interactive watcher. Coverage is intentionally
+basic, not exhaustive: pure-logic unit tests (`lib/utils.test.ts`,
+`lib/passwordStrength.test.ts`, `lib/mappers.test.ts`), a component test
+(`components/ui/PasswordStrengthMeter.test.tsx`), and a context/hook test
+(`context/CartContext.test.tsx`, mocking `lib/api/products` to verify
+add/remove/quantity/localStorage-persistence logic without a real network
+call). No Playwright/e2e browser testing exists — UI/visual changes still
+need manual verification in a browser, see "For UI or frontend changes" in
+the Doing Tasks guidance at the top of the harness system prompt.
 
 ## Environment / running locally
 
@@ -459,31 +568,27 @@ need it.
 
 ## Known limitations (verified, not exhaustive)
 
-- **No backend integration/e2e tests** — only unit-style Jest specs exist
-  (see Testing above); nothing exercises a real request against a real or
-  in-memory MongoDB.
-- **No automated frontend tests at all** — no test runner is configured.
-  UI changes must be verified by hand in a browser.
+- **Test coverage is basic, not comprehensive** — the backend has unit specs
+  plus a small set of integration tests (auth, catalog, order) against an
+  in-memory MongoDB, and the frontend has Vitest/RTL coverage for a handful
+  of pure-logic modules, one component, and `CartContext` (see Testing in
+  both Architecture sections above). Most routes/pages/components still have
+  no automated test; UI/visual changes still need manual browser
+  verification, and no Playwright/e2e browser testing exists.
+- **No payment gateway integration** — `paymentMethod` (`cod`/`bkash`/
+  `nagad`) is stored on the order but there is no `config/payment.ts`, no
+  webhook/callback route, and no signature verification; `Order.isPaid` only
+  ever flips to `true` for a `cod` order marked `delivered`
+  (`order.service.ts#updateOrderStatus`) — a `bkash`/`nagad` order is never
+  actually charged or marked paid by anything in this codebase, and the
+  frontend checkout never redirects to a gateway. Treat "select bKash/Nagad
+  at checkout" as UI-only until a real gateway (e.g. bKash/SSLCommerz) is
+  integrated.
 - **Cart/wishlist don't persist server-side or cross-device** — they're
   `localStorage`-only (see "Cart & wishlist are client-side only" above).
-- **Co-admin route gating is UI-only for `/admin/salary`, `/admin/homepage`,
-  `/admin/settings`** — the layout guard admits all three admin-tier roles;
-  a co_admin who navigates there directly gets a page shell whose API calls
-  then 403, rather than a redirect.
 - **No `frontend/src/middleware.ts`** — route protection is entirely
   client-side (`RoleGuard`) plus real backend authorization; there's no
   server-side redirect before the page ships to the browser.
-- **No silent access-token refresh on the frontend** — `JWT_ACCESS_EXPIRES_IN`
-  defaults to 15 minutes, and `lib/api/client.ts` has no interceptor that
-  calls `POST /auth/refresh` on a 401; once the access-token cookie expires
-  mid-session, the next mutating request (e.g. placing an order) fails with
-  401 and the user is silently signed out (`AuthContext`'s next `GET
-  /auth/me` also 401s), even though the 30-day `refreshToken` cookie is
-  still valid. Confirmed by hitting this live: `POST /orders` 401'd after a
-  session sat open past the access-token TTL, requiring a fresh sign-in.
-  Not something to silently "fix" as a drive-by — it changes the auth
-  client's architecture — but worth knowing if a customer reports being
-  logged out mid-checkout.
 - **Google Sign-In is wired end-to-end but inactive** — no `GOOGLE_CLIENT_ID`
   has been provisioned on this machine, so `POST /auth/google` 503s and the
   frontend's "Continue with Google" button doesn't render. See "Google
@@ -496,10 +601,14 @@ need it.
   identifier.
 - Static content pages (`/about`, `/contact`, `/shipping-policy`) are
   hardcoded JSX, not admin-editable — only the homepage has editable
-  content (see "Homepage content management").
-- `frontend/src/app/(site)/contact/page.tsx` currently has a placeholder
-  phone number literal (`+880 1XXX-XXXXXX`) — real contact info still
-  needs to be filled in before this is launch-ready copy.
+  content (see "Homepage content management"). `/contact` is a partial
+  exception: it's still hardcoded structure/copy, but its phone/email rows
+  now read live from the same admin-editable `SiteSettings` singleton the
+  footer uses (`getSiteSettings()`, async server component,
+  `dynamic = "force-dynamic"`) instead of a hardcoded literal — the old
+  `+880 1XXX-XXXXXX` placeholder is gone, and the phone row simply doesn't
+  render until an admin sets a real `contactPhone` via `/admin/settings`
+  (no fake number is shown in the meantime).
 
 ## Documentation maintenance
 

@@ -5,6 +5,7 @@ import { Heart, LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { AuthForms } from "@/components/account/AuthForms";
+import { EmailVerificationBanner } from "@/components/account/EmailVerificationBanner";
 import { AddressBook } from "@/components/account/AddressBook";
 import { OrderHistory } from "@/components/account/OrderHistory";
 import { ProfileSection } from "@/components/account/ProfileSection";
@@ -84,6 +85,8 @@ export default function AccountPage() {
             <h1 className="font-serif text-2xl text-green-950">{TAB_COPY[tab].title}</h1>
             <p className="mt-1 text-sm text-brown-500">{TAB_COPY[tab].description}</p>
           </div>
+
+          {!user.isEmailVerified && <EmailVerificationBanner email={user.email} />}
 
           {tab === "dashboard" && (
             <DashboardOverview
