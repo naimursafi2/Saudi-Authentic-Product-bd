@@ -18,6 +18,7 @@ import siteSettingsRoutes from "./siteSettings.routes";
 import couponRoutes from "./coupon.routes";
 import navLinkRoutes from "./navLink.routes";
 import footerColumnRoutes from "./footerColumn.routes";
+import staticPageRoutes from "./staticPage.routes";
 
 const router = Router();
 
@@ -40,5 +41,6 @@ router.use("/site-settings", siteSettingsRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/nav-links", navLinkRoutes);
 router.use("/footer-columns", footerColumnRoutes);
+router.use("/static-pages", staticPageRoutes);
 
 export default router;

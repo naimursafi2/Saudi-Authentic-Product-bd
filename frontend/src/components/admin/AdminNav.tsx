@@ -22,6 +22,7 @@ import {
   PanelBottom,
   Settings,
   Tag,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/types/api";
@@ -52,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/homepage", label: "Homepage", icon: LayoutPanelTop, roles: ["admin", "super_admin"] },
   { href: "/admin/navigation", label: "Navigation", icon: Compass, roles: ["admin", "super_admin"] },
   { href: "/admin/footer", label: "Footer", icon: PanelBottom, roles: ["admin", "super_admin"] },
+  { href: "/admin/pages", label: "Pages", icon: FileText, roles: ["admin", "super_admin"] },
   { href: "/admin/settings", label: "Settings", icon: Settings, roles: ["admin", "super_admin"] },
 ];
 

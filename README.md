@@ -42,8 +42,9 @@ form or state-management library — forms/data fetching are hand-rolled with
   book with add/edit/delete/set-default), password reset, a public
   order-tracking page (`/track-order` — look up any order by order number +
   checkout email, no login required, auto-prefilled for signed-in
-  customers), about, contact (phone/email sourced from the admin-editable
-  `SiteSettings` singleton), shipping policy, plus a standalone `/checkout`
+  customers), about, contact, and shipping policy — all three admin-editable
+  via the `StaticPage` content system (contact's phone/email still sourced
+  separately from the admin-editable `SiteSettings` singleton) — plus a standalone `/checkout`
   flow with a coupon-code field (server-validated discount preview, applied
   total, never a client-trusted amount) — all backed by the live API and
   Cloudinary imagery. The navbar shows
@@ -82,12 +83,13 @@ form or state-management library — forms/data fetching are hand-rolled with
   reports (sales summary), homepage content (hero slides + homepage
   sections, admin/super_admin only), navigation (header nav links,
   admin/super_admin only), footer (footer link columns, admin/super_admin
+  only), pages (About/Contact/Shipping Policy body copy, admin/super_admin
   only), site settings (admin/super_admin only). Route access is guarded
   client-side (`RoleGuard`) and enforced for real by the backend's
-  `authorize(...)` on every route; the six admin/super_admin-only pages
-  (coupons, salary, homepage, navigation, footer, settings) show a friendly
-  "Access restricted" state for a co_admin who navigates there directly
-  instead of a broken page shell.
+  `authorize(...)` on every route; the seven admin/super_admin-only pages
+  (coupons, salary, homepage, navigation, footer, pages, settings) show a
+  friendly "Access restricted" state for a co_admin who navigates there
+  directly instead of a broken page shell.
 - **Employee portal** (`frontend/src/app/employee`, fully built):
   check-in/out + attendance history, tasks, leave requests, performance
   history, salary/payment history.
@@ -106,10 +108,18 @@ form or state-management library — forms/data fetching are hand-rolled with
   are freely add/edit/delete/reorder-able, same pattern as hero slides; the
   footer's social icons come from a `socialLinks` list on the same
   `SiteSettings` singleton as the logo/announcement/contact fields
-  (`/admin/settings`). This and the homepage system above are **not** a
-  general CMS or page builder — `/about`, `/contact`, and
-  `/shipping-policy` remain hardcoded static pages, and there's no arbitrary
-  page creation.
+  (`/admin/settings`).
+- **Static page content management** — `/admin/pages` edits the body copy of
+  the three static informational pages (`/about`, `/contact`,
+  `/shipping-policy`) via a `StaticPage` model: one fixed, lazily-seeded
+  document per page type (editable, not creatable/deletable), covering hero
+  title/intro text/hero image, a reorderable `blocks[]` list (About's value
+  highlights with an icon picker, or Shipping Policy's policy sections, each
+  independently visible), and About's closing CTA banner. Contact's
+  phone/email/social links still come from `SiteSettings`, not duplicated
+  here. This and the homepage system above are **not** a general CMS or page
+  builder — every editable surface is a fixed, known type; there's still no
+  arbitrary page/route creation.
 - SMTP email notifications (fire-and-forget, never block a request): order
   confirmations, staff welcome, leave status, task assignment, password
   reset, and salary/payment notices (paid or pending-reminder copy).
@@ -240,10 +250,11 @@ missing/malformed):
   paid. Treat non-COD checkout as UI-only until a real gateway is wired up.
 - Cart and wishlist are `localStorage`-only; they don't persist server-side
   or follow a customer across devices/browsers.
-- Co-admin's `/admin/salary`, `/admin/coupons`, `/admin/homepage`, and
+- Co-admin's `/admin/salary`, `/admin/coupons`, `/admin/homepage`,
+  `/admin/navigation`, `/admin/footer`, `/admin/pages`, and
   `/admin/settings` nav links are hidden in the UI, and the layout's role
-  guard still admits all four admin-tier roles at the route level — but each
-  of those four pages now checks the role itself and shows a friendly
+  guard still admits all admin-tier roles at the route level — but each
+  of those pages now checks the role itself and shows a friendly
   "Access restricted" state instead of attempting to load data, so a
   co_admin navigating there directly no longer sees a broken page shell
   with failed API calls.
@@ -254,20 +265,21 @@ missing/malformed):
   and posting reviews (`isEmailVerified`); staff and Google Sign-In accounts
   are exempt.
 - The homepage content system (hero slides + homepage sections), navigation
-  (header nav links), and footer (link columns + social links) are all
-  admin-editable, but this is not a general CMS/page builder — `/about`,
-  `/contact`, and `/shipping-policy`'s own copy still aren't admin-editable,
-  and there's no arbitrary page creation.
+  (header nav links), footer (link columns + social links), and now
+  `/about`/`/contact`/`/shipping-policy` (via `/admin/pages`) are all
+  admin-editable, but this is not a general CMS/page builder — every
+  editable surface is a fixed, known page/section type, and there's still no
+  arbitrary page or route creation.
 - Google Sign-In is fully implemented but inactive on this machine — no
   `GOOGLE_CLIENT_ID` has been provisioned yet (see Environment variables).
 - No SMS gateway is configured anywhere, so there's no phone-OTP
   registration/verification or phone-based login — `phone` is only ever a
   supplementary, duplicate-checked contact field alongside the required
   email login identifier.
-- `/contact`'s phone/email now come from the admin-editable `SiteSettings`
-  singleton (same one the footer uses) instead of a hardcoded placeholder;
-  the phone row just doesn't render until an admin sets one in
-  `/admin/settings`.
+- `/contact`'s phone/email come from the admin-editable `SiteSettings`
+  singleton (same one the footer uses); the phone row just doesn't render
+  until an admin sets one in `/admin/settings`. Its intro text and address
+  line come from the separate `StaticPage` document (`/admin/pages`).
 
 ## Notes
 

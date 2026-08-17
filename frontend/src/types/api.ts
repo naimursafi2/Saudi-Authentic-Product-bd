@@ -206,6 +206,44 @@ export interface ApiFooterColumn {
   updatedAt: string;
 }
 
+export type StaticPageType = "about" | "contact" | "shippingPolicy";
+
+export type StaticPageBlockIcon =
+  | "BadgeCheck"
+  | "ShieldCheck"
+  | "Globe"
+  | "HandCoins"
+  | "Truck"
+  | "Clock"
+  | "Package"
+  | "Award"
+  | "Star"
+  | "Leaf";
+
+export interface ApiStaticPageBlock {
+  title: string;
+  body: string;
+  icon?: StaticPageBlockIcon;
+  isVisible: boolean;
+}
+
+export interface ApiStaticPage {
+  _id: string;
+  type: StaticPageType;
+  heroTitle?: string;
+  heroDescription?: string;
+  heroImage?: { url: string; publicId: string };
+  introText?: string;
+  addressLine?: string;
+  blocks: ApiStaticPageBlock[];
+  ctaTitle?: string;
+  ctaDescription?: string;
+  ctaButtonLabel?: string;
+  ctaButtonHref?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApiReview {
   _id: string;
   product: string | { _id: string; name: string; slug: string };

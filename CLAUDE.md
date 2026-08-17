@@ -54,6 +54,7 @@ Register every new router in `routes/index.ts`.
 | `/coupons` | `POST /validate` (authenticated customer, preview a discount); admin CRUD (`GET /`, `POST /`, `PATCH /:id`, `DELETE /:id`) | `admin`,`super_admin` only for CRUD — deliberately excludes `co_admin`, matching the `/site-settings`/`/homepage-sections`/`/salary-payments` restriction pattern; `/validate` just requires `authenticate` |
 | `/nav-links` | public list (sorted, visible-only by default); admin create/update/delete of the storefront header's top-level nav links | create/update/delete: `admin`,`super_admin` only |
 | `/footer-columns` | public list (sorted, visible-only by default); admin create/update/delete of the storefront footer's link columns (each with an embedded, wholesale-replaced `links[]`) | create/update/delete: `admin`,`super_admin` only |
+| `/static-pages` | public list + `GET /:type` (lazily-seeded singleton per fixed page type); admin `PATCH /:type` (hero image upload) | update: `admin`,`super_admin` only |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
 `validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
@@ -95,7 +96,7 @@ route under `/orders` (mounted before the router's `router.use(authenticate)`).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`, optional `couponCode`/`discountBDT`), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below).
+`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`, optional `couponCode`/`discountBDT`), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below).
 
 #### Homepage content management (not a general CMS)
 
@@ -128,12 +129,43 @@ not a page builder:
   rather than a broken/empty section.
 
 There is no arbitrary page/route creation and no rich-text/WYSIWYG block
-editor. `/about`, `/contact`, and `/shipping-policy` remain hardcoded static
-JSX (see "Navigation & footer content management" below for what else is
-admin-editable outside the homepage, and "Known limitations" for what still
-isn't). `SiteSettings` (site name, logo, announcement bar text, contact
-email/phone, footer tagline, social links — `/admin/settings`) is a
-separate, unrelated singleton, not part of the homepage-section system.
+editor — see "Static page content management" below for `/about`,
+`/contact`, and `/shipping-policy`'s own (separate, fixed-type) content
+system, and "Navigation & footer content management" below for what else is
+admin-editable outside the homepage. `SiteSettings` (site name, logo,
+announcement bar text, contact email/phone, footer tagline, social links —
+`/admin/settings`) is a separate, unrelated singleton, not part of the
+homepage-section system.
+
+#### Static page content management
+
+`/admin/pages` and its backing model (`StaticPage`) let admins/super-admins
+edit the body copy of the three static informational pages — `about`,
+`contact`, `shippingPolicy` — a **fixed enum**, same lazily-seeded-singleton
+pattern as `HomepageSection`'s five fixed types: one document per type
+(unique index on `type`), seeded from `STATIC_PAGE_DEFAULTS` on first read,
+editable but **not creatable or deletable**, and not a general page builder
+— there is still no way to add an arbitrary new page or route. Each
+document holds `heroTitle`, an optional `heroDescription` (About's two
+intro paragraphs, stored as one string split on a blank line),
+an optional `heroImage`, an optional `introText`/`addressLine` (Contact
+only), a `blocks[]` array (About's four value-highlight tiles with an
+allow-listed lucide `icon` name, or Shipping Policy's list of policy
+sections — each block has its own `isVisible`, replaced wholesale on
+update, ordered by array order), and optional `ctaTitle`/`ctaDescription`/
+`ctaButtonLabel`/`ctaButtonHref` (About's closing banner — rendered only
+when `ctaTitle` is set). `/admin/pages`'s form (`StaticPageForm.tsx`) shows
+only the fields relevant to the selected page type (mirrors
+`HomepageSectionForm`'s per-type `FIELD_VISIBILITY` pattern) via a
+type-selector tab bar. Contact's phone/email/social links are **not**
+duplicated here — they still come from the existing `SiteSettings` singleton
+(`/admin/settings`); `StaticPage`'s `contact` document only adds the page's
+own intro paragraph and address line. The three public pages
+(`frontend/src/app/(site)/{about,contact,shipping-policy}/page.tsx`) are
+`force-dynamic` server components that fetch their content from
+`GET /static-pages/:type` (Contact also fetches `SiteSettings` in parallel)
+— nothing on these three pages is hardcoded body copy anymore, only their
+Tailwind layout/markup.
 
 #### Navigation & footer content management
 
@@ -400,14 +432,15 @@ co_admin), `/admin/customers`, `/admin/reviews`,
 `/admin/inventory`, `/admin/reports`, `/admin/homepage` (hero slides +
 homepage sections — nav-hidden from co_admin), `/admin/navigation` (header
 nav links — nav-hidden from co_admin), `/admin/footer` (footer link columns
-— nav-hidden from co_admin), `/admin/settings` (site settings, including
-social links — nav-hidden from co_admin).
+— nav-hidden from co_admin), `/admin/pages` (About/Contact/Shipping Policy
+body copy — nav-hidden from co_admin), `/admin/settings` (site settings,
+including social links — nav-hidden from co_admin).
 
 **Co-admin admin-portal UX**: the layout's `RoleGuard` (`app/admin/layout.tsx`)
 accepts the whole `["co_admin","admin","super_admin"]` union — it's a role
 gate, not a per-page one — so a co_admin who navigates directly to
 `/admin/salary`, `/admin/coupons`, `/admin/homepage`, `/admin/navigation`,
-`/admin/footer`, or `/admin/settings` still reaches the page shell
+`/admin/footer`, `/admin/pages`, or `/admin/settings` still reaches the page shell
 (`AdminNav.tsx` only hides the link, it doesn't block the route). Each of
 those pages handles this itself with a
 page-level check — `const isRestricted = user?.role === "co_admin"` — that
@@ -637,19 +670,13 @@ need it.
   no SMS gateway configured anywhere in this project, so there is no
   phone-OTP signup flow or phone-based login; email remains the only login
   identifier.
-- Static content pages (`/about`, `/contact`, `/shipping-policy`) are
-  hardcoded JSX body copy, not admin-editable — the homepage (hero/sections),
-  header nav, and footer (columns/social links) are admin-editable (see
-  "Homepage content management" and "Navigation & footer content
-  management"), but there's still no way to edit these three pages' own text
-  or add new arbitrary pages. `/contact` is a partial exception: it's still
-  hardcoded structure/copy, but its phone/email rows
-  now read live from the same admin-editable `SiteSettings` singleton the
-  footer uses (`getSiteSettings()`, async server component,
-  `dynamic = "force-dynamic"`) instead of a hardcoded literal — the old
-  `+880 1XXX-XXXXXX` placeholder is gone, and the phone row simply doesn't
-  render until an admin sets a real `contactPhone` via `/admin/settings`
-  (no fake number is shown in the meantime).
+- **Still no arbitrary page/route creation** — `/about`, `/contact`, and
+  `/shipping-policy`'s body copy is admin-editable via the fixed-type
+  `StaticPage` system (see "Static page content management"), same as the
+  homepage (hero/sections), header nav, and footer (columns/social links),
+  but there is still no way to add a brand-new page, route, or arbitrary
+  content block outside these known, fixed surfaces — nowhere in the app is
+  there a general page builder.
 
 ## Documentation maintenance
 
