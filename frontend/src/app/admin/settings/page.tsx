@@ -44,6 +44,7 @@ export default function AdminSettingsPage() {
       form.set("contactEmail", values.contactEmail);
       form.set("contactPhone", values.contactPhone);
       form.set("footerTagline", values.footerTagline);
+      form.set("socialLinks", JSON.stringify(values.socialLinks));
       if (logo) form.set("logo", logo);
       const { data } = await updateSiteSettings(form);
       setSettings(data.settings);

@@ -21,15 +21,8 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useSiteSettings } from "@/lib/hooks/useSiteSettings";
+import { useNavLinks } from "@/lib/hooks/useNavLinks";
 import { SearchOverlay } from "./SearchOverlay";
-
-const NAV_LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/shop", label: "Shop" },
-  { href: "/offers", label: "Offers" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
-];
 
 /** Shared classes for a top-level nav label + its animated hover/active underline. */
 const NAV_LINK_BASE =
@@ -60,6 +53,7 @@ export function Header() {
   const { user, status, logout } = useAuth();
   const { categories } = useCategories();
   const { settings } = useSiteSettings();
+  const { navLinks } = useNavLinks();
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const siteName = settings?.siteName || "Saudi Authentic Product";
@@ -81,20 +75,21 @@ export function Header() {
           </Link>
 
           <nav className="hidden items-stretch gap-8 lg:flex">
-            <Link
-              href="/"
-              className={cn(NAV_LINK_BASE, navLinkTextClass(pathname === "/"))}
-            >
-              Home
-              <NavUnderline active={pathname === "/"} />
-            </Link>
-            <Link
-              href="/shop"
-              className={cn(NAV_LINK_BASE, navLinkTextClass(pathname.startsWith("/shop")))}
-            >
-              Shop
-              <NavUnderline active={pathname.startsWith("/shop")} />
-            </Link>
+            {navLinks.map((link) => {
+              const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link._id}
+                  href={link.href}
+                  target={link.openInNewTab ? "_blank" : undefined}
+                  rel={link.openInNewTab ? "noopener noreferrer" : undefined}
+                  className={cn(NAV_LINK_BASE, navLinkTextClass(active))}
+                >
+                  {link.label}
+                  <NavUnderline active={active} />
+                </Link>
+              );
+            })}
 
             {/* Categories dropdown — hover on desktop, focus-visible for keyboard nav. */}
             <div className="group relative flex items-stretch">
@@ -139,20 +134,6 @@ export function Header() {
                 </div>
               </div>
             </div>
-
-            {NAV_LINKS.slice(2).map((link) => {
-              const active = pathname.startsWith(link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(NAV_LINK_BASE, navLinkTextClass(active))}
-                >
-                  {link.label}
-                  <NavUnderline active={active} />
-                </Link>
-              );
-            })}
           </nav>
 
           <div className="flex items-center gap-4 sm:gap-5">
@@ -228,16 +209,25 @@ export function Header() {
                 <X size={20} className="text-green-950" />
               </button>
             </div>
-            {[{ href: "/", label: "Home" }, { href: "/shop", label: "Shop" }, { href: "/categories", label: "Categories" }, ...NAV_LINKS.slice(2)].map((link) => (
+            {navLinks.map((link) => (
               <Link
-                key={link.href}
+                key={link._id}
                 href={link.href}
+                target={link.openInNewTab ? "_blank" : undefined}
+                rel={link.openInNewTab ? "noopener noreferrer" : undefined}
                 onClick={() => setMobileOpen(false)}
                 className="rounded px-2 py-3 text-sm font-bold uppercase tracking-[0.1em] text-green-950 hover:bg-green-950/5"
               >
                 {link.label}
               </Link>
             ))}
+            <Link
+              href="/categories"
+              onClick={() => setMobileOpen(false)}
+              className="rounded px-2 py-3 text-sm font-bold uppercase tracking-[0.1em] text-green-950 hover:bg-green-950/5"
+            >
+              Categories
+            </Link>
             <div className="my-3 h-px bg-green-900/10" />
             <Link
               href="/track-order"

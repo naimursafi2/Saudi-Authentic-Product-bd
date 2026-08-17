@@ -52,6 +52,8 @@ Register every new router in `routes/index.ts`.
 | `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
 | `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement/contact/footer | `admin`,`super_admin` only |
 | `/coupons` | `POST /validate` (authenticated customer, preview a discount); admin CRUD (`GET /`, `POST /`, `PATCH /:id`, `DELETE /:id`) | `admin`,`super_admin` only for CRUD — deliberately excludes `co_admin`, matching the `/site-settings`/`/homepage-sections`/`/salary-payments` restriction pattern; `/validate` just requires `authenticate` |
+| `/nav-links` | public list (sorted, visible-only by default); admin create/update/delete of the storefront header's top-level nav links | create/update/delete: `admin`,`super_admin` only |
+| `/footer-columns` | public list (sorted, visible-only by default); admin create/update/delete of the storefront footer's link columns (each with an embedded, wholesale-replaced `links[]`) | create/update/delete: `admin`,`super_admin` only |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
 `validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
@@ -93,7 +95,7 @@ route under `/orders` (mounted before the router's `router.use(authenticate)`).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`, optional `couponCode`/`discountBDT`), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton).
+`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`, optional `couponCode`/`discountBDT`), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below).
 
 #### Homepage content management (not a general CMS)
 
@@ -125,13 +127,46 @@ not a page builder:
   showcase for a category with zero active products simply renders nothing
   rather than a broken/empty section.
 
-There is no arbitrary page/route creation, no rich-text/WYSIWYG block editor,
-and no way to add admin-editable content to any page other than the
-homepage — `/about`, `/contact`, and `/shipping-policy` are hardcoded static
-JSX. `SiteSettings` (site name, logo, announcement bar text, contact
-email/phone, footer tagline — `/admin/settings`) is a separate, unrelated
-singleton, not part of the homepage-section system. If asked for "the CMS,"
-this is it — don't imply more editability exists than this.
+There is no arbitrary page/route creation and no rich-text/WYSIWYG block
+editor. `/about`, `/contact`, and `/shipping-policy` remain hardcoded static
+JSX (see "Navigation & footer content management" below for what else is
+admin-editable outside the homepage, and "Known limitations" for what still
+isn't). `SiteSettings` (site name, logo, announcement bar text, contact
+email/phone, footer tagline, social links — `/admin/settings`) is a
+separate, unrelated singleton, not part of the homepage-section system.
+
+#### Navigation & footer content management
+
+Two more freely-creatable/orderable/deletable collections extend admin
+control beyond the homepage to the storefront's global chrome — same
+lazily-seeded-defaults, `isVisible`/`sortOrder` pattern as `HeroSlide`, but
+with no fixed/uncreatable rows (everything in both is freely add/edit/
+delete/reorder):
+
+- **`NavLink`** (`label`, `href`, `sortOrder`, `isVisible`,
+  `openInNewTab`) — the storefront header's top-level nav links
+  (`Header.tsx`, via `lib/hooks/useNavLinks.ts`), managed at
+  `/admin/navigation`. The "Categories" dropdown (live category list, hover
+  menu) is a separate, fixed structural element always rendered after the
+  dynamic links — it is not itself a `NavLink` row and isn't reorderable
+  relative to them.
+- **`FooterColumn`** (`heading`, `sortOrder`, `isVisible`, an embedded
+  `links[]` of `{label, href, sortOrder}`, replaced wholesale on update) —
+  the storefront footer's link columns (`Footer.tsx`, an async server
+  component fetching both this and `SiteSettings` server-side), managed at
+  `/admin/footer`. Social icons in the footer's bottom row come from
+  `SiteSettings.socialLinks` (edited on `/admin/settings`, alongside the
+  existing branding/contact fields) and render via
+  `components/ui/SocialIcon.tsx` — a small stroked-circle-with-monogram
+  glyph (not a brand logo) since lucide-react dropped brand/logo icons for
+  trademark reasons; do not add a brand-icon dependency to restore literal
+  logos without checking that constraint first.
+
+Both `/admin/navigation` and `/admin/footer` are `admin`/`super_admin`
+only (nav-hidden from `co_admin`, same restricted-page pattern as
+`/admin/homepage`/`/admin/settings` — see "Co-admin admin-portal UX"
+below), and both public list endpoints are visible-only/sorted by default
+(`includeHidden=true` for the admin views).
 
 #### Middlewares (`src/middlewares`)
 
@@ -363,15 +398,18 @@ co_admin), `/admin/customers`, `/admin/reviews`,
 `/admin/employees`, `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
 `/admin/inventory`, `/admin/reports`, `/admin/homepage` (hero slides +
-homepage sections — nav-hidden from co_admin), `/admin/settings` (site
-settings — nav-hidden from co_admin).
+homepage sections — nav-hidden from co_admin), `/admin/navigation` (header
+nav links — nav-hidden from co_admin), `/admin/footer` (footer link columns
+— nav-hidden from co_admin), `/admin/settings` (site settings, including
+social links — nav-hidden from co_admin).
 
 **Co-admin admin-portal UX**: the layout's `RoleGuard` (`app/admin/layout.tsx`)
 accepts the whole `["co_admin","admin","super_admin"]` union — it's a role
 gate, not a per-page one — so a co_admin who navigates directly to
-`/admin/salary`, `/admin/coupons`, `/admin/homepage`, or `/admin/settings`
-still reaches the page shell (`AdminNav.tsx` only hides the link, it doesn't
-block the route). Each of those four pages handles this itself with a
+`/admin/salary`, `/admin/coupons`, `/admin/homepage`, `/admin/navigation`,
+`/admin/footer`, or `/admin/settings` still reaches the page shell
+(`AdminNav.tsx` only hides the link, it doesn't block the route). Each of
+those pages handles this itself with a
 page-level check — `const isRestricted = user?.role === "co_admin"` — that
 renders a friendly `EmptyState` ("Access restricted... available to Admin
 and Super Admin only") instead of attempting to load data, rather than
@@ -600,9 +638,12 @@ need it.
   phone-OTP signup flow or phone-based login; email remains the only login
   identifier.
 - Static content pages (`/about`, `/contact`, `/shipping-policy`) are
-  hardcoded JSX, not admin-editable — only the homepage has editable
-  content (see "Homepage content management"). `/contact` is a partial
-  exception: it's still hardcoded structure/copy, but its phone/email rows
+  hardcoded JSX body copy, not admin-editable — the homepage (hero/sections),
+  header nav, and footer (columns/social links) are admin-editable (see
+  "Homepage content management" and "Navigation & footer content
+  management"), but there's still no way to edit these three pages' own text
+  or add new arbitrary pages. `/contact` is a partial exception: it's still
+  hardcoded structure/copy, but its phone/email rows
   now read live from the same admin-editable `SiteSettings` singleton the
   footer uses (`getSiteSettings()`, async server component,
   `dynamic = "force-dynamic"`) instead of a hardcoded literal — the old

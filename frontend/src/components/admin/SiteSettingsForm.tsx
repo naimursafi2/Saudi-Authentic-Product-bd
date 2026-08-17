@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import type { ApiSiteSettings } from "@/types/api";
+import type { ApiSiteSettings, ApiSocialLink, SocialPlatform } from "@/types/api";
 
 export interface SiteSettingsFormValues {
   siteName: string;
@@ -10,7 +11,18 @@ export interface SiteSettingsFormValues {
   contactEmail: string;
   contactPhone: string;
   footerTagline: string;
+  socialLinks: ApiSocialLink[];
 }
+
+const SOCIAL_PLATFORMS: SocialPlatform[] = [
+  "facebook",
+  "instagram",
+  "twitter",
+  "youtube",
+  "linkedin",
+  "whatsapp",
+  "tiktok",
+];
 
 const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
@@ -23,6 +35,7 @@ function fromSettings(settings: ApiSiteSettings): SiteSettingsFormValues {
     contactEmail: settings.contactEmail ?? "",
     contactPhone: settings.contactPhone ?? "",
     footerTagline: settings.footerTagline ?? "",
+    socialLinks: settings.socialLinks,
   };
 }
 
@@ -43,6 +56,26 @@ export function SiteSettingsForm({
 
   function update<K extends keyof SiteSettingsFormValues>(key: K, value: SiteSettingsFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateSocialLink(index: number, field: keyof ApiSocialLink, value: string) {
+    setValues((prev) => ({
+      ...prev,
+      socialLinks: prev.socialLinks.map((link, i) =>
+        i === index ? { ...link, [field]: value } : link
+      ),
+    }));
+  }
+
+  function addSocialLink() {
+    setValues((prev) => ({
+      ...prev,
+      socialLinks: [...prev.socialLinks, { platform: "facebook", url: "" }],
+    }));
+  }
+
+  function removeSocialLink(index: number) {
+    setValues((prev) => ({ ...prev, socialLinks: prev.socialLinks.filter((_, i) => i !== index) }));
   }
 
   function handleLogoChange(file: File | null) {
@@ -122,6 +155,50 @@ export function SiteSettingsForm({
             onChange={(e) => update("contactPhone", e.target.value)}
             className={fieldClasses}
           />
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <label className={labelClasses}>Social Links</label>
+          <Button type="button" variant="outline" size="sm" onClick={addSocialLink}>
+            <Plus size={12} /> Add Social Link
+          </Button>
+        </div>
+        <div className="flex flex-col gap-2">
+          {values.socialLinks.map((link, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <select
+                value={link.platform}
+                onChange={(e) => updateSocialLink(i, "platform", e.target.value)}
+                className={fieldClasses}
+              >
+                {SOCIAL_PLATFORMS.map((platform) => (
+                  <option key={platform} value={platform}>
+                    {platform}
+                  </option>
+                ))}
+              </select>
+              <input
+                required
+                value={link.url}
+                onChange={(e) => updateSocialLink(i, "url", e.target.value)}
+                placeholder="https://..."
+                className={fieldClasses}
+              />
+              <button
+                type="button"
+                aria-label="Remove social link"
+                onClick={() => removeSocialLink(i)}
+                className="shrink-0 text-brown-500 hover:text-[#8a4a3f]"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+          {values.socialLinks.length === 0 && (
+            <p className="text-xs text-brown-500">No social links yet — add one above.</p>
+          )}
         </div>
       </div>
 

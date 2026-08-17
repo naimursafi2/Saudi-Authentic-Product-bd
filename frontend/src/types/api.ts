@@ -152,6 +152,20 @@ export interface ApiHomepageSection {
   updatedAt: string;
 }
 
+export type SocialPlatform =
+  | "facebook"
+  | "instagram"
+  | "twitter"
+  | "youtube"
+  | "linkedin"
+  | "whatsapp"
+  | "tiktok";
+
+export interface ApiSocialLink {
+  platform: SocialPlatform;
+  url: string;
+}
+
 export interface ApiSiteSettings {
   _id: string;
   siteName: string;
@@ -160,6 +174,34 @@ export interface ApiSiteSettings {
   contactEmail?: string;
   contactPhone?: string;
   footerTagline?: string;
+  socialLinks: ApiSocialLink[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiNavLink {
+  _id: string;
+  label: string;
+  href: string;
+  sortOrder: number;
+  isVisible: boolean;
+  openInNewTab: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiFooterLink {
+  label: string;
+  href: string;
+  sortOrder: number;
+}
+
+export interface ApiFooterColumn {
+  _id: string;
+  heading: string;
+  sortOrder: number;
+  isVisible: boolean;
+  links: ApiFooterLink[];
   createdAt: string;
   updatedAt: string;
 }

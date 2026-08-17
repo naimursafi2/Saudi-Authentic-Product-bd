@@ -1,29 +1,16 @@
 import Link from "next/link";
-import { Globe, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 import { getSiteSettings } from "@/lib/api/siteSettings";
-
-const linkColumns = [
-  {
-    heading: "Explore",
-    links: [
-      { href: "/about", label: "Our Story" },
-      { href: "/shop?category=madinah-dates", label: "Madinah Dates" },
-      { href: "/categories", label: "Premium Perfumes" },
-    ],
-  },
-  {
-    heading: "Support",
-    links: [
-      { href: "/track-order", label: "Track Order" },
-      { href: "/shipping-policy", label: "Shipping Policy" },
-      { href: "/contact", label: "Contact Us" },
-    ],
-  },
-];
+import { listFooterColumns } from "@/lib/api/footerColumns";
+import { SocialIcon } from "@/components/ui/SocialIcon";
 
 export async function Footer() {
-  const { data } = await getSiteSettings();
-  const { siteName, footerTagline, contactEmail } = data.settings;
+  const [{ data: settingsData }, { data: columnsData }] = await Promise.all([
+    getSiteSettings(),
+    listFooterColumns(),
+  ]);
+  const { siteName, footerTagline, contactEmail, socialLinks } = settingsData.settings;
+  const columns = [...columnsData.footerColumns].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
     <footer className="bg-cream-200">
@@ -39,13 +26,13 @@ export async function Footer() {
           )}
         </div>
 
-        {linkColumns.map((col) => (
-          <div key={col.heading} className="flex-1">
+        {columns.map((col) => (
+          <div key={col._id} className="flex-1">
             <h4 className="mb-4 text-xs font-bold uppercase tracking-[0.1em] text-brown-600">
               {col.heading}
             </h4>
             <ul className="flex flex-col gap-3">
-              {col.links.map((link) => (
+              {[...col.links].sort((a, b) => a.sortOrder - b.sortOrder).map((link) => (
                 <li key={link.label}>
                   <Link
                     href={link.href}
@@ -66,9 +53,18 @@ export async function Footer() {
           {footerTagline ? `. ${footerTagline}` : ""}
         </p>
         <div className="flex items-center gap-4">
-          <a href="#" aria-label="Website" className="hover:text-green-950">
-            <Globe size={16} />
-          </a>
+          {socialLinks.map((social) => (
+            <a
+              key={social.platform}
+              href={social.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={social.platform}
+              className="hover:text-green-950"
+            >
+              <SocialIcon platform={social.platform} size={16} />
+            </a>
+          ))}
           {contactEmail && (
             <a href={`mailto:${contactEmail}`} aria-label="Email" className="hover:text-green-950">
               <Mail size={16} />

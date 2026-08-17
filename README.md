@@ -80,12 +80,14 @@ form or state-management library — forms/data fetching are hand-rolled with
   employees, attendance, leave, tasks, performance, salary & payments
   (admin/super_admin only), inventory (stock adjustments + audit log),
   reports (sales summary), homepage content (hero slides + homepage
-  sections, admin/super_admin only), site settings (admin/super_admin
-  only). Route access is guarded client-side (`RoleGuard`) and enforced for
-  real by the backend's `authorize(...)` on every route; the four
-  admin/super_admin-only pages (coupons, salary, homepage, settings) show a
-  friendly "Access restricted" state for a co_admin who navigates there
-  directly instead of a broken page shell.
+  sections, admin/super_admin only), navigation (header nav links,
+  admin/super_admin only), footer (footer link columns, admin/super_admin
+  only), site settings (admin/super_admin only). Route access is guarded
+  client-side (`RoleGuard`) and enforced for real by the backend's
+  `authorize(...)` on every route; the six admin/super_admin-only pages
+  (coupons, salary, homepage, navigation, footer, settings) show a friendly
+  "Access restricted" state for a co_admin who navigates there directly
+  instead of a broken page shell.
 - **Employee portal** (`frontend/src/app/employee`, fully built):
   check-in/out + attendance history, tasks, leave requests, performance
   history, salary/payment history.
@@ -98,9 +100,16 @@ form or state-management library — forms/data fetching are hand-rolled with
   created/deleted. A product showcase pulls a configurable product grid
   (by category, best sellers, new arrivals, or on-sale) — this is how
   sections like "Premium Dates" or a future Watches/Chocolates showcase get
-  added with no code change. This is scoped to the homepage — it is **not**
-  a general CMS or page builder; `/about`, `/contact`, and
-  `/shipping-policy` remain hardcoded static pages.
+  added with no code change.
+- **Navigation & footer content management** — the header's top-level nav
+  links and the footer's link columns (`/admin/navigation`, `/admin/footer`)
+  are freely add/edit/delete/reorder-able, same pattern as hero slides; the
+  footer's social icons come from a `socialLinks` list on the same
+  `SiteSettings` singleton as the logo/announcement/contact fields
+  (`/admin/settings`). This and the homepage system above are **not** a
+  general CMS or page builder — `/about`, `/contact`, and
+  `/shipping-policy` remain hardcoded static pages, and there's no arbitrary
+  page creation.
 - SMTP email notifications (fire-and-forget, never block a request): order
   confirmations, staff welcome, leave status, task assignment, password
   reset, and salary/payment notices (paid or pending-reminder copy).
@@ -244,9 +253,11 @@ missing/malformed):
 - Storefront registration requires email verification for placing orders
   and posting reviews (`isEmailVerified`); staff and Google Sign-In accounts
   are exempt.
-- The homepage content system (hero slides + homepage sections) is scoped
-  to the homepage only — it is not a general CMS/page builder; other static
-  pages aren't admin-editable.
+- The homepage content system (hero slides + homepage sections), navigation
+  (header nav links), and footer (link columns + social links) are all
+  admin-editable, but this is not a general CMS/page builder — `/about`,
+  `/contact`, and `/shipping-policy`'s own copy still aren't admin-editable,
+  and there's no arbitrary page creation.
 - Google Sign-In is fully implemented but inactive on this machine — no
   `GOOGLE_CLIENT_ID` has been provisioned yet (see Environment variables).
 - No SMS gateway is configured anywhere, so there's no phone-OTP

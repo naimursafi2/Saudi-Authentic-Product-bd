@@ -18,6 +18,8 @@ import {
   Boxes,
   BarChart3,
   LayoutPanelTop,
+  Compass,
+  PanelBottom,
   Settings,
   Tag,
 } from "lucide-react";
@@ -48,6 +50,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/inventory", label: "Inventory", icon: Boxes },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
   { href: "/admin/homepage", label: "Homepage", icon: LayoutPanelTop, roles: ["admin", "super_admin"] },
+  { href: "/admin/navigation", label: "Navigation", icon: Compass, roles: ["admin", "super_admin"] },
+  { href: "/admin/footer", label: "Footer", icon: PanelBottom, roles: ["admin", "super_admin"] },
   { href: "/admin/settings", label: "Settings", icon: Settings, roles: ["admin", "super_admin"] },
 ];
 
