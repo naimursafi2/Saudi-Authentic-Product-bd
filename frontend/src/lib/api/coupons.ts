@@ -41,12 +41,17 @@ export interface CouponPayload {
   isActive?: boolean;
 }
 
+/** A discount above the auto-approve threshold comes back as a pending
+ * approval request instead of an immediately-created coupon — see
+ * ROLES_AND_PERMISSIONS_v2.md §4 and `/admin/approvals`. */
+export type CouponMutationResult = { coupon: ApiCoupon; pendingActionId?: undefined } | { coupon?: undefined; pendingActionId: string };
+
 export async function createCoupon(payload: CouponPayload) {
-  return api.post<{ coupon: ApiCoupon }>("/coupons", payload);
+  return api.post<CouponMutationResult>("/coupons", payload);
 }
 
 export async function updateCoupon(id: string, payload: Partial<CouponPayload>) {
-  return api.patch<{ coupon: ApiCoupon }>(`/coupons/${id}`, payload);
+  return api.patch<CouponMutationResult>(`/coupons/${id}`, payload);
 }
 
 export async function deleteCoupon(id: string) {

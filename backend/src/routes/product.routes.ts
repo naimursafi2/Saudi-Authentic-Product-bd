@@ -46,10 +46,14 @@ router.patch(
   validate({ params: mongoIdParamSchema, body: updateProductSchema }),
   productController.updateProduct
 );
+// `admin` deliberately excluded — per ROLES_AND_PERMISSIONS_v2.md §6, Admin
+// has no product-deletion access at all. `co_admin` can only request
+// deletion (routed through the approval gate in product.service.ts);
+// `super_admin` deletes directly.
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  authorize("co_admin", "super_admin"),
   validate({ params: mongoIdParamSchema }),
   productController.deleteProduct
 );

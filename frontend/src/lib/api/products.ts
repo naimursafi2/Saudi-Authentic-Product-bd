@@ -57,6 +57,8 @@ export async function updateProduct(id: string, formData: FormData) {
   return api.patchForm<{ product: ApiProduct }>(`/products/${id}`, formData);
 }
 
+/** `super_admin` deletes directly; `co_admin`'s request comes back as a
+ * pending approval instead (see ROLES_AND_PERMISSIONS_v2.md §6, `/admin/approvals`). */
 export async function deleteProduct(id: string) {
-  return api.delete<null>(`/products/${id}`);
+  return api.delete<{ pendingActionId?: string } | null>(`/products/${id}`);
 }

@@ -5,7 +5,14 @@
  * the storefront transitions from local fixtures to the real API.
  */
 
-export type Role = "customer" | "employee" | "co_admin" | "admin" | "super_admin";
+export type Role =
+  | "customer"
+  | "employee"
+  | "delivery_agent"
+  | "co_admin"
+  | "order_manager"
+  | "admin"
+  | "super_admin";
 
 export interface ApiEnvelope<T> {
   success: boolean;
@@ -124,6 +131,7 @@ export interface ApiHeroSlide {
 
 export type HomepageSectionType =
   | "hero"
+  | "trustStrip"
   | "featuredCategories"
   | "bestSellers"
   | "productStory"
@@ -133,6 +141,13 @@ export type HomepageSectionType =
 
 /** `productShowcase` sections only — how the product grid is resolved. */
 export type ProductShowcaseMode = "category" | "bestSellers" | "newArrivals" | "onSale";
+
+/** `trustStrip` sections only — one benefit/trust icon+label item. */
+export interface ApiTrustStripBlock {
+  icon: StaticPageBlockIcon;
+  label: string;
+  isVisible: boolean;
+}
 
 export interface ApiHomepageSection {
   _id: string;
@@ -148,6 +163,7 @@ export interface ApiHomepageSection {
   categorySlug?: string;
   productMode?: ProductShowcaseMode;
   limit?: number;
+  blocks?: ApiTrustStripBlock[];
   createdAt: string;
   updatedAt: string;
 }
@@ -255,7 +271,21 @@ export interface ApiReview {
   updatedAt: string;
 }
 
-export type OrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "processing"
+  | "packed"
+  | "ready_for_dispatch"
+  | "assigned_to_agent"
+  | "picked_up"
+  | "out_for_delivery"
+  | "otp_verified"
+  | "delivered"
+  | "delivery_failed"
+  | "cancelled"
+  | "returned"
+  | "refunded";
 export type DeliveryMethod = "standard" | "express";
 export type PaymentMethod = "cod" | "bkash" | "nagad";
 
@@ -294,7 +324,17 @@ export interface ApiOrder {
   discountBDT: number;
   totalBDT: number;
   status: OrderStatus;
-  statusHistory: { status: OrderStatus; at: string; note?: string }[];
+  statusHistory: {
+    status: OrderStatus;
+    previousStatus?: OrderStatus;
+    at: string;
+    note?: string;
+    changedBy?: string;
+    changedByRole?: Role;
+  }[];
+  assignedAgent?: string | { _id: string; name: string; email: string };
+  deliveryNotes?: string;
+  failureReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -317,4 +357,132 @@ export interface ApiCoupon {
   status: CouponStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+// -- Approval gate (pending_actions) & audit logging --
+
+export type PendingActionType =
+  | "coupon.create"
+  | "coupon.update"
+  | "product.delete"
+  | "refund.request"
+  | "refund.approve"
+  | "expense.confirm";
+export type PendingActionStatus = "pending" | "granted" | "denied";
+
+export interface ApiPendingAction {
+  _id: string;
+  actionType: PendingActionType;
+  payload: Record<string, unknown>;
+  requestedBy: string | { _id: string; name: string; email: string };
+  requestedByRole: Role;
+  status: PendingActionStatus;
+  note?: string;
+  reviewedBy?: string | { _id: string; name: string; email: string };
+  reviewedAt?: string;
+  reviewNote?: string;
+  resultResourceId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiAuditLog {
+  _id: string;
+  actor: string | { _id: string; name: string; email: string };
+  actorRole: Role;
+  action: string;
+  resource: string;
+  resourceId?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  note?: string;
+  createdAt: string;
+}
+
+export interface ApiApprovalSettings {
+  _id: string;
+  couponAutoApprovePercent: number;
+  couponSuperAdminOnlyAbovePercent: number;
+  refundAutoApproveThresholdBDT: number;
+  expenseApprovalThresholdBDT: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// -- Finance module --
+
+export interface ApiInvestment {
+  _id: string;
+  investorName: string;
+  amountBDT: number;
+  investedAt: string;
+  note?: string;
+  recordedBy: string | { _id: string; name: string; email: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExpenseCategory =
+  | "product_purchase"
+  | "packaging"
+  | "delivery"
+  | "shipping"
+  | "marketing"
+  | "advertising"
+  | "warehouse"
+  | "salaries"
+  | "software"
+  | "payment_fees"
+  | "refund"
+  | "other";
+export type ExpenseStatus = "pending" | "confirmed" | "rejected";
+
+export interface ApiExpense {
+  _id: string;
+  category: ExpenseCategory;
+  amountBDT: number;
+  incurredAt: string;
+  note?: string;
+  status: ExpenseStatus;
+  recordedBy: string | { _id: string; name: string; email: string };
+  recordedByRole: Role;
+  confirmedBy?: string | { _id: string; name: string; email: string };
+  confirmedAt?: string;
+  reviewNote?: string;
+  linkedRefund?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RefundReasonCategory = "damaged" | "wrong_item" | "not_as_described" | "changed_mind" | "other";
+export type RefundStatus = "pending_review" | "pending_approval" | "approved" | "rejected";
+
+export interface ApiRefund {
+  _id: string;
+  order: string | { _id: string; orderNumber: string; totalBDT: number };
+  customer: string | { _id: string; name: string; email: string };
+  reasonCategory: RefundReasonCategory;
+  requestedAmountBDT: number;
+  note?: string;
+  status: RefundStatus;
+  requestedBy: string | { _id: string; name: string; email: string };
+  requestedByRole: Role;
+  reviewedBy?: string | { _id: string; name: string; email: string };
+  reviewedAt?: string;
+  reviewNote?: string;
+  approvedBy?: string | { _id: string; name: string; email: string };
+  approvedAt?: string;
+  linkedExpense?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceSummary {
+  totalRevenueBDT: number;
+  totalOrders: number;
+  totalInvestmentBDT: number;
+  totalExpensesBDT: number;
+  netProfitBDT: number;
+  cashBalanceBDT: number;
+  expensesByCategory: Record<ExpenseCategory, number>;
 }

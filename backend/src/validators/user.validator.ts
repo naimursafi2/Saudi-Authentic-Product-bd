@@ -6,7 +6,7 @@ export const createStaffSchema = z.object({
   email: z.string().trim().email().toLowerCase(),
   password: z.string().min(8).max(128),
   phone: z.string().trim().min(6).max(20).optional(),
-  role: z.enum(["employee", "co_admin", "admin"]),
+  role: z.enum(["employee", "delivery_agent", "co_admin", "order_manager", "admin"]),
   staffMeta: z
     .object({
       employeeId: z.string().trim().min(1),

@@ -16,17 +16,32 @@ export const listCoupons = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const createCoupon = catchAsync(async (req: Request, res: Response) => {
-  const coupon = await couponService.createCoupon(req.body);
-  sendSuccess(res, 201, "Coupon created", { coupon });
+  const result = await couponService.createCoupon(req.body, { id: req.user!.id, role: req.user!.role });
+  if (result.kind === "pending") {
+    sendSuccess(res, 202, "This discount requires Super Admin approval — submitted for review", {
+      pendingActionId: result.pendingActionId,
+    });
+    return;
+  }
+  sendSuccess(res, 201, "Coupon created", { coupon: result.coupon });
 });
 
 export const updateCoupon = catchAsync(async (req: Request, res: Response) => {
-  const coupon = await couponService.updateCoupon(paramStr(req.params.id), req.body);
-  sendSuccess(res, 200, "Coupon updated", { coupon });
+  const result = await couponService.updateCoupon(paramStr(req.params.id), req.body, {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
+  if (result.kind === "pending") {
+    sendSuccess(res, 202, "This discount requires Super Admin approval — submitted for review", {
+      pendingActionId: result.pendingActionId,
+    });
+    return;
+  }
+  sendSuccess(res, 200, "Coupon updated", { coupon: result.coupon });
 });
 
 export const deleteCoupon = catchAsync(async (req: Request, res: Response) => {
-  await couponService.deleteCoupon(paramStr(req.params.id));
+  await couponService.deleteCoupon(paramStr(req.params.id), { id: req.user!.id, role: req.user!.role });
   sendSuccess(res, 200, "Coupon deleted");
 });
 

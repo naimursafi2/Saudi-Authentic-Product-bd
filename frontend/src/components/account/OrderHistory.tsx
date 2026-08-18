@@ -6,14 +6,24 @@ import { Package, Search } from "lucide-react";
 import { listMyOrders } from "@/lib/api/orders";
 import { formatBDT, cn } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/Button";
+import { OrderStatusTimeline } from "@/components/account/OrderStatusTimeline";
 import type { ApiOrder, OrderStatus } from "@/types/api";
 
 const STATUS_CLASSES: Record<OrderStatus, string> = {
   pending: "bg-cream-300 text-brown-600",
+  confirmed: "bg-cream-300 text-brown-600",
   processing: "bg-[#fcf8ee] text-[#735c00]",
-  shipped: "bg-[#e9f3ee] text-green-900",
+  packed: "bg-[#fcf8ee] text-[#735c00]",
+  ready_for_dispatch: "bg-[#fcf8ee] text-[#735c00]",
+  assigned_to_agent: "bg-[#e9f3ee] text-green-900",
+  picked_up: "bg-[#e9f3ee] text-green-900",
+  out_for_delivery: "bg-[#e9f3ee] text-green-900",
+  otp_verified: "bg-[#e9f3ee] text-green-900",
   delivered: "bg-green-900 text-white",
+  delivery_failed: "bg-[#fbeceb] text-[#8a4a3f]",
   cancelled: "bg-[#fbeceb] text-[#8a4a3f]",
+  returned: "bg-[#fbeceb] text-[#8a4a3f]",
+  refunded: "bg-[#fbeceb] text-[#8a4a3f]",
 };
 
 export function OrderHistory() {
@@ -68,7 +78,8 @@ export function OrderHistory() {
     );
   }
 
-  const pendingCount = orders.filter((o) => o.status !== "delivered" && o.status !== "cancelled").length;
+  const CLOSED_STATUSES: OrderStatus[] = ["delivered", "cancelled", "returned", "refunded"];
+  const pendingCount = orders.filter((o) => !CLOSED_STATUSES.includes(o.status)).length;
   const deliveredCount = orders.filter((o) => o.status === "delivered").length;
 
   return (
@@ -107,7 +118,7 @@ export function OrderHistory() {
                   STATUS_CLASSES[order.status]
                 )}
               >
-                {order.status}
+                {order.status.replace(/_/g, " ")}
               </span>
             </div>
 
@@ -121,6 +132,8 @@ export function OrderHistory() {
                 </li>
               ))}
             </ul>
+
+            <OrderStatusTimeline status={order.status} statusHistory={order.statusHistory} />
 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Link

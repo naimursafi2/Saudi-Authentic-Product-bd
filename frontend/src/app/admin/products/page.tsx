@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Plus, Pencil, Trash2, Package } from "lucide-react";
 import { listProducts, createProduct, updateProduct, deleteProduct } from "@/lib/api/products";
 import { ApiClientError } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -17,6 +18,7 @@ import type { ApiProduct } from "@/types/api";
 import type { Pagination } from "@/types/api";
 
 export default function AdminProductsPage() {
+  const { user } = useAuth();
   const { categories } = useCategories();
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -26,6 +28,13 @@ export default function AdminProductsPage() {
   const [editing, setEditing] = useState<ApiProduct | "new" | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
+
+  // Per ROLES_AND_PERMISSIONS_v2.md §6: only super_admin deletes directly,
+  // co_admin can only request deletion (approval-gated), admin has no
+  // product-deletion access at all.
+  const canDeleteDirectly = user?.role === "super_admin";
+  const canRequestDelete = user?.role === "co_admin";
 
   function load() {
     setIsLoading(true);
@@ -75,8 +84,15 @@ export default function AdminProductsPage() {
   }
 
   async function handleDelete(product: ApiProduct) {
-    if (!confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
-    await deleteProduct(product._id);
+    const confirmMessage = canRequestDelete
+      ? `Request deletion of "${product.name}"? This requires Super Admin approval.`
+      : `Delete "${product.name}"? This cannot be undone.`;
+    if (!confirm(confirmMessage)) return;
+
+    const { data } = await deleteProduct(product._id);
+    if (data?.pendingActionId) {
+      setPendingNotice(`Deletion of "${product.name}" was submitted for Super Admin approval — see Approvals.`);
+    }
     load();
   }
 
@@ -91,6 +107,12 @@ export default function AdminProductsPage() {
           </Button>
         }
       />
+
+      {pendingNotice && (
+        <div className="mb-4 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+          {pendingNotice}
+        </div>
+      )}
 
       {isLoading ? (
         <TableSkeleton />
@@ -142,13 +164,15 @@ export default function AdminProductsPage() {
                       >
                         <Pencil size={15} />
                       </button>
-                      <button
-                        aria-label="Delete"
-                        onClick={() => handleDelete(product)}
-                        className="text-brown-500 hover:text-[#8a4a3f]"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {(canDeleteDirectly || canRequestDelete) && (
+                        <button
+                          aria-label={canDeleteDirectly ? "Delete" : "Request deletion"}
+                          onClick={() => handleDelete(product)}
+                          className="text-brown-500 hover:text-[#8a4a3f]"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

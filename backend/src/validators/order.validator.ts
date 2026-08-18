@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ORDER_STATUSES } from "../constants/orderStatus";
 
 const orderItemInputSchema = z.object({
   productId: z.string().length(24),
@@ -26,14 +27,38 @@ export const createOrderSchema = z.object({
 });
 
 export const updateOrderStatusSchema = z.object({
-  status: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"]),
+  status: z.enum(ORDER_STATUSES),
   note: z.string().trim().max(300).optional(),
 });
 
 export const listOrdersQuerySchema = z.object({
-  status: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"]).optional(),
+  status: z.enum(ORDER_STATUSES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const listAssignedOrdersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const assignAgentSchema = z.object({
+  agentId: z.string().length(24),
+});
+
+export const deliveryStatusSchema = z.object({
+  status: z.enum(["picked_up", "out_for_delivery"]),
+  note: z.string().trim().max(300).optional(),
+});
+
+export const verifyOtpSchema = z.object({
+  otp: z.string().trim().length(6),
+  note: z.string().trim().max(300).optional(),
+});
+
+export const deliveryFailedSchema = z.object({
+  failureReason: z.string().trim().min(1).max(300),
+  note: z.string().trim().max(300).optional(),
 });
 
 export const trackOrderQuerySchema = z.object({

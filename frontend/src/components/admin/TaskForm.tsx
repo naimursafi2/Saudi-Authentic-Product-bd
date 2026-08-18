@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import type { ApiTask, TaskPriority } from "@/types/hr";
+import type { ApiTask, TaskPriority, TaskType } from "@/types/hr";
 import type { ApiUser } from "@/types/api";
 
 const fieldClasses =
@@ -10,10 +10,20 @@ const fieldClasses =
 const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["low", "medium", "high"];
+export const TASK_TYPE_OPTIONS: TaskType[] = [
+  "packing",
+  "product_counting",
+  "stock_checking",
+  "warehouse",
+  "customer_support",
+  "data_entry",
+  "product_preparation",
+];
 
 export interface TaskFormValues {
   title: string;
   description: string;
+  type: TaskType;
   assignedTo: string;
   dueDate: string;
   priority: TaskPriority;
@@ -21,11 +31,12 @@ export interface TaskFormValues {
 
 function fromTask(task?: ApiTask): TaskFormValues {
   if (!task) {
-    return { title: "", description: "", assignedTo: "", dueDate: "", priority: "medium" };
+    return { title: "", description: "", type: "packing", assignedTo: "", dueDate: "", priority: "medium" };
   }
   return {
     title: task.title,
     description: task.description ?? "",
+    type: task.type,
     assignedTo: typeof task.assignedTo === "string" ? task.assignedTo : task.assignedTo._id,
     dueDate: task.dueDate ? task.dueDate.slice(0, 10) : "",
     priority: task.priority,
@@ -75,6 +86,21 @@ export function TaskForm({
         />
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelClasses}>Task Type *</label>
+          <select
+            required
+            value={values.type}
+            onChange={(e) => update("type", e.target.value as TaskType)}
+            className={fieldClasses}
+          >
+            {TASK_TYPE_OPTIONS.map((t) => (
+              <option key={t} value={t}>
+                {t.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className={labelClasses}>Assignee *</label>
           <select

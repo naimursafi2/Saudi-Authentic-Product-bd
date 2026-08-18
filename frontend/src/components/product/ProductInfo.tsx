@@ -3,19 +3,22 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ShoppingCart, Truck, Zap } from "lucide-react";
+import { ChevronRight, Heart, ShoppingCart, Truck, Zap } from "lucide-react";
 import type { Product } from "@/types/product";
 import { formatBDT, cn } from "@/lib/utils";
 import { StarRating } from "@/components/ui/StarRating";
 import { QuantityInput } from "@/components/ui/QuantityInput";
 import { Button } from "@/components/ui/Button";
 import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
 
 export function ProductInfo({ product }: { product: Product }) {
   const [variantId, setVariantId] = useState(product.variants[0].id);
   const [quantity, setQuantity] = useState(1);
   const { addItem, closeDrawer } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const router = useRouter();
+  const wishlisted = isWishlisted(product.id);
 
   const variant = useMemo(
     () => product.variants.find((v) => v.id === variantId) ?? product.variants[0],
@@ -124,6 +127,17 @@ export function ProductInfo({ product }: { product: Product }) {
         >
           <Zap size={16} /> Buy Now
         </Button>
+        <button
+          type="button"
+          aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          onClick={() => toggleWishlist(product.id)}
+          className={cn(
+            "flex size-12 shrink-0 items-center justify-center self-center rounded border border-green-900/20 text-brown-500 transition-colors hover:border-[#8a4a3f]/40 hover:text-[#8a4a3f] sm:self-auto",
+            wishlisted && "border-[#8a4a3f]/40 text-[#8a4a3f]"
+          )}
+        >
+          <Heart size={18} className={wishlisted ? "fill-[#8a4a3f]" : ""} />
+        </button>
       </div>
 
       <p className="flex items-center gap-2 text-xs text-brown-500">

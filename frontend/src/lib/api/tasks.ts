@@ -1,9 +1,10 @@
 import { api } from "./client";
-import type { ApiTask, TaskPriority, TaskStatus } from "@/types/hr";
+import type { ApiTask, TaskPriority, TaskStatus, TaskType } from "@/types/hr";
 
 export async function createTask(payload: {
   title: string;
   description?: string;
+  type: TaskType;
   assignedTo: string;
   dueDate?: string;
   priority?: TaskPriority;
@@ -19,7 +20,9 @@ export async function updateTaskStatus(id: string, status: TaskStatus) {
   return api.patch<{ task: ApiTask }>(`/tasks/${id}/status`, { status });
 }
 
-export async function listTasks(params: { assignedTo?: string; status?: TaskStatus; page?: number; limit?: number } = {}) {
+export async function listTasks(
+  params: { assignedTo?: string; type?: TaskType; status?: TaskStatus; page?: number; limit?: number } = {}
+) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) search.set(key, String(value));
@@ -30,7 +33,14 @@ export async function listTasks(params: { assignedTo?: string; status?: TaskStat
 
 export async function updateTask(
   id: string,
-  payload: Partial<{ title: string; description: string; assignedTo: string; dueDate: string; priority: TaskPriority }>
+  payload: Partial<{
+    title: string;
+    description: string;
+    type: TaskType;
+    assignedTo: string;
+    dueDate: string;
+    priority: TaskPriority;
+  }>
 ) {
   return api.patch<{ task: ApiTask }>(`/tasks/${id}`, payload);
 }

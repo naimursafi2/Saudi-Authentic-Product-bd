@@ -14,7 +14,7 @@ export interface SalesSummaryFilter {
 }
 
 export async function getSalesSummary(filter: SalesSummaryFilter) {
-  const match: Record<string, unknown> = { status: { $ne: "cancelled" } };
+  const match: Record<string, unknown> = { status: { $nin: ["cancelled", "refunded"] } };
   if (filter.from || filter.to) {
     const range: Record<string, Date> = {};
     if (filter.from) range.$gte = filter.from;
@@ -75,7 +75,9 @@ export async function getAdminDashboard() {
       getTodaySummary(),
       UserModel.countDocuments({ role: "customer" }),
       ProductModel.countDocuments({ isActive: true }),
-      UserModel.countDocuments({ role: { $in: ["employee", "co_admin", "admin", "super_admin"] } }),
+      UserModel.countDocuments({
+        role: { $in: ["employee", "delivery_agent", "co_admin", "order_manager", "admin", "super_admin"] },
+      }),
     ]);
 
   return { sales, pendingLeaves, lowStockCount, attendanceToday, totalCustomers, totalProducts, totalStaff };

@@ -1,11 +1,23 @@
+import { Types } from "mongoose";
 import { ProductModel } from "../models/Product.model";
-import { OrderModel, type IOrder, type OrderStatus } from "../models/Order.model";
+import { UserModel } from "../models/User.model";
+import { OrderModel, type IOrder } from "../models/Order.model";
+import type { InventoryLogReason } from "../models/InventoryLog.model";
 import { ApiError } from "../utils/ApiError";
 import { computeShippingFee } from "../constants/shipping";
 import { recordStockChange } from "./inventory.service";
-import { sendOrderConfirmationEmail } from "./email.service";
+import { sendOrderConfirmationEmail, sendDeliveryOtpEmail } from "./email.service";
 import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
+import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
+import type { Role } from "../constants/roles";
 import type { CreateOrderInput } from "../validators/order.validator";
+
+export interface OrderActor {
+  id: string;
+  role: Role;
+}
+
+const OTP_TTL_MINUTES = 60;
 
 async function generateOrderNumber(): Promise<string> {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -17,6 +29,46 @@ async function generateOrderNumber(): Promise<string> {
     if (!existing) return candidate;
   }
   throw ApiError.internal("Could not generate a unique order number, please try again");
+}
+
+function generateOtp(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+/** Pushes a history entry, capturing the order's *current* status as `previousStatus`
+ * — call this before mutating `order.status` to the new value. */
+function pushStatusHistory(order: IOrder, status: OrderStatus, actor: OrderActor, note?: string) {
+  order.statusHistory.push({
+    status,
+    previousStatus: order.status,
+    at: new Date(),
+    note,
+    changedBy: new Types.ObjectId(actor.id),
+    changedByRole: actor.role,
+  });
+}
+
+/** Restocks every item on an order and writes an inventory audit-trail entry per variant. */
+async function restockOrderItems(order: IOrder, reason: InventoryLogReason) {
+  await Promise.all(
+    order.items.map(async (item) => {
+      const updated = await ProductModel.findOneAndUpdate(
+        { _id: item.product, "variants._id": item.variantId },
+        { $inc: { "variants.$.stock": item.quantity } },
+        { new: true }
+      );
+      const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
+      await recordStockChange({
+        productId: item.product.toString(),
+        variantId: item.variantId,
+        variantLabel: item.variantLabel,
+        delta: item.quantity,
+        balanceAfter: variant?.stock ?? 0,
+        reason,
+        note: `Order ${order.orderNumber} ${reason === "order_cancelled" ? "cancelled" : "returned"}`,
+      });
+    })
+  );
 }
 
 export async function createOrder(customerId: string, input: CreateOrderInput) {
@@ -81,7 +133,7 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
     discountBDT,
     totalBDT,
     status: "pending",
-    statusHistory: [{ status: "pending", at: new Date() }],
+    statusHistory: [{ status: "pending", at: new Date(), changedBy: customerId, changedByRole: "customer" }],
   });
 
   if (appliedCoupon) {
@@ -122,7 +174,7 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
 }
 
 export async function getOrderById(id: string) {
-  const order = await OrderModel.findById(id).populate("customer", "name email");
+  const order = await OrderModel.findById(id).select("+otpCode").populate("customer", "name email");
   if (!order) throw ApiError.notFound("Order not found");
   return order;
 }
@@ -136,7 +188,7 @@ export async function trackOrder(orderNumber: string, email: string) {
   const order = await OrderModel.findOne({
     orderNumber: orderNumber.trim().toUpperCase(),
     "shippingAddress.email": email.trim().toLowerCase(),
-  });
+  }).select("+otpCode");
   if (!order) {
     throw ApiError.notFound("No order found for that Order ID and email. Please check and try again.");
   }
@@ -164,6 +216,7 @@ export async function listOrders(filter: { status?: OrderStatus; page: number; l
   const [orders, total] = await Promise.all([
     OrderModel.find(query)
       .populate("customer", "name email")
+      .populate("assignedAgent", "name email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(filter.limit),
@@ -181,42 +234,182 @@ export async function listOrders(filter: { status?: OrderStatus; page: number; l
   };
 }
 
-export async function updateOrderStatus(id: string, status: OrderStatus, note?: string) {
+export async function listAssignedOrders(agentId: string, page: number, limit: number) {
+  const filter = { assignedAgent: agentId };
+  const skip = (page - 1) * limit;
+  const [orders, total] = await Promise.all([
+    OrderModel.find(filter)
+      .populate("customer", "name email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    OrderModel.countDocuments(filter),
+  ]);
+  return {
+    orders,
+    pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+  };
+}
+
+/** Generic status-transition endpoint — covers every hop except the
+ * delivery-agent-only statuses in `DELIVERY_ONLY_STATUSES`, which must go
+ * through their own dedicated functions below. */
+export async function updateOrderStatus(id: string, status: OrderStatus, actor: OrderActor, note?: string) {
   const order = await OrderModel.findById(id);
   if (!order) throw ApiError.notFound("Order not found");
 
-  if (order.status === "delivered" || order.status === "cancelled") {
+  if (DELIVERY_ONLY_STATUSES.includes(status)) {
+    throw ApiError.badRequest(`Status "${status}" can only be set through its dedicated delivery endpoint`);
+  }
+
+  const allowedNext = ORDER_TRANSITIONS[order.status];
+  if (!allowedNext || allowedNext.length === 0) {
     throw ApiError.badRequest(`Order is already ${order.status} and cannot be updated`);
   }
+  if (!allowedNext.includes(status)) {
+    throw ApiError.badRequest(`Invalid status transition from ${order.status} to ${status}`);
+  }
 
-  // Restock items if the order is being cancelled.
+  const isOverride = actor.role === "admin" || actor.role === "super_admin";
+  if (!isOverride) {
+    const allowedActors = GENERIC_STATUS_ACTOR_ROLES[order.status] ?? [];
+    if (!allowedActors.includes(actor.role)) {
+      throw ApiError.forbidden("You are not permitted to change this order's status");
+    }
+  }
+
   if (status === "cancelled") {
-    await Promise.all(
-      order.items.map(async (item) => {
-        const updated = await ProductModel.findOneAndUpdate(
-          { _id: item.product, "variants._id": item.variantId },
-          { $inc: { "variants.$.stock": item.quantity } },
-          { new: true }
-        );
-        const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
-        await recordStockChange({
-          productId: item.product.toString(),
-          variantId: item.variantId,
-          variantLabel: item.variantLabel,
-          delta: item.quantity,
-          balanceAfter: variant?.stock ?? 0,
-          reason: "order_cancelled",
-          note: `Order ${order.orderNumber} cancelled`,
-        });
-      })
-    );
+    await restockOrderItems(order, "order_cancelled");
+  } else if (status === "returned") {
+    await restockOrderItems(order, "order_returned");
   }
 
+  pushStatusHistory(order, status, actor, note);
   order.status = status;
-  if (status === "delivered" && order.paymentMethod === "cod") {
-    order.isPaid = true;
+  await order.save();
+  return order;
+}
+
+export async function assignDeliveryAgent(orderId: string, agentId: string, actor: OrderActor) {
+  const order = await OrderModel.findById(orderId);
+  if (!order) throw ApiError.notFound("Order not found");
+  if (order.status !== "ready_for_dispatch" && order.status !== "delivery_failed") {
+    throw ApiError.badRequest(`Cannot assign a delivery agent while the order is "${order.status}"`);
   }
-  order.statusHistory.push({ status, at: new Date(), note });
+
+  const agent = await UserModel.findById(agentId);
+  if (!agent || agent.role !== "delivery_agent") {
+    throw ApiError.badRequest("Selected user is not a delivery agent");
+  }
+  if (!agent.isActive) {
+    throw ApiError.badRequest("Selected delivery agent is not active");
+  }
+
+  order.assignedAgent = agent._id;
+  pushStatusHistory(order, "assigned_to_agent", actor);
+  order.status = "assigned_to_agent";
+  await order.save();
+  return order;
+}
+
+async function loadOrderAssignedTo(orderId: string, agentId: string) {
+  const order = await OrderModel.findById(orderId).select("+otpCode");
+  if (!order) throw ApiError.notFound("Order not found");
+  if (!order.assignedAgent || order.assignedAgent.toString() !== agentId) {
+    throw ApiError.forbidden("This order is not assigned to you");
+  }
+  return order;
+}
+
+export async function updateDeliveryStatus(
+  orderId: string,
+  agentId: string,
+  status: "picked_up" | "out_for_delivery",
+  note?: string
+) {
+  const order = await loadOrderAssignedTo(orderId, agentId);
+  const actor: OrderActor = { id: agentId, role: "delivery_agent" };
+
+  if (status === "picked_up") {
+    if (order.status !== "assigned_to_agent") {
+      throw ApiError.badRequest(`Cannot mark picked up from "${order.status}"`);
+    }
+    pushStatusHistory(order, "picked_up", actor, note);
+    order.status = "picked_up";
+    await order.save();
+    return order;
+  }
+
+  // out_for_delivery — also reachable again while already in this status, to
+  // regenerate/resend the OTP without creating a duplicate history entry.
+  if (order.status !== "picked_up" && order.status !== "out_for_delivery") {
+    throw ApiError.badRequest(`Cannot mark out for delivery from "${order.status}"`);
+  }
+  const otp = generateOtp();
+  order.otpCode = otp;
+  order.otpGeneratedAt = new Date();
+  order.otpExpiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+  if (order.status !== "out_for_delivery") {
+    pushStatusHistory(order, "out_for_delivery", actor, note);
+    order.status = "out_for_delivery";
+  }
+  await order.save();
+
+  void sendDeliveryOtpEmail(
+    order.shippingAddress.email,
+    `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`,
+    { orderNumber: order.orderNumber, otp }
+  );
+
+  return order;
+}
+
+export async function verifyDeliveryOtp(orderId: string, agentId: string, otp: string, note?: string) {
+  const order = await loadOrderAssignedTo(orderId, agentId);
+  const actor: OrderActor = { id: agentId, role: "delivery_agent" };
+
+  if (order.status !== "out_for_delivery") {
+    throw ApiError.badRequest(`Cannot verify OTP from "${order.status}"`);
+  }
+  if (!order.otpCode || !order.otpExpiresAt || order.otpExpiresAt.getTime() < Date.now()) {
+    throw ApiError.badRequest("OTP expired — ask the customer for a fresh code, or resend it.");
+  }
+  if (otp.trim() !== order.otpCode) {
+    throw ApiError.badRequest("Incorrect OTP");
+  }
+
+  pushStatusHistory(order, "otp_verified", actor, note);
+  order.status = "otp_verified";
+  order.otpVerifiedAt = new Date();
+
+  pushStatusHistory(order, "delivered", actor, note);
+  order.status = "delivered";
+  if (order.paymentMethod === "cod") order.isPaid = true;
+
+  order.otpCode = undefined;
+  order.otpGeneratedAt = undefined;
+  order.otpExpiresAt = undefined;
+
+  await order.save();
+  return order;
+}
+
+export async function markDeliveryFailed(orderId: string, agentId: string, failureReason: string, note?: string) {
+  const order = await loadOrderAssignedTo(orderId, agentId);
+  const actor: OrderActor = { id: agentId, role: "delivery_agent" };
+
+  if (order.status !== "out_for_delivery") {
+    throw ApiError.badRequest(`Cannot mark delivery failed from "${order.status}"`);
+  }
+
+  order.failureReason = failureReason;
+  if (note) order.deliveryNotes = note;
+  pushStatusHistory(order, "delivery_failed", actor, note);
+  order.status = "delivery_failed";
+  order.otpCode = undefined;
+  order.otpGeneratedAt = undefined;
+  order.otpExpiresAt = undefined;
+
   await order.save();
   return order;
 }

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { EmployeeForm, type EmployeeFormValues } from "@/components/admin/EmployeeForm";
 import type { ApiUser } from "@/types/api";
 
-const STAFF_ROLES = ["employee", "co_admin", "admin", "super_admin"] as const;
+const STAFF_ROLES = ["employee", "delivery_agent", "co_admin", "order_manager", "admin", "super_admin"] as const;
 
 export default function AdminEmployeesPage() {
   const { user } = useAuth();

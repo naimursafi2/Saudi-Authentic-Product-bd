@@ -5,11 +5,14 @@ import { ReviewModel } from "../models/Review.model";
 import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import { slugify } from "../utils/slugify";
+import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
+import { recordAuditLog } from "./auditLog.service";
 import type {
   CreateProductInput,
   ListProductsQuery,
   UpdateProductInput,
 } from "../validators/product.validator";
+import type { Role } from "../constants/roles";
 
 const SORT_MAP: Record<ListProductsQuery["sort"], Record<string, 1 | -1>> = {
   featured: { isFeatured: -1, createdAt: -1 },
@@ -159,12 +162,57 @@ export async function updateProduct(
   return product;
 }
 
-export async function deleteProduct(id: string) {
+async function removeProduct(id: string): Promise<{ id: string; name: string }> {
   const product = await ProductModel.findById(id);
   if (!product) throw ApiError.notFound("Product not found");
+  const summary = { id: product._id.toString(), name: product.name };
   await Promise.all(product.images.map((img) => deleteCloudinaryImage(img.publicId)));
   await product.deleteOne();
+  return summary;
 }
+
+export type DeleteProductResult = { kind: "deleted" } | { kind: "pending"; pendingActionId: string };
+
+/**
+ * Per ROLES_AND_PERMISSIONS_v2.md §6: `super_admin` deletes directly;
+ * `co_admin` may only request deletion (routed through the approval gate);
+ * `admin` has no product-deletion access at all — enforced at the route
+ * level (see product.routes.ts) as well as here for defense in depth.
+ */
+export async function deleteProduct(id: string, actor: { id: string; role: Role }): Promise<DeleteProductResult> {
+  if (actor.role === "co_admin") {
+    const product = await ProductModel.findById(id);
+    if (!product) throw ApiError.notFound("Product not found");
+    const action = await createPendingAction("product.delete", { productId: id, productName: product.name }, actor);
+    return { kind: "pending", pendingActionId: action._id.toString() };
+  }
+
+  const summary = await removeProduct(id);
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "product.delete",
+    resource: "Product",
+    resourceId: summary.id,
+    oldValue: summary,
+  });
+  return { kind: "deleted" };
+}
+
+registerPendingActionHandler("product.delete", async (payload, reviewer) => {
+  const productId = payload.productId as string;
+  const summary = await removeProduct(productId);
+  await recordAuditLog({
+    actor: reviewer.id,
+    actorRole: reviewer.role,
+    action: "product.delete",
+    resource: "Product",
+    resourceId: summary.id,
+    oldValue: summary,
+    note: "Applied via approval grant",
+  });
+  return { resource: "Product", resourceId: summary.id };
+});
 
 async function uploadProductImages(files: Express.Multer.File[]) {
   const uploaded = await Promise.all(

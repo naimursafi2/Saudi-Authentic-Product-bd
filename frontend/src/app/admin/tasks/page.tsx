@@ -63,6 +63,7 @@ export default function AdminTasksPage() {
         await createTask({
           title: values.title,
           description: values.description || undefined,
+          type: values.type,
           assignedTo: values.assignedTo,
           dueDate: values.dueDate || undefined,
           priority: values.priority,
@@ -71,6 +72,7 @@ export default function AdminTasksPage() {
         await updateTask(editing._id, {
           title: values.title,
           description: values.description,
+          type: values.type,
           assignedTo: values.assignedTo,
           dueDate: values.dueDate || undefined,
           priority: values.priority,
@@ -115,6 +117,7 @@ export default function AdminTasksPage() {
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
                 <th className="px-4 py-3">Title</th>
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Assignee</th>
                 <th className="px-4 py-3">Priority</th>
                 <th className="px-4 py-3">Due Date</th>
@@ -126,6 +129,7 @@ export default function AdminTasksPage() {
               {tasks.map((task) => (
                 <tr key={task._id} className="border-b border-brown-600/10 last:border-none">
                   <td className="px-4 py-3 font-medium text-green-950">{task.title}</td>
+                  <td className="px-4 py-3 capitalize text-brown-600">{task.type.replace(/_/g, " ")}</td>
                   <td className="px-4 py-3 text-brown-600">{personName(task.assignedTo)}</td>
                   <td className="px-4 py-3 capitalize text-brown-600">{task.priority}</td>
                   <td className="px-4 py-3 text-brown-600">

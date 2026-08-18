@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import type { ApiCategory, ApiHomepageSection, HomepageSectionType, ProductShowcaseMode } from "@/types/api";
+import { STATIC_PAGE_BLOCK_ICONS } from "@/lib/staticPageBlockIcons";
+import type {
+  ApiCategory,
+  ApiHomepageSection,
+  ApiTrustStripBlock,
+  HomepageSectionType,
+  ProductShowcaseMode,
+} from "@/types/api";
 
 export interface HomepageSectionFormValues {
   title: string;
@@ -15,6 +23,7 @@ export interface HomepageSectionFormValues {
   categorySlug: string;
   productMode: ProductShowcaseMode;
   limit: number;
+  blocks: ApiTrustStripBlock[];
 }
 
 const fieldClasses =
@@ -32,15 +41,51 @@ const PRODUCT_MODE_LABELS: Record<ProductShowcaseMode, string> = {
  * showing e.g. a CTA field on "Best Sellers", which never renders one. */
 const FIELD_VISIBILITY: Record<
   HomepageSectionType,
-  { subtitle: boolean; description: boolean; image: boolean; cta: boolean; productShowcase: boolean }
+  {
+    subtitle: boolean;
+    description: boolean;
+    image: boolean;
+    cta: boolean;
+    productShowcase: boolean;
+    blocks: boolean;
+  }
 > = {
-  hero: { subtitle: true, description: false, image: false, cta: false, productShowcase: false },
-  featuredCategories: { subtitle: false, description: false, image: false, cta: false, productShowcase: false },
-  bestSellers: { subtitle: false, description: false, image: false, cta: false, productShowcase: false },
-  productStory: { subtitle: false, description: true, image: true, cta: false, productShowcase: false },
-  customerReviews: { subtitle: false, description: false, image: false, cta: false, productShowcase: false },
-  promoBanner: { subtitle: false, description: true, image: true, cta: true, productShowcase: false },
-  productShowcase: { subtitle: true, description: false, image: false, cta: true, productShowcase: true },
+  hero: { subtitle: true, description: false, image: false, cta: false, productShowcase: false, blocks: false },
+  trustStrip: { subtitle: false, description: false, image: false, cta: false, productShowcase: false, blocks: true },
+  featuredCategories: {
+    subtitle: false,
+    description: false,
+    image: false,
+    cta: false,
+    productShowcase: false,
+    blocks: false,
+  },
+  bestSellers: {
+    subtitle: false,
+    description: false,
+    image: false,
+    cta: false,
+    productShowcase: false,
+    blocks: false,
+  },
+  productStory: { subtitle: false, description: true, image: true, cta: false, productShowcase: false, blocks: false },
+  customerReviews: {
+    subtitle: false,
+    description: false,
+    image: false,
+    cta: false,
+    productShowcase: false,
+    blocks: false,
+  },
+  promoBanner: { subtitle: false, description: true, image: true, cta: true, productShowcase: false, blocks: false },
+  productShowcase: {
+    subtitle: true,
+    description: false,
+    image: false,
+    cta: true,
+    productShowcase: true,
+    blocks: false,
+  },
 };
 
 export function fromHomepageSection(section?: ApiHomepageSection): HomepageSectionFormValues {
@@ -56,6 +101,7 @@ export function fromHomepageSection(section?: ApiHomepageSection): HomepageSecti
       categorySlug: "",
       productMode: "category",
       limit: 8,
+      blocks: [],
     };
   }
   return {
@@ -69,6 +115,7 @@ export function fromHomepageSection(section?: ApiHomepageSection): HomepageSecti
     categorySlug: section.categorySlug ?? "",
     productMode: section.productMode ?? "category",
     limit: section.limit ?? 8,
+    blocks: section.blocks ?? [],
   };
 }
 
@@ -95,6 +142,24 @@ export function HomepageSectionForm({
 
   function update<K extends keyof HomepageSectionFormValues>(key: K, value: HomepageSectionFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateBlock(index: number, patch: Partial<ApiTrustStripBlock>) {
+    setValues((prev) => ({
+      ...prev,
+      blocks: prev.blocks.map((block, i) => (i === index ? { ...block, ...patch } : block)),
+    }));
+  }
+
+  function addBlock() {
+    setValues((prev) => ({
+      ...prev,
+      blocks: [...prev.blocks, { icon: "BadgeCheck", label: "", isVisible: true }],
+    }));
+  }
+
+  function removeBlock(index: number) {
+    setValues((prev) => ({ ...prev, blocks: prev.blocks.filter((_, i) => i !== index) }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -176,6 +241,58 @@ export function HomepageSectionForm({
               />
             </div>
           </>
+        )}
+        {fields.blocks && (
+          <div className="sm:col-span-2">
+            <div className="mb-2 flex items-center justify-between">
+              <label className={labelClasses}>Benefit Items</label>
+              <Button type="button" variant="outline" size="sm" onClick={addBlock}>
+                <Plus size={12} /> Add
+              </Button>
+            </div>
+            <div className="flex flex-col gap-3">
+              {values.blocks.map((block, i) => (
+                <div key={i} className="flex items-center gap-2 rounded border border-brown-600/10 bg-cream-50 p-3">
+                  <select
+                    value={block.icon}
+                    onChange={(e) => updateBlock(i, { icon: e.target.value as ApiTrustStripBlock["icon"] })}
+                    className={fieldClasses}
+                  >
+                    {STATIC_PAGE_BLOCK_ICONS.map((icon) => (
+                      <option key={icon} value={icon}>
+                        {icon}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    required
+                    value={block.label}
+                    onChange={(e) => updateBlock(i, { label: e.target.value })}
+                    placeholder="Label"
+                    className={fieldClasses}
+                  />
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs text-brown-600">
+                    <input
+                      type="checkbox"
+                      checked={block.isVisible}
+                      onChange={(e) => updateBlock(i, { isVisible: e.target.checked })}
+                      className="accent-green-900"
+                    />
+                    Visible
+                  </label>
+                  <button
+                    type="button"
+                    aria-label="Remove"
+                    onClick={() => removeBlock(i)}
+                    className="shrink-0 text-brown-500 hover:text-[#8a4a3f]"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+              {values.blocks.length === 0 && <p className="text-xs text-brown-500">None yet — add one above.</p>}
+            </div>
+          </div>
         )}
         {fields.cta && (
           <>

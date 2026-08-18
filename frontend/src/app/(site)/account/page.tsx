@@ -61,6 +61,11 @@ export default function AccountPage() {
                 Employee Portal
               </ButtonLink>
             )}
+            {user.role === "delivery_agent" && (
+              <ButtonLink href="/delivery" variant="outline" size="sm">
+                Delivery Portal
+              </ButtonLink>
+            )}
             <Button variant="ghost" size="sm" onClick={logout}>
               <LogOut size={14} /> Sign Out
             </Button>

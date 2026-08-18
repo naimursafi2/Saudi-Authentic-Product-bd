@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { booleanish } from "./common.validator";
 import { PRODUCT_SHOWCASE_MODES } from "../models/HomepageSection.model";
+import { STATIC_PAGE_BLOCK_ICONS } from "../models/StaticPage.model";
+
+const trustStripBlockSchema = z.object({
+  icon: z.enum(STATIC_PAGE_BLOCK_ICONS),
+  label: z.string().trim().min(1).max(60),
+  isVisible: booleanish.optional().default(true),
+});
 
 /** Only `promoBanner` and `productShowcase` sections are freely creatable —
  * the five fixed types are lazily seeded and only ever updated (see
@@ -40,6 +47,7 @@ export const updateHomepageSectionSchema = z.object({
   categorySlug: z.string().trim().optional(),
   productMode: z.enum(PRODUCT_SHOWCASE_MODES).optional(),
   limit: z.coerce.number().int().min(1).max(12).optional(),
+  blocks: z.array(trustStripBlockSchema).optional(),
 });
 
 export const listHomepageSectionsQuerySchema = z.object({

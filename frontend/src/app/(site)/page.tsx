@@ -1,4 +1,5 @@
 import { HeroBanner } from "@/components/home/HeroBanner";
+import { TrustStrip } from "@/components/home/TrustStrip";
 import { FeaturedCategories } from "@/components/home/FeaturedCategories";
 import { BestSellers } from "@/components/home/BestSellers";
 import { ProductStory } from "@/components/home/ProductStory";
@@ -21,6 +22,8 @@ export default async function HomePage() {
         switch (section.type) {
           case "hero":
             return <HeroBanner key={section._id} section={section} />;
+          case "trustStrip":
+            return <TrustStrip key={section._id} section={section} />;
           case "featuredCategories":
             return <FeaturedCategories key={section._id} section={section} />;
           case "bestSellers":

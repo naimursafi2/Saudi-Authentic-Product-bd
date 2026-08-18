@@ -2,7 +2,8 @@
 
 An e-commerce platform (Saudi/Madinah dates, gift boxes, and future categories)
 with a customer storefront plus internal Admin / Co-Admin / Super Admin /
-Employee portals. Currency is displayed in **BDT** and shipping uses
+Order Manager / Employee / Delivery Agent portals. Currency is displayed in
+**BDT** and shipping uses
 **Bangladesh districts** — this is intentional (the storefront targets
 Bangladesh), not a bug. Two independent apps, no shared code between them:
 
@@ -36,14 +37,14 @@ Register every new router in `routes/index.ts`.
 | Base path | Purpose | Role restrictions (beyond `authenticate`) |
 | --- | --- | --- |
 | `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification. Login/register/google/refresh/forgot/reset/verify-email/resend-verification are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password` require auth; `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
-| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin`; all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed |
+| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin`; all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
-| `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status; `GET /:id` ownership-checked in controller | list-all/status-update: `admin`,`super_admin`,`co_admin`(+`employee` for list); `/track` is public (mounted before the router's `authenticate`) |
+| `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
 | `/reviews` | public: recent reviews, reviews by product; customer creates one review per product; staff lists all/deletes | list-all/delete: `admin`,`super_admin`,`co_admin` |
 | `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
 | `/leaves` | employee creates/lists own/cancels; staff lists all + approves/rejects | review/list-all: `admin`,`super_admin`,`co_admin` |
-| `/tasks` | employee lists own (`/mine`) + updates own status; staff creates/lists/updates/deletes | create/list/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
+| `/tasks` | employee lists own (`/mine`) + updates own status; staff creates/lists (filterable by `type`)/updates/deletes; every task has a required `type` (packing/product_counting/stock_checking/warehouse/customer_support/data_entry/product_preparation) for task-based access categorization | create/list/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/performance-reviews` | employee lists own reviews; staff creates/lists | create/list: `admin`,`super_admin`,`co_admin` |
 | `/salary-payments` | employee lists own payment history; admin creates payment/lists all/updates status/sends notify email | `admin`,`super_admin` **only** — co_admin is deliberately excluded |
 | `/inventory` | low-stock list, logs, manual stock adjustment | `admin`,`super_admin`,`co_admin` for everything (router-level) |
@@ -51,10 +52,17 @@ Register every new router in `routes/index.ts`.
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | `admin`,`super_admin` only |
 | `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
 | `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement/contact/footer | `admin`,`super_admin` only |
-| `/coupons` | `POST /validate` (authenticated customer, preview a discount); admin CRUD (`GET /`, `POST /`, `PATCH /:id`, `DELETE /:id`) | `admin`,`super_admin` only for CRUD — deliberately excludes `co_admin`, matching the `/site-settings`/`/homepage-sections`/`/salary-payments` restriction pattern; `/validate` just requires `authenticate` |
+| `/coupons` | `POST /validate` (authenticated customer, preview a discount); `GET /`, `POST /`, `PATCH /:id` (create/update — may be gated through the approval system, see "Approval-gate system" below); `DELETE /:id` | list/create/update: `co_admin`,`admin`,`super_admin`; delete: `admin`,`super_admin` only; `/validate` just requires `authenticate` |
 | `/nav-links` | public list (sorted, visible-only by default); admin create/update/delete of the storefront header's top-level nav links | create/update/delete: `admin`,`super_admin` only |
 | `/footer-columns` | public list (sorted, visible-only by default); admin create/update/delete of the storefront footer's link columns (each with an embedded, wholesale-replaced `links[]`) | create/update/delete: `admin`,`super_admin` only |
 | `/static-pages` | public list + `GET /:type` (lazily-seeded singleton per fixed page type); admin `PATCH /:type` (hero image upload) | update: `admin`,`super_admin` only |
+| `/audit-logs` | `GET /` — read-only, general-purpose sensitive-action audit trail | `co_admin`,`order_manager`,`employee`,`delivery_agent`,`admin`,`super_admin` may call it, but every non-admin/super_admin viewer is force-scoped server-side to their own actions only — see "Approval-gate system & audit logging" below |
+| `/pending-actions` | `GET /`, `PATCH /:id/grant`, `PATCH /:id/deny` — the Grant-Based Approval Workflow queue | `super_admin` only |
+| `/approval-settings` | `GET /`, `PATCH /` (singleton) — the Super-Admin-editable numeric thresholds the approval gate checks against | `super_admin` only |
+| `/investments` | `GET /` (list), `POST /` (create) — append-only partner investment ledger, no update/delete route | list: `admin`,`super_admin`; create: `super_admin` only |
+| `/expenses` | `GET /`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject` | list/create: `co_admin`,`admin`,`super_admin` (co_admin scoped to own submissions); confirm/reject: `admin`,`super_admin` only |
+| `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `order_manager`,`co_admin`,`admin`,`super_admin`; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
+| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot | `admin`,`super_admin` only — `co_admin` finance visibility is off by default per the spec |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
 `validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
@@ -80,10 +88,19 @@ the update filter so two concurrent orders can't both redeem the last use of
 a limited coupon. Frontend: `CheckoutClient.tsx` has a coupon-code field in
 the order summary (`lib/api/coupons.ts#validateCoupon`) showing a live
 discount preview and updated total before submit; `/admin/coupons` is full
-CRUD (list/create/edit/delete) restricted the same way as
-salary/homepage/settings — a `co_admin` who navigates there directly sees
-the same friendly "Access restricted" state (see "Co-admin admin-portal UX"
-below), not a broken page, since the backend route already 403s them.
+CRUD (list/create/edit/delete), reachable by `co_admin`/`admin`/`super_admin`
+(deletion stays `admin`/`super_admin` only) — **large-discount creates/
+updates are gated through the approval system** (see "Approval-gate system &
+audit logging" below): `co_admin`/`admin` create/update a **percentage**
+coupon directly only at/below `ApprovalSettings.couponAutoApprovePercent`
+(default 10%); above that and up to `couponSuperAdminOnlyAbovePercent`
+(default 25%) the request is submitted for Super Admin grant instead of
+taking effect immediately (`POST`/`PATCH` respond `202` with a
+`pendingActionId`, not the coupon); above the Super-Admin-only threshold
+`co_admin`/`admin` are rejected outright (`403`). `super_admin` always
+creates/updates directly, any discount size. Fixed-amount (non-percentage)
+coupons aren't gated by this — the spec only defines thresholds for
+percentage discounts.
 
 **Public order tracking** (`GET /orders/track?orderNumber=...&email=...`,
 `order.service.ts#trackOrder`): unauthenticated customers look up an order by
@@ -94,9 +111,216 @@ to pull up someone else's order. Powers the storefront's `/track-order` page
 (`frontend/src/app/(site)/track-order/page.tsx`); it is the only unauthenticated
 route under `/orders` (mounted before the router's `router.use(authenticate)`).
 
+**Order status pipeline & delivery** (`constants/orderStatus.ts`,
+`services/order.service.ts`, `models/Order.model.ts`): `Order.status` is a
+14-value pipeline — `pending → confirmed → processing → packed →
+ready_for_dispatch → assigned_to_agent → picked_up → out_for_delivery →
+otp_verified → delivered`, plus the branch statuses `delivery_failed`,
+`cancelled`, `returned`, `refunded`. `ORDER_TRANSITIONS` is an explicit
+adjacency map (which statuses a given status may move to) enforced in
+`order.service.ts#updateOrderStatus` — a request naming an invalid next
+status 400s regardless of role. `DELIVERY_ONLY_STATUSES` (everything from
+`assigned_to_agent` through `delivered`, plus `delivery_failed`) can only be
+reached through their own dedicated endpoints below, never the generic
+`PATCH /orders/:id/status`. Non-`admin`/`super_admin` actors are further
+gated by `GENERIC_STATUS_ACTOR_ROLES` (keyed by the order's *current*
+status) — `order_manager`/`co_admin` drive every pre-dispatch step plus
+cancelling/returning; `returned → refunded` is **`admin`/`super_admin`
+only** (refunds are financial, deliberately excluded from Order Manager's
+responsibilities, mirroring the Salary-payments restriction pattern).
+`admin`/`super_admin` always bypass the actor-role check but never the
+adjacency table. Every `statusHistory` entry now records `changedBy`,
+`changedByRole`, and `previousStatus` alongside `status`/`at`/`note`,
+satisfying a full per-change audit trail.
+
+Dedicated endpoints beyond the generic one: `PATCH /orders/:id/assign-agent`
+(`order_manager`/`co_admin`/`admin`/`super_admin`; validates the target user
+has role `delivery_agent` and is active, and that the order is currently
+`ready_for_dispatch` or `delivery_failed`) sets `Order.assignedAgent` and
+transitions to `assigned_to_agent`. `PATCH /orders/:id/delivery-status`
+(`delivery_agent` only, self-scoped to `order.assignedAgent === req.user.id`)
+handles `picked_up` and `out_for_delivery`; transitioning into
+`out_for_delivery` generates a random 6-digit `otpCode` (`select: false` on
+the schema, plus a `toJSON` transform that always strips it — defense in
+depth), a 60-minute `otpExpiresAt`, and fire-and-forget emails it to the
+customer via a new `sendDeliveryOtpEmail` (`email.service.ts`); repeating
+the call while already `out_for_delivery` regenerates/resends the code
+("Resend code" in the delivery UI) without duplicating the history entry.
+Since this project has no SMS gateway, the OTP is also surfaced directly to
+the order owner — `order.controller.ts`'s `getOrder`/`trackOrder` add a
+top-level `otp` field to the response, but **only** when the requester is
+confirmed to be the order's owner and `status === "out_for_delivery"`; staff
+and the delivery agent's own endpoints never select or expose `otpCode` at
+all, so the agent must obtain the code verbally from the customer (real-world
+courier UX). `POST /orders/:id/verify-otp` checks the code, then records
+both `otp_verified` and `delivered` in the same call, clears the OTP fields,
+and — for `cod` orders — sets `isPaid = true`. `PATCH /orders/:id/delivery-failed`
+requires a `failureReason` and records `delivery_failed`. `restockOrderItems()`
+(shared helper) restocks and writes an `InventoryLog` entry (`reason:
+"order_cancelled"` or the new `"order_returned"`) for both `cancelled` and
+`returned` transitions.
+
+Frontend: the enum/transition table is mirrored in
+`frontend/src/lib/orderStatus.ts` (`ORDER_TRANSITIONS`,
+`nextGenericStatuses()` — filters out delivery-only targets so
+`/admin/orders`'s status dropdown only ever offers valid, non-agent moves).
+`/admin/orders`'s order-detail modal shows an "Assign Delivery Agent" picker
+(populated via the existing `listUsers({role: "delivery_agent"})` API, no
+new endpoint needed) when the order is `ready_for_dispatch`/`delivery_failed`.
+The shared `frontend/src/components/account/OrderStatusTimeline.tsx`
+component (a 10-step visual stepper, with `cancelled`/`delivery_failed`/
+`returned`/`refunded` rendered as a banner instead of a step) is used by
+both the public `/track-order` page and the customer account portal's Order
+History — one timeline implementation, not two. `/track-order` also
+displays the owner-visible `otp` field when present, with a "share this
+code with the delivery agent" prompt.
+
+**Delivery Portal** (`frontend/src/app/delivery`, `delivery_agent` only,
+modeled directly on the Employee Portal's shell): `/delivery` (dashboard —
+counts of assigned orders by status), `/delivery/orders` (assigned-orders
+list + a detail modal with Picked-Up/Out-for-Delivery buttons, an OTP-entry
+field, and a Delivery-Failed form), `/delivery/profile` (avatar/address,
+reusing the same `ProfileSection`/`AddressBook` components as everywhere
+else). `RoleGuard allowed={["delivery_agent"]}` in `app/delivery/layout.tsx`
+is the only role that can reach it; it is structurally excluded from
+`/admin` (not in `ADMIN_PORTAL_ROLES`), not just nav-hidden.
+
+**Order Manager** reuses the existing `/admin` shell rather than a separate
+portal — `ADMIN_PORTAL_ROLES` includes `order_manager`, and
+`AdminNav.tsx`'s nav items are explicitly `roles`-restricted so an Order
+Manager only ever sees Dashboard, Orders, Refunds, and Audit Logs (their own
+actions) — the real boundary is still backend `authorize()`, not nav
+visibility.
+
+#### Approval-gate system & audit logging (Grant-Based Approval Workflow)
+
+Implements ROLES_AND_PERMISSIONS_v2.md §14/§19–20 — a single reusable
+`pending_actions` table (not a bespoke approval flow per feature) plus a
+general-purpose audit log covering sensitive actions that aren't already
+covered by `InventoryLog` (stock deltas) or `Order.statusHistory` (order
+status changes).
+
+**`PendingAction`** (`models/PendingAction.model.ts`,
+`services/pendingAction.service.ts`): `actionType` (one of
+`coupon.create`/`coupon.update`/`product.delete`/`refund.request`/
+`refund.approve`/`expense.confirm`), `payload` (the intended change, applied
+**verbatim** on grant — a Super Admin can never silently edit what was
+requested, only approve or deny it), `requestedBy`/`requestedByRole`,
+`status` (`pending`/`granted`/`denied`), `reviewedBy`/`reviewedAt`/
+`reviewNote`. Creating one (`createPendingAction()`) fires a fire-and-forget
+email (`sendPendingActionRequestedEmail`) to every active `super_admin`;
+granting/denying (`grantPendingAction()`/`denyPendingAction()`, both
+`super_admin`-only via `PATCH /pending-actions/:id/grant`|`/deny`) emails the
+original requester the outcome. Each gated action type registers its own
+"apply" function via `registerPendingActionHandler(actionType, handler)` at
+the bottom of its owning service (`coupon.service.ts`, `product.service.ts`,
+`refund.service.ts`, `expense.service.ts`) rather than
+`pendingAction.service.ts` importing those services directly — the services
+import *this* module to request a grant, so the reverse import would be
+circular; since every route file (and therefore every service) is imported
+by `routes/index.ts` at server startup, all handlers are registered before
+any request is handled. `/admin/approvals` (super_admin only) is the review
+queue (grant/deny with an optional note) plus a form for the thresholds
+below.
+
+**`ApprovalSettings`** (`models/ApprovalSettings.model.ts`,
+`services/approvalSettings.service.ts`): singleton (same lazily-created
+pattern as `SiteSettings`), `super_admin`-only `GET`/`PATCH
+/approval-settings` — `couponAutoApprovePercent` (default 10),
+`couponSuperAdminOnlyAbovePercent` (default 25), `refundAutoApproveThresholdBDT`
+(default 5000), `expenseApprovalThresholdBDT` (default 2000). These numbers
+are checked live by `coupon.service.ts`, `expense.service.ts`, and
+`refund.service.ts` — never hardcoded, per the spec's explicit requirement.
+
+**Product deletion** (`product.service.ts#deleteProduct`): `super_admin`
+deletes directly; `co_admin` may only *request* deletion — `DELETE
+/products/:id` responds `202` with a `pendingActionId` instead of deleting,
+and the product is only removed once a Super Admin grants it;
+**`admin` has no product-deletion access at all** (excluded from the
+route's `authorize()` entirely) — a deliberate reduction from Admin's
+otherwise-broad product control, per the spec. `/admin/products`'s delete
+button reflects this: hidden for `admin`, a "Request deletion" action for
+`co_admin`, a normal "Delete" action for `super_admin`.
+
+**`AuditLog`** (`models/AuditLog.model.ts`, `services/auditLog.service.ts`):
+append-only, `{actor, actorRole, action, resource, resourceId?, oldValue?,
+newValue?, note?, createdAt}` — `action`/`resource` are free-form
+dot-namespaced strings (e.g. `"coupon.create"`, `"user.role.update"`) rather
+than a closed enum. `recordAuditLog()` never throws (catches internally,
+logs to console on failure) so a logging failure never breaks the action it
+describes — called from `user.service.ts` (role/status changes),
+`coupon.service.ts`, `product.service.ts`, `approvalSettings.service.ts`,
+`pendingAction.service.ts` (every grant/deny), and the Finance services
+below. `GET /audit-logs` is read-only for every role; `super_admin`/`admin`
+see everything, every other viewer (`co_admin`, `order_manager`, `employee`,
+`delivery_agent`) is **force-scoped server-side** to their own actions only,
+regardless of any filter they pass — `/admin/audit-logs` is the read-only
+list view (reachable by every admin-portal role plus `order_manager`).
+
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum, `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]`, optional `couponCode`/`discountBDT`), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task`, `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below).
+
+#### Finance module (Investment, Expense, Refund, Profit/Loss)
+
+Implements ROLES_AND_PERMISSIONS_v2.md §6/§10/§11. "Revenue" is
+**deliberately not re-derived as its own model** — `report.service.ts#getSalesSummary`
+already computes `totalRevenueBDT` from live `Order` data, and
+`finance.service.ts#getFinanceSummary` (`GET /finance/summary`,
+`admin`/`super_admin` only — `co_admin` finance visibility is off by default)
+calls into it directly rather than duplicating the aggregation.
+"Profit/Loss" is likewise computed, not stored: `netProfitBDT =
+totalRevenueBDT - totalExpensesBDT` (confirmed expenses only), plus a
+`cashBalanceBDT = totalInvestmentBDT + totalRevenueBDT - totalExpensesBDT`.
+`/admin/finance` renders this as a dashboard with an expenses-by-category
+breakdown.
+
+- **`Investment`** (`models/Investment.model.ts`,
+  `services/investment.service.ts`) — the Partner Investment Ledger:
+  `investorName`, `amountBDT`, `investedAt`, `note`, `recordedBy`. **Append-only
+  — there is deliberately no update/delete route**; a correction is a new
+  entry, never an edit, per the spec. `super_admin` creates
+  (`/admin/investments`); `admin` can view the list but not add.
+- **`Expense`** (`models/Expense.model.ts`, `services/expense.service.ts`) —
+  `category` (one of `product_purchase`/`packaging`/`delivery`/`shipping`/
+  `marketing`/`advertising`/`warehouse`/`salaries`/`software`/
+  `payment_fees`/`refund`/`other`), `amountBDT`, `incurredAt`, `status`
+  (`pending`/`confirmed`/`rejected`). `admin`/`super_admin` entries are
+  auto-confirmed; `co_admin` entries always start `pending` and need
+  `PATCH /expenses/:id/confirm`|`/reject` from an `admin`/`super_admin` —
+  and if the amount exceeds `ApprovalSettings.expenseApprovalThresholdBDT`,
+  a `pending_action` (`expense.confirm`) is *also* created so only a
+  `super_admin` grant (not a direct `admin` confirm) can confirm it — the
+  direct-confirm endpoint itself enforces this (`confirmExpense()` 403s an
+  `admin` attempting to confirm an over-threshold expense outside the grant
+  flow). Confirmed expenses are immutable — no edit/delete route exists once
+  `status: "confirmed"`. `/admin/expenses`.
+- **`Refund`** (`models/Refund.model.ts`, `services/refund.service.ts`) —
+  the Refund & Return Workflow: `reasonCategory`
+  (`damaged`/`wrong_item`/`not_as_described`/`changed_mind`/`other`),
+  `requestedAmountBDT`, `status`
+  (`pending_review`→`pending_approval`→`approved`/`rejected`). A refund can
+  only be requested on an order whose `Order.status` is already `"returned"`
+  (reusing the existing order pipeline's `returned` state, see "Order status
+  pipeline & delivery" above) — `POST /refunds` (customer on their own
+  order, or `order_manager`/`co_admin`/`admin`/`super_admin` on any order;
+  **a `co_admin`'s request always requires a Super Admin grant** — routed
+  through `pending_actions` as `refund.request` before the `Refund` document
+  even exists, per the spec, regardless of amount). `PATCH
+  /refunds/:id/review` (`order_manager`/`admin`/`super_admin`) marks it
+  `pending_approval` (or `rejected`). `PATCH /refunds/:id/approve`
+  (`admin`/`super_admin`): `super_admin` approves any amount directly;
+  `admin` approves directly only at/below
+  `ApprovalSettings.refundAutoApproveThresholdBDT`, otherwise the attempt is
+  routed through `pending_actions` (`refund.approve`) instead of applying.
+  Approval transitions the linked `Order.status` to `"refunded"` (via the
+  existing `order.service.ts#updateOrderStatus`, reusing its transition
+  validation) and **auto-logs a confirmed `Expense`** (category `"refund"`,
+  linked via `linkedExpense`/`linkedRefund`) — exactly as the spec requires.
+  `/admin/refunds` (staff-only UI for now — there is no self-service
+  customer-facing "request a refund" page yet, even though the backend
+  already accepts a `customer`-initiated request; that's a real gap, not a
+  design choice, see Known limitations).
 
 #### Homepage content management (not a general CMS)
 
@@ -110,12 +334,19 @@ not a page builder:
   (`HeroCarousel.tsx`, dots + arrows, pause-on-hover); a single slide (or
   none — falling back to the `hero` section's text/default photo) renders
   as a static banner with no controls.
-- **Homepage sections** (`HomepageSection`): a **fixed enum** of seven
-  types — `hero`, `featuredCategories`, `bestSellers`, `productStory`,
-  `customerReviews`, `promoBanner`, `productShowcase`. The first five are
-  singleton documents (unique index on `type`), lazily seeded from
-  `HOMEPAGE_SECTION_DEFAULTS`, editable (title/subtitle/description/image/
-  visibility/sort order) but **not creatable or deletable**. `promoBanner`
+- **Homepage sections** (`HomepageSection`): a **fixed enum** of eight
+  types — `hero`, `trustStrip`, `featuredCategories`, `bestSellers`,
+  `productStory`, `customerReviews`, `promoBanner`, `productShowcase`. The
+  first six are singleton documents (unique index on `type`), lazily seeded
+  from `HOMEPAGE_SECTION_DEFAULTS`, editable (title/subtitle/description/
+  image/visibility/sort order) but **not creatable or deletable**.
+  `trustStrip` is the homepage's benefit/trust icon row (e.g. "100%
+  Authentic", "Fast Delivery") — its own reorderable/toggleable section
+  (previously hardcoded inside the hero banner) with a `blocks[]` array of
+  `{icon, label, isVisible}`, `icon` drawn from the same allow-listed
+  lucide-icon set `StaticPage`'s value-highlight blocks use
+  (`STATIC_PAGE_BLOCK_ICONS`), edited via the same add/remove/reorder block
+  editor pattern as `StaticPageForm.tsx`. `promoBanner`
   and `productShowcase` are unlimited/freely creatable and deletable.
   `promoBanner` is for ad-hoc promotional banners (image/description/CTA).
   `productShowcase` renders a configurable product grid — `productMode` is
@@ -219,11 +450,16 @@ Core utilities (reuse, don't reinvent):
 - `paramStr(req.params.x)` — narrows Express's `string | string[]` param type.
 
 **Auth**: httpOnly cookies `accessToken` / `refreshToken` (see `utils/cookies.ts`,
-`utils/jwt.ts`). Roles: `customer | employee | co_admin | admin | super_admin`
-(`constants/roles.ts`). No DB permission matrix — every route hand-lists
-allowed roles via `authorize(...)`, matching existing convention. Convention:
-co_admin can run day-to-day HR (attendance/leave/tasks/performance) but never
-touches salary, staff role/status, or deletes — those are admin/super_admin only.
+`utils/jwt.ts`). Roles: `customer | employee | delivery_agent | co_admin |
+order_manager | admin | super_admin` (`constants/roles.ts`). No DB permission
+matrix — every route hand-lists allowed roles via `authorize(...)`, matching
+existing convention. Convention: co_admin can run day-to-day HR (attendance/
+leave/tasks/performance) but never touches salary, staff role/status, or
+deletes — those are admin/super_admin only. `order_manager` gets Admin Portal
+access scoped to Orders only (verify/dispatch/assign — see "Order status
+pipeline & delivery" below); `delivery_agent` never reaches `/admin` at all
+— it's excluded from `ADMIN_PORTAL_ROLES` and gets its own minimal Delivery
+Portal (`/delivery`) instead, self-scoped to its own assigned orders.
 
 **Registration** (`auth.validator.ts#registerSchema`, `auth.service.ts#registerCustomer`):
 `name`, `email` (unique), `password`+`confirmPassword` (must match; password
@@ -277,8 +513,9 @@ states.
 
 **Forgot / reset password** (`auth.service.ts#forgotPassword`/`resetPassword`,
 `utils/jwt.ts#signPasswordResetToken`) works identically for **every role**
-(customer, employee, co_admin, admin, super_admin) — it's a single flow keyed
-by email against the shared `User` model, not a per-role system. `POST
+(customer, employee, delivery_agent, co_admin, order_manager, admin,
+super_admin) — it's a single flow keyed by email against the shared `User`
+model, not a per-role system. `POST
 /auth/forgot-password` always responds success without revealing whether the
 email exists, and (best-effort, fire-and-forget) emails a link
 `{CLIENT_ORIGIN}/account/reset-password?token=...` carrying a JWT signed with
@@ -288,7 +525,7 @@ strength/match rules as registration) and verifies the token's `purpose` and
 `tokenVersion`; on success it bumps the user's `tokenVersion`, which both
 sets the new password **and** invalidates the token (and every other active
 session) so it cannot be replayed. Same "Forgot password?" link and reset
-page serve all five roles — there's no separate admin/employee login screen
+page serve all seven roles — there's no separate admin/employee login screen
 (see `/account` below), so no extra wiring was needed for staff roles.
 
 **Google Sign-In** (`config/google.ts`, `POST /auth/google`): verifies the ID
@@ -313,6 +550,7 @@ added.
 `deleteCloudinaryImage()` is best-effort and swallows errors.
 
 **Email**: `services/email.service.ts` exports `sendPasswordResetEmail`,
+`sendDeliveryOtpEmail`,
 `sendStaffWelcomeEmail`, `sendOrderConfirmationEmail`, `sendLeaveStatusEmail`,
 `sendTaskAssignedEmail`, `sendSalaryPaymentEmail` — all HTML via a shared
 `layout()`/`button()` helper, routed through `safeSend()` (catches/logs,
@@ -337,18 +575,37 @@ new middleware that needs to modify `req.query`.
 
 **Testing**: `backend/src/tests/*.test.ts` — 10 unit-style spec files
 (`apiError`, `app`, `booleanish`, `errorMiddleware`, `jwt`, `params`, `rbac`,
-`shipping`, `slugify`, `validateMiddleware`), plus `backend/src/tests/
-integration/*.integration.test.ts` — real HTTP-through-Mongoose integration
-specs (`auth`, `catalog`, `order`) run against an actual in-memory MongoDB
-via `mongodb-memory-server` (`tests/integration/setup.ts` starts/stops it
-and wipes collections between tests; `tests/integration/helpers.ts` creates
-a DB-backed user and signs a bearer token for it, bypassing `authLimiter` so
-RBAC-focused tests aren't rate-limited). They exercise `createApp()` with
-`supertest` end-to-end: register/login/`me`/logout, category+product RBAC
-and creation, and order creation/stock-decrement/tracking/ownership. Both
-suites run together via `npm test` (Jest + ts-jest, `backend/jest.config.js`,
-`tsconfig.jest.json` since the main `tsconfig.json` excludes `src/tests/**/*`
-from the build).
+`shipping`, `slugify`, `validateMiddleware`; `rbac.test.ts` includes cases
+locking in the `order_manager`/`delivery_agent` role strings), plus
+`backend/src/tests/integration/*.integration.test.ts` — real
+HTTP-through-Mongoose integration specs (`auth`, `catalog`, `order`,
+`orderStatus`, `task`, `coupon`, `approvalGate`, `finance`) run against an
+actual in-memory MongoDB via `mongodb-memory-server`
+(`tests/integration/setup.ts` starts/stops it and wipes collections between
+tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
+bearer token for it, bypassing `authLimiter` so RBAC-focused tests aren't
+rate-limited). They exercise `createApp()` with `supertest` end-to-end:
+register/login/`me`/logout, category+product RBAC and creation, order
+creation/stock-decrement/tracking/ownership, `orderStatus.integration.test.ts`
+(full pending→delivered pipeline walk with actor/role history assertions,
+invalid-transition/terminal-status rejection, admin's
+actor-gate-bypass-but-not-adjacency-table override, `order_manager`/
+`delivery_agent` RBAC against unrelated resources, delivery-agent
+self-scoping between two different agents, and the OTP flow's owner-only/
+staff-hidden visibility), `task.integration.test.ts` (required `type` field,
+`type` query filtering), `coupon.integration.test.ts` (discount-size gating
+— auto-approve/pending/forbidden thresholds for `co_admin`, plus a
+super_admin grant materializing the original payload),
+`approvalGate.integration.test.ts` (product-deletion gating across
+`super_admin`/`co_admin`/`admin`, grant/deny, audit-log recording and
+per-role visibility scoping, threshold-settings edit), and
+`finance.integration.test.ts` (investment RBAC, co_admin expense submission
++ threshold-gated confirmation, and a full refund walk from request through
+Order-Manager review to Admin approval — including the above-threshold
+grant path — asserting the order transitions to `"refunded"` and a linked
+`Expense` is auto-logged). All suites run together via `npm test` (Jest +
+ts-jest, `backend/jest.config.js`, `tsconfig.jest.json` since the main
+`tsconfig.json` excludes `src/tests/**/*` from the build).
 
 ### Frontend (`frontend/src`)
 
@@ -357,10 +614,11 @@ app/(site)/...      Customer storefront (App Router route group)
 app/checkout/...     Checkout flow — a TOP-LEVEL route (NOT inside (site)),
                       with its own layout.tsx, so it does not share the
                       storefront header/footer chrome
-app/admin/...        Admin / Co-Admin / Super Admin portal (role-guarded)
+app/admin/...        Admin / Co-Admin / Super Admin / Order Manager portal (role-guarded)
 app/employee/...     Employee portal (role-guarded)
+app/delivery/...     Delivery Agent portal (role-guarded, self-scoped to own assigned orders)
 components/ui/       Shared primitives: Button, ProductCard, SectionHeading, ProductVisual, etc.
-components/<domain>/ Feature components (checkout/, product/, shop/, admin/, employee/, home/, account/)
+components/<domain>/ Feature components (checkout/, product/, shop/, admin/, employee/, delivery/, home/, account/)
 context/              AuthContext, CartContext, WishlistContext (React context, "use client")
 lib/api/              One file per backend resource (products.ts, orders.ts, attendance.ts, ...),
                       all built on lib/api/client.ts's `api.get/post/patch/delete/postForm/patchForm`
@@ -390,8 +648,9 @@ their own "All Orders"/"View More" shortcuts) or the existing `OrderHistory`
 the same `ProductCard` grid as the standalone `/wishlist` page. Sidebar items
 are deliberately scoped to features the API actually has — no
 promo-code/payment-method/support-ticket nav items were added since no
-backend exists for them. Staff roles see a redirect card to `/admin` or
-`/employee` instead of the dashboard; when signed out, renders `AuthForms` —
+backend exists for them. Staff roles see a redirect card to `/admin`,
+`/employee`, or `/delivery` (whichever portal matches their role) instead of
+the dashboard; when signed out, renders `AuthForms` —
 the single Sign In / Register / Forgot Password form shared by **every**
 role, see "Registration" and "Forgot / reset password" above), `/account/reset-password` (Set a New
 Password — Confirm Password field + live strength meter, see above),
@@ -417,47 +676,95 @@ nothing when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is unset).
 
 #### Admin portal (`app/admin`) — fully built, not stubbed
 
-Guarded as a group by `RoleGuard allowed={["co_admin","admin","super_admin"]}`
-in `app/admin/layout.tsx`. Every page below does real CRUD against the live
+Guarded as a group by `RoleGuard
+allowed={["co_admin","order_manager","admin","super_admin"]}` in
+`app/admin/layout.tsx`. Every page below does real CRUD against the live
 API (loading/empty/error states via `EmptyState`/`TableSkeleton`/`ErrorState`,
 modal forms via `Modal.tsx`, `PageHeader`, `StatusBadge`,
 `AdminPagination`) — none are placeholders:
 
 `/admin` (dashboard: revenue/orders/customers/active-products/low-stock/
-pending-leaves stat cards, today's attendance, top products), `/admin/products`,
-`/admin/categories`, `/admin/orders`, `/admin/coupons` (nav-hidden from
-co_admin), `/admin/customers`, `/admin/reviews`,
+pending-leaves stat cards, today's attendance, top products), `/admin/products`
+(delete button is role-aware — hidden for `admin`, "Request deletion" for
+`co_admin`, "Delete" for `super_admin`, see "Approval-gate system" above),
+`/admin/categories`, `/admin/orders` (includes an "Assign Delivery Agent"
+picker on orders that are `ready_for_dispatch`/`delivery_failed` — see
+"Order status pipeline & delivery" above), `/admin/refunds` (Order Manager
+review + Admin/Super Admin approval — see "Finance module" above),
+`/admin/coupons` (reachable by `co_admin` now too — large-discount
+create/update requests may come back as a pending-approval notice instead
+of an immediate save), `/admin/customers`, `/admin/reviews`,
 `/admin/employees`, `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
-`/admin/inventory`, `/admin/reports`, `/admin/homepage` (hero slides +
-homepage sections — nav-hidden from co_admin), `/admin/navigation` (header
-nav links — nav-hidden from co_admin), `/admin/footer` (footer link columns
-— nav-hidden from co_admin), `/admin/pages` (About/Contact/Shipping Policy
-body copy — nav-hidden from co_admin), `/admin/settings` (site settings,
-including social links — nav-hidden from co_admin).
+`/admin/inventory`, `/admin/reports`, `/admin/finance` (revenue/expense/
+investment/profit-loss summary, nav-hidden from co_admin),
+`/admin/investments` (nav-hidden from co_admin), `/admin/expenses`
+(reachable by co_admin — scoped to their own submissions), `/admin/approvals`
+(Grant-Based Approval Workflow queue + threshold settings, `super_admin`
+only), `/admin/audit-logs` (reachable by every admin-portal role plus
+`order_manager` — scoped server-side to own actions for everyone except
+admin/super_admin), `/admin/homepage` (hero slides + homepage sections —
+nav-hidden from co_admin), `/admin/navigation` (header nav links —
+nav-hidden from co_admin), `/admin/footer` (footer link columns — nav-hidden
+from co_admin), `/admin/pages` (About/Contact/Shipping Policy body copy —
+nav-hidden from co_admin), `/admin/settings` (site settings, including
+social links — nav-hidden from co_admin). `order_manager`'s nav
+(`AdminNav.tsx`) is explicitly restricted to `Dashboard`, `Orders`,
+`Refunds`, and `Audit Logs` — every other item declares an explicit `roles`
+list that excludes it — so an Order Manager reaches the same `/admin` shell
+as everyone else but sees a much smaller nav; the real boundary is still
+backend `authorize()`.
 
 **Co-admin admin-portal UX**: the layout's `RoleGuard` (`app/admin/layout.tsx`)
-accepts the whole `["co_admin","admin","super_admin"]` union — it's a role
-gate, not a per-page one — so a co_admin who navigates directly to
-`/admin/salary`, `/admin/coupons`, `/admin/homepage`, `/admin/navigation`,
-`/admin/footer`, `/admin/pages`, or `/admin/settings` still reaches the page shell
-(`AdminNav.tsx` only hides the link, it doesn't block the route). Each of
-those pages handles this itself with a
-page-level check — `const isRestricted = user?.role === "co_admin"` — that
-renders a friendly `EmptyState` ("Access restricted... available to Admin
-and Super Admin only") instead of attempting to load data, rather than
-letting the page render its normal shell and have every API call inside it
-403. This is UX polish on top of the backend's real authorization boundary
-(those routes already reject co_admin server-side) — not a substitute for
-it, and not a security fix, since the API was never reachable by co_admin
-in the first place.
+accepts the whole `["co_admin","order_manager","admin","super_admin"]` union
+— it's a role gate, not a per-page one — so a co_admin who navigates
+directly to `/admin/salary`, `/admin/finance`, `/admin/investments`,
+`/admin/homepage`, `/admin/navigation`, `/admin/footer`, `/admin/pages`, or
+`/admin/settings` still reaches the page shell (`AdminNav.tsx` only hides
+the link, it doesn't block the route). Each of those pages handles this
+itself with a page-level check — `const isRestricted = user?.role ===
+"co_admin"` — that renders a friendly `EmptyState` ("Access restricted...
+available to Admin and Super Admin only") instead of attempting to load
+data, rather than letting the page render its normal shell and have every
+API call inside it 403. This is UX polish on top of the backend's real
+authorization boundary (those routes already reject co_admin server-side)
+— not a substitute for it, and not a security fix, since the API was never
+reachable by co_admin in the first place. **`/admin/coupons` is no longer on
+this restricted list** — co_admin has real, working (if discount-size-gated)
+access to it now, unlike the other pages here which remain fully blocked.
+`/admin/approvals` follows the same page-level-guard pattern but with a
+narrower audience: its check is `user?.role !== "super_admin"` (not just
+`=== "co_admin"`), since the backing routes (`/pending-actions`,
+`/approval-settings`) are `super_admin`-only — an `admin` who navigates
+there directly sees the same "Access restricted... Super Admin only" state
+as a co_admin would, correctly reflecting that Admin has no role in the
+Grant-Based Approval Workflow's review step.
 
 #### Employee portal (`app/employee`) — fully built, not stubbed
 
 Guarded by `RoleGuard allowed={["employee"]}` in `app/employee/layout.tsx`:
 `/employee` (dashboard), `/employee/attendance` (check-in/out + history),
-`/employee/tasks`, `/employee/leave`, `/employee/performance`,
-`/employee/salary`.
+`/employee/tasks` (a `type` filter dropdown plus a type badge on each task,
+alongside the existing priority badge/status dropdown), `/employee/leave`,
+`/employee/performance`, `/employee/salary`, `/employee/profile` (avatar +
+address — the `ProfileSection`/`AddressBook` components were already
+generic/backend-supported for every role, this page just adds the missing
+nav entry + route for staff).
+
+#### Delivery portal (`app/delivery`) — fully built, not stubbed
+
+Guarded by `RoleGuard allowed={["delivery_agent"]}` in
+`app/delivery/layout.tsx`, built directly from the Employee portal's shell
+pattern (same sidebar/mobile-drawer structure, `DeliveryNav.tsx` mirrors
+`EmployeeNav.tsx`): `/delivery` (dashboard — assigned-order counts by
+status), `/delivery/orders` (assigned-orders list + a detail modal with
+Picked-Up/Out-for-Delivery actions, an OTP-entry field with a "Resend code"
+link, and a Delivery-Failed form requiring a `failureReason`),
+`/delivery/profile` (avatar + address, same as Employee's). See "Order
+status pipeline & delivery" above for the full backend-driven workflow this
+portal exposes. `delivery_agent` is not in `ADMIN_PORTAL_ROLES` and cannot
+reach `/admin` — this is a structural guarantee (the role guard rejects it),
+not just a hidden nav link.
 
 **Data flow convention**: never fetch raw API shapes directly in a component.
 Call the relevant `lib/api/*.ts` function, then map through `lib/mappers.ts`
@@ -467,12 +774,13 @@ shapes.
 
 **Auth**: `AuthContext` hydrates from `GET /auth/me` on mount (cookie-based,
 `credentials: "include"` on every request — set in `lib/api/client.ts`).
-`status` is `"loading" | "authenticated" | "unauthenticated"`. Admin/Employee
-routes are guarded **client-side only** via `components/admin/RoleGuard.tsx`
-(checks `useAuth()`, shows a loading placeholder, then redirects to
-`/account` if unauthenticated or the role doesn't match) — **there is no
-`frontend/src/middleware.ts`**; the guard is UX-only (avoids a flash of admin
-UI), and the API enforces the real authorization server-side.
+`status` is `"loading" | "authenticated" | "unauthenticated"`. Admin/
+Employee/Delivery routes are guarded **client-side only** via
+`components/admin/RoleGuard.tsx` (checks `useAuth()`, shows a loading
+placeholder, then redirects to `/account` if unauthenticated or the role
+doesn't match) — **there is no `frontend/src/middleware.ts`**; the guard is
+UX-only (avoids a flash of admin UI), and the API enforces the real
+authorization server-side.
 
 **Silent access-token refresh** (`lib/api/client.ts`): the shared `request()`
 helper behind every `api.get/post/patch/delete/postForm/patchForm` call
@@ -620,6 +928,23 @@ need it.
 - Don't call the homepage hero-slide/homepage-section system a general
   "CMS" or imply arbitrary pages/blocks are admin-editable — see "Homepage
   content management" above for exactly what it covers.
+- `PendingAction`/`ApprovalSettings` are a workflow layered **on top of**
+  `authorize()` role gating for a specific, spec-defined list of high-risk
+  actions — they are not a replacement DB-backed permission system, and the
+  "don't add a DB-backed permission system" rule above still applies to
+  everything else. To gate a new action type: add it to
+  `PENDING_ACTION_TYPES` (`models/PendingAction.model.ts`), register an
+  apply-handler via `registerPendingActionHandler()` at the bottom of the
+  owning service (never have `pendingAction.service.ts` import that service
+  directly — see "Approval-gate system & audit logging"), and call
+  `createPendingAction()` at the point where the gate should trigger. Any
+  new Super-Admin-editable numeric threshold belongs on `ApprovalSettings`,
+  never hardcoded.
+- Call `recordAuditLog()` (`services/auditLog.service.ts`) for any new
+  sensitive action outside what `InventoryLog`/`Order.statusHistory` already
+  cover (role/status changes, financial approvals, settings changes,
+  create/update/delete on anything an owner shouldn't be able to silently
+  undo) — it never throws, so it's always safe to call inline.
 
 ## Security
 
@@ -640,21 +965,46 @@ need it.
 ## Known limitations (verified, not exhaustive)
 
 - **Test coverage is basic, not comprehensive** — the backend has unit specs
-  plus a small set of integration tests (auth, catalog, order) against an
-  in-memory MongoDB, and the frontend has Vitest/RTL coverage for a handful
-  of pure-logic modules, one component, and `CartContext` (see Testing in
-  both Architecture sections above). Most routes/pages/components still have
-  no automated test; UI/visual changes still need manual browser
-  verification, and no Playwright/e2e browser testing exists.
+  plus a small set of integration tests (auth, catalog, order, orderStatus,
+  task) against an in-memory MongoDB, and the frontend has Vitest/RTL
+  coverage for a handful of pure-logic modules, one component, and
+  `CartContext` (see Testing in both Architecture sections above). Most
+  routes/pages/components still have no automated test; UI/visual changes
+  still need manual browser verification, and no Playwright/e2e browser
+  testing exists.
 - **No payment gateway integration** — `paymentMethod` (`cod`/`bkash`/
   `nagad`) is stored on the order but there is no `config/payment.ts`, no
   webhook/callback route, and no signature verification; `Order.isPaid` only
-  ever flips to `true` for a `cod` order marked `delivered`
-  (`order.service.ts#updateOrderStatus`) — a `bkash`/`nagad` order is never
-  actually charged or marked paid by anything in this codebase, and the
+  ever flips to `true` for a `cod` order that reaches `delivered` (via either
+  the generic status endpoint or the delivery-agent's OTP-verify flow — see
+  "Order status pipeline & delivery" above) — a `bkash`/`nagad` order is
+  never actually charged or marked paid by anything in this codebase, and the
   frontend checkout never redirects to a gateway. Treat "select bKash/Nagad
   at checkout" as UI-only until a real gateway (e.g. bKash/SSLCommerz) is
   integrated.
+- **No customer-facing "request a refund" UI** — `POST /refunds` already
+  accepts a `customer`-initiated request on their own order (see "Finance
+  module" above), but there is no page/button anywhere in the storefront or
+  account portal that calls it; today a refund request can only be created
+  from `/admin/refunds` by staff. This is a real, unfilled gap, not a
+  deliberate scope boundary.
+- **The approval-gate system covers a fixed, spec-defined list of actions**
+  (`coupon.create`/`.update`, `product.delete`, `refund.request`/`.approve`,
+  `expense.confirm`) — role changes, settings changes, and other sensitive
+  actions are audit-*logged* (see "Approval-gate system & audit logging"
+  above) but are **not** routed through the Grant-Based Approval Workflow;
+  only the six action types above create a `PendingAction`.
+- **No 2FA, session-timeout enforcement, account-lockout, or
+  impersonation/support-login feature** — ROLES_AND_PERMISSIONS_v2.md §13/§15
+  describe these, but they were out of scope for the approval-gate/finance
+  build and have not been implemented; existing auth security (bcrypt,
+  JWT cookies, `authLimiter` rate limiting, logout-all via `tokenVersion`)
+  is unchanged, see "Security" below.
+- **No general notification matrix** — only approval-gate-related
+  notifications exist (a Super Admin is emailed when a request needs their
+  review; the requester is emailed the grant/deny outcome). The wider event
+  list in ROLES_AND_PERMISSIONS_v2.md §16 (new-order alerts, low-stock
+  alerts, delivery-failure escalation, etc.) is not implemented.
 - **Cart/wishlist don't persist server-side or cross-device** — they're
   `localStorage`-only (see "Cart & wishlist are client-side only" above).
 - **No `frontend/src/middleware.ts`** — route protection is entirely
@@ -665,11 +1015,14 @@ need it.
   frontend's "Continue with Google" button doesn't render. See "Google
   Sign-In" above for the exact setup steps; nothing else needs to change once
   a Client ID is added to both `.env` files.
-- **No SMS/phone-based registration verification** — registration collects
-  an optional `phone` field (validated + checked for duplicates) but there is
-  no SMS gateway configured anywhere in this project, so there is no
+- **No SMS gateway anywhere in this project** — registration collects an
+  optional `phone` field (validated + checked for duplicates) but there is no
   phone-OTP signup flow or phone-based login; email remains the only login
-  identifier.
+  identifier. The delivery-agent OTP flow (see "Order status pipeline &
+  delivery" above) works around this by emailing the code and also
+  surfacing it directly on the order owner's own tracking/account page —
+  it is not texted to the customer, and the delivery agent must obtain it
+  verbally.
 - **Still no arbitrary page/route creation** — `/about`, `/contact`, and
   `/shipping-policy`'s body copy is admin-editable via the fixed-type
   `StaticPage` system (see "Static page content management"), same as the

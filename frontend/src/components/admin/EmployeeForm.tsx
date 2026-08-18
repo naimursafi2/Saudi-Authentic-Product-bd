@@ -8,8 +8,8 @@ const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
 const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
 
-export type StaffRole = "employee" | "co_admin" | "admin";
-const STAFF_ROLE_OPTIONS: StaffRole[] = ["employee", "co_admin", "admin"];
+export type StaffRole = "employee" | "delivery_agent" | "co_admin" | "order_manager" | "admin";
+const STAFF_ROLE_OPTIONS: StaffRole[] = ["employee", "delivery_agent", "co_admin", "order_manager", "admin"];
 
 export interface EmployeeFormValues {
   name: string;
@@ -44,7 +44,9 @@ function fromUser(user?: ApiUser): EmployeeFormValues {
     email: user.email,
     password: "",
     phone: user.phone ?? "",
-    role: (user.role === "co_admin" || user.role === "admin" ? user.role : "employee") as StaffRole,
+    role: (["co_admin", "order_manager", "admin", "delivery_agent"].includes(user.role)
+      ? user.role
+      : "employee") as StaffRole,
     employeeId: user.staffMeta?.employeeId ?? "",
     department: user.staffMeta?.department ?? "",
     designation: user.staffMeta?.designation ?? "",

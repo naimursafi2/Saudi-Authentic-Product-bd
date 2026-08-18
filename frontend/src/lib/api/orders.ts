@@ -17,13 +17,14 @@ export async function listMyOrders(page = 1, limit = 20) {
   return api.get<{ orders: ApiOrder[] }>(`/orders/mine?page=${page}&limit=${limit}`);
 }
 
+/** `otp` is only present when the caller is the order's owner and it's currently `out_for_delivery`. */
 export async function getOrder(id: string) {
-  return api.get<{ order: ApiOrder }>(`/orders/${id}`);
+  return api.get<{ order: ApiOrder; otp?: string }>(`/orders/${id}`);
 }
 
 export async function trackOrder(orderNumber: string, email: string) {
   const search = new URLSearchParams({ orderNumber, email });
-  return api.get<{ order: ApiOrder }>(`/orders/track?${search.toString()}`);
+  return api.get<{ order: ApiOrder; otp?: string }>(`/orders/track?${search.toString()}`);
 }
 
 export async function listOrders(params: { status?: OrderStatus; page?: number; limit?: number } = {}) {
@@ -37,4 +38,30 @@ export async function listOrders(params: { status?: OrderStatus; page?: number; 
 
 export async function updateOrderStatus(id: string, status: OrderStatus, note?: string) {
   return api.patch<{ order: ApiOrder }>(`/orders/${id}/status`, { status, note });
+}
+
+export async function assignAgent(id: string, agentId: string) {
+  return api.patch<{ order: ApiOrder }>(`/orders/${id}/assign-agent`, { agentId });
+}
+
+// -- Delivery Agent (self-scoped) --
+
+export async function listAssignedOrders(page = 1, limit = 20) {
+  return api.get<{ orders: ApiOrder[] }>(`/orders/assigned-to-me?page=${page}&limit=${limit}`);
+}
+
+export async function updateDeliveryStatus(
+  id: string,
+  status: "picked_up" | "out_for_delivery",
+  note?: string
+) {
+  return api.patch<{ order: ApiOrder }>(`/orders/${id}/delivery-status`, { status, note });
+}
+
+export async function verifyDeliveryOtp(id: string, otp: string, note?: string) {
+  return api.post<{ order: ApiOrder }>(`/orders/${id}/verify-otp`, { otp, note });
+}
+
+export async function markDeliveryFailed(id: string, failureReason: string, note?: string) {
+  return api.patch<{ order: ApiOrder }>(`/orders/${id}/delivery-failed`, { failureReason, note });
 }

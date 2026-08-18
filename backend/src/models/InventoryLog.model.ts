@@ -1,6 +1,6 @@
 import { Schema, model, type Document, type Model, type Types } from "mongoose";
 
-export type InventoryLogReason = "order_placed" | "order_cancelled" | "manual_adjustment";
+export type InventoryLogReason = "order_placed" | "order_cancelled" | "order_returned" | "manual_adjustment";
 
 export interface IInventoryLog extends Document {
   _id: Types.ObjectId;
@@ -24,7 +24,7 @@ const inventoryLogSchema = new Schema<IInventoryLog>(
     balanceAfter: { type: Number, required: true },
     reason: {
       type: String,
-      enum: ["order_placed", "order_cancelled", "manual_adjustment"],
+      enum: ["order_placed", "order_cancelled", "order_returned", "manual_adjustment"],
       required: true,
     },
     note: { type: String, trim: true, maxlength: 500 },

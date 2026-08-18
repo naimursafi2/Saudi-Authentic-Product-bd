@@ -42,6 +42,7 @@ export async function listTasks(query: ListTasksQuery) {
   const filter: Record<string, unknown> = {};
   if (query.assignedTo) filter.assignedTo = query.assignedTo;
   if (query.status) filter.status = query.status;
+  if (query.type) filter.type = query.type;
 
   const skip = (query.page - 1) * query.limit;
   const [tasks, total] = await Promise.all([

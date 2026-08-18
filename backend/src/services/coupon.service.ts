@@ -1,6 +1,42 @@
 import { CouponModel, type ICoupon } from "../models/Coupon.model";
 import { ApiError } from "../utils/ApiError";
+import { getApprovalSettings } from "./approvalSettings.service";
+import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
+import { recordAuditLog } from "./auditLog.service";
 import type { CreateCouponInput, UpdateCouponInput } from "../validators/coupon.validator";
+import type { Role } from "../constants/roles";
+
+export interface CouponActor {
+  id: string;
+  role: Role;
+}
+
+export type CreateCouponResult = { kind: "created"; coupon: ICoupon } | { kind: "pending"; pendingActionId: string };
+export type UpdateCouponResult = { kind: "updated"; coupon: ICoupon } | { kind: "pending"; pendingActionId: string };
+
+/**
+ * Percentage discounts are gated per ROLES_AND_PERMISSIONS_v2.md §4: at/below
+ * the auto-approve threshold, `co_admin`/`admin` create directly; above it
+ * (and up to the Super-Admin-only threshold) the request goes through the
+ * approval gate; above the Super-Admin-only threshold, only `super_admin`
+ * may create/update at all. `super_admin` always bypasses the gate. Fixed
+ * (non-percentage) discounts aren't addressed by the spec's threshold table,
+ * so they're treated like an auto-approved (≤ threshold) request — no risk
+ * metric is defined for a flat BDT amount.
+ */
+async function resolveCouponGate(
+  actor: CouponActor,
+  discountType: "percentage" | "fixed",
+  discountValue: number
+): Promise<"direct" | "gated" | "forbidden"> {
+  if (actor.role === "super_admin") return "direct";
+  if (discountType !== "percentage") return "direct";
+
+  const settings = await getApprovalSettings();
+  if (discountValue <= settings.couponAutoApprovePercent) return "direct";
+  if (discountValue <= settings.couponSuperAdminOnlyAbovePercent) return "gated";
+  return "forbidden";
+}
 
 export type CouponStatus = "scheduled" | "active" | "expired" | "disabled";
 
@@ -56,13 +92,37 @@ export async function listCoupons(filter: {
   };
 }
 
-export async function createCoupon(input: CreateCouponInput) {
+async function insertCoupon(input: CreateCouponInput): Promise<ICoupon> {
   const existing = await CouponModel.findOne({ code: input.code });
   if (existing) throw ApiError.conflict("A coupon with this code already exists");
   return CouponModel.create(input);
 }
 
-export async function updateCoupon(id: string, input: UpdateCouponInput) {
+export async function createCoupon(input: CreateCouponInput, actor: CouponActor): Promise<CreateCouponResult> {
+  const gate = await resolveCouponGate(actor, input.discountType, input.discountValue);
+  if (gate === "forbidden") {
+    throw ApiError.forbidden(
+      "Only Super Admin can create a coupon with a discount this large — see Approval Settings for the current threshold"
+    );
+  }
+  if (gate === "gated") {
+    const action = await createPendingAction("coupon.create", { ...input }, actor);
+    return { kind: "pending", pendingActionId: action._id.toString() };
+  }
+
+  const coupon = await insertCoupon(input);
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "coupon.create",
+    resource: "Coupon",
+    resourceId: coupon._id.toString(),
+    newValue: input,
+  });
+  return { kind: "created", coupon };
+}
+
+async function applyCouponUpdate(id: string, input: UpdateCouponInput): Promise<ICoupon> {
   const coupon = await CouponModel.findById(id);
   if (!coupon) throw ApiError.notFound("Coupon not found");
 
@@ -87,11 +147,85 @@ export async function updateCoupon(id: string, input: UpdateCouponInput) {
   return coupon;
 }
 
-export async function deleteCoupon(id: string) {
+export async function updateCoupon(
+  id: string,
+  input: UpdateCouponInput,
+  actor: CouponActor
+): Promise<UpdateCouponResult> {
+  const existing = await CouponModel.findById(id);
+  if (!existing) throw ApiError.notFound("Coupon not found");
+
+  const discountType = input.discountType ?? existing.discountType;
+  const discountValue = input.discountValue ?? existing.discountValue;
+  const gate = await resolveCouponGate(actor, discountType, discountValue);
+  if (gate === "forbidden") {
+    throw ApiError.forbidden(
+      "Only Super Admin can set a discount this large — see Approval Settings for the current threshold"
+    );
+  }
+  if (gate === "gated") {
+    const action = await createPendingAction("coupon.update", { id, ...input }, actor);
+    return { kind: "pending", pendingActionId: action._id.toString() };
+  }
+
+  const oldValue = existing.toObject();
+  const coupon = await applyCouponUpdate(id, input);
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "coupon.update",
+    resource: "Coupon",
+    resourceId: coupon._id.toString(),
+    oldValue,
+    newValue: input,
+  });
+  return { kind: "updated", coupon };
+}
+
+export async function deleteCoupon(id: string, actor: CouponActor) {
   const coupon = await CouponModel.findById(id);
   if (!coupon) throw ApiError.notFound("Coupon not found");
   await coupon.deleteOne();
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "coupon.delete",
+    resource: "Coupon",
+    resourceId: id,
+    oldValue: coupon.toObject(),
+  });
 }
+
+// -- Approval-gate handlers — see pendingAction.service.ts for why this is a
+// registry rather than a direct import. --
+registerPendingActionHandler("coupon.create", async (payload, reviewer) => {
+  const coupon = await insertCoupon(payload as unknown as CreateCouponInput);
+  await recordAuditLog({
+    actor: reviewer.id,
+    actorRole: reviewer.role,
+    action: "coupon.create",
+    resource: "Coupon",
+    resourceId: coupon._id.toString(),
+    newValue: payload,
+    note: "Applied via approval grant",
+  });
+  return { resource: "Coupon", resourceId: coupon._id.toString() };
+});
+
+registerPendingActionHandler("coupon.update", async (payload, reviewer) => {
+  const { id, ...input } = payload as { id: string } & UpdateCouponInput;
+  const coupon = await applyCouponUpdate(id, input);
+  await recordAuditLog({
+    actor: reviewer.id,
+    actorRole: reviewer.role,
+    action: "coupon.update",
+    resource: "Coupon",
+    resourceId: coupon._id.toString(),
+    newValue: input,
+    note: "Applied via approval grant",
+  });
+  return { resource: "Coupon", resourceId: coupon._id.toString() };
+});
 
 export interface CouponValidationResult {
   coupon: ICoupon;

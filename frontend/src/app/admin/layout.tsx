@@ -40,7 +40,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <RoleGuard allowed={["co_admin", "admin", "super_admin"]}>
+    <RoleGuard allowed={["co_admin", "order_manager", "admin", "super_admin"]}>
       <AdminShell>{children}</AdminShell>
     </RoleGuard>
   );

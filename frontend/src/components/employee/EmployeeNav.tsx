@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListChecks, CalendarClock, TrendingUp, Wallet, CalendarCheck } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListChecks,
+  CalendarClock,
+  TrendingUp,
+  Wallet,
+  CalendarCheck,
+  UserCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -12,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/employee/leave", label: "Leave", icon: CalendarClock },
   { href: "/employee/performance", label: "Performance", icon: TrendingUp },
   { href: "/employee/salary", label: "Salary", icon: Wallet },
+  { href: "/employee/profile", label: "Profile", icon: UserCircle },
 ];
 
 export function EmployeeNav({ onNavigate }: { onNavigate?: () => void }) {

@@ -2,19 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { PackageSearch } from "lucide-react";
-import { listOrders, getOrder, updateOrderStatus } from "@/lib/api/orders";
+import { listOrders, getOrder, updateOrderStatus, assignAgent } from "@/lib/api/orders";
+import { listUsers } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { formatBDT } from "@/lib/utils";
+import { ORDER_STATUSES, nextGenericStatuses, orderStatusLabel } from "@/lib/orderStatus";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import type { ApiOrder, OrderStatus, Pagination } from "@/types/api";
+import type { ApiOrder, ApiUser, OrderStatus, Pagination } from "@/types/api";
 
-const STATUS_OPTIONS: OrderStatus[] = ["pending", "processing", "shipped", "delivered", "cancelled"];
-const FINAL_STATUSES: OrderStatus[] = ["delivered", "cancelled"];
+const STATUS_OPTIONS = ORDER_STATUSES;
+const ASSIGNABLE_STATUSES: OrderStatus[] = ["ready_for_dispatch", "delivery_failed"];
 
 function customerName(customer: ApiOrder["customer"]): string {
   return typeof customer === "string" ? customer : customer.name;
@@ -59,8 +61,8 @@ export default function AdminOrdersPage() {
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s[0].toUpperCase() + s.slice(1)}
+            <option key={s} value={s} className="capitalize">
+              {orderStatusLabel(s)}
             </option>
           ))}
         </select>
@@ -142,6 +144,10 @@ function OrderDetailModal({
   const [note, setNote] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [agents, setAgents] = useState<ApiUser[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   function loadOrder() {
     setIsLoading(true);
@@ -157,6 +163,12 @@ function OrderDetailModal({
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(loadOrder, [orderId]);
 
+  useEffect(() => {
+    listUsers({ role: "delivery_agent", limit: 100 })
+      .then(({ data }) => setAgents(data.users))
+      .catch(() => setAgents([]));
+  }, []);
+
   async function handleUpdate() {
     if (!order || !nextStatus) return;
     setUpdateError(null);
@@ -171,6 +183,22 @@ function OrderDetailModal({
       setUpdateError(err instanceof ApiClientError ? err.message : "Could not update order status.");
     } finally {
       setIsUpdating(false);
+    }
+  }
+
+  async function handleAssign() {
+    if (!order || !selectedAgentId) return;
+    setAssignError(null);
+    setIsAssigning(true);
+    try {
+      const { data } = await assignAgent(order._id, selectedAgentId);
+      setOrder(data.order);
+      setSelectedAgentId("");
+      onUpdated();
+    } catch (err) {
+      setAssignError(err instanceof ApiClientError ? err.message : "Could not assign delivery agent.");
+    } finally {
+      setIsAssigning(false);
     }
   }
 
@@ -268,13 +296,50 @@ function OrderDetailModal({
             </section>
           )}
 
+          {ASSIGNABLE_STATUSES.includes(order.status) && (
+            <section>
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-brown-500">
+                Assign Delivery Agent
+              </h3>
+              <div className="flex flex-col gap-2">
+                {assignError && <p className="text-sm text-[#8a4a3f]">{assignError}</p>}
+                {agents.length === 0 ? (
+                  <p className="text-sm text-brown-500">No delivery agent accounts exist yet.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={selectedAgentId}
+                      onChange={(e) => setSelectedAgentId(e.target.value)}
+                      className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                    >
+                      <option value="">Select an agent</option>
+                      {agents.map((agent) => (
+                        <option key={agent._id} value={agent._id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={!selectedAgentId || isAssigning}
+                      onClick={handleAssign}
+                    >
+                      {isAssigning ? "Assigning..." : "Assign"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-brown-500">
               Update Status
             </h3>
-            {FINAL_STATUSES.includes(order.status) ? (
+            {nextGenericStatuses(order.status).length === 0 ? (
               <p className="text-sm text-brown-500">
-                This order is {order.status} and can no longer be updated.
+                This order is {orderStatusLabel(order.status)} and has no further status changes available here.
               </p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -286,9 +351,9 @@ function OrderDetailModal({
                     className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                   >
                     <option value="">Select new status</option>
-                    {STATUS_OPTIONS.filter((s) => s !== order.status).map((s) => (
+                    {nextGenericStatuses(order.status).map((s) => (
                       <option key={s} value={s}>
-                        {s[0].toUpperCase() + s.slice(1)}
+                        {orderStatusLabel(s)}
                       </option>
                     ))}
                   </select>

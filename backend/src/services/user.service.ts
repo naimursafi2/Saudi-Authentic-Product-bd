@@ -2,6 +2,7 @@ import { UserModel } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import { sendStaffWelcomeEmail } from "./email.service";
+import { recordAuditLog } from "./auditLog.service";
 import type {
   AddAddressInput,
   CreateStaffInput,
@@ -79,21 +80,51 @@ export async function getUserById(id: string) {
   return user;
 }
 
-export async function updateUserRole(id: string, role: Role, actingUserId: string) {
-  if (id === actingUserId) {
+export async function updateUserRole(id: string, role: Role, actor: { id: string; role: Role }) {
+  if (id === actor.id) {
     throw ApiError.badRequest("You cannot change your own role");
   }
+  const before = await UserModel.findById(id);
+  if (!before) throw ApiError.notFound("User not found");
+  const previousRole = before.role;
+
   const user = await UserModel.findByIdAndUpdate(id, { role }, { new: true });
   if (!user) throw ApiError.notFound("User not found");
+
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "user.role.update",
+    resource: "User",
+    resourceId: id,
+    oldValue: { role: previousRole },
+    newValue: { role },
+  });
+
   return user;
 }
 
-export async function updateUserStatus(id: string, isActive: boolean, actingUserId: string) {
-  if (id === actingUserId) {
+export async function updateUserStatus(id: string, isActive: boolean, actor: { id: string; role: Role }) {
+  if (id === actor.id) {
     throw ApiError.badRequest("You cannot deactivate your own account");
   }
+  const before = await UserModel.findById(id);
+  if (!before) throw ApiError.notFound("User not found");
+  const previousStatus = before.isActive;
+
   const user = await UserModel.findByIdAndUpdate(id, { isActive }, { new: true });
   if (!user) throw ApiError.notFound("User not found");
+
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "user.status.update",
+    resource: "User",
+    resourceId: id,
+    oldValue: { isActive: previousStatus },
+    newValue: { isActive },
+  });
+
   return user;
 }
 

@@ -2,30 +2,15 @@
 
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  CreditCard,
-  MapPin,
-  PackageSearch,
-  Settings2,
-  Truck,
-} from "lucide-react";
+import { AlertCircle, CreditCard, KeyRound, MapPin, PackageSearch } from "lucide-react";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Button } from "@/components/ui/Button";
+import { OrderStatusTimeline } from "@/components/account/OrderStatusTimeline";
 import { trackOrder } from "@/lib/api/orders";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { cn, formatBDT } from "@/lib/utils";
-import type { ApiOrder, OrderStatus } from "@/types/api";
-
-const STATUS_STEPS: { status: OrderStatus; label: string; icon: typeof Clock }[] = [
-  { status: "pending", label: "Order Placed", icon: Clock },
-  { status: "processing", label: "Processing", icon: Settings2 },
-  { status: "shipped", label: "Shipped", icon: Truck },
-  { status: "delivered", label: "Delivered", icon: CheckCircle2 },
-];
+import type { ApiOrder } from "@/types/api";
 
 const PAYMENT_LABELS: Record<ApiOrder["paymentMethod"], string> = {
   cod: "Cash on Delivery",
@@ -51,6 +36,7 @@ function TrackOrderForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<ApiOrder | null>(null);
+  const [otp, setOtp] = useState<string | undefined>(undefined);
   const [hasSearched, setHasSearched] = useState(false);
   const autoSubmitted = useRef(false);
 
@@ -65,9 +51,11 @@ function TrackOrderForm() {
     setIsLoading(true);
     setError(null);
     setOrder(null);
+    setOtp(undefined);
     try {
       const { data } = await trackOrder(orderNumberValue.trim(), emailValue.trim());
       setOrder(data.order);
+      setOtp(data.otp);
     } catch (err) {
       const message =
         err instanceof ApiClientError && err.statusCode !== 400
@@ -94,8 +82,11 @@ function TrackOrderForm() {
     void performSearch(orderNumber, email);
   }
 
-  const currentStepIndex = order ? STATUS_STEPS.findIndex((s) => s.status === order.status) : -1;
-  const isCancelled = order?.status === "cancelled";
+  const isBranchStatus =
+    order?.status === "cancelled" ||
+    order?.status === "delivery_failed" ||
+    order?.status === "returned" ||
+    order?.status === "refunded";
 
   return (
     <div className="mx-auto max-w-[900px] px-6 py-14 sm:px-10 lg:px-16">
@@ -170,74 +161,24 @@ function TrackOrderForm() {
             <span
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.08em]",
-                isCancelled ? "bg-[#fbeceb] text-[#8a4a3f]" : "bg-green-900 text-white"
+                isBranchStatus ? "bg-[#fbeceb] text-[#8a4a3f]" : "bg-green-900 text-white"
               )}
             >
-              {order.status}
+              {order.status.replace(/_/g, " ")}
             </span>
           </div>
 
-          {isCancelled ? (
-            <div className="flex items-start gap-3 rounded-lg border border-[#f0c9c3] bg-[#fbeceb] p-5 text-sm text-[#8a4a3f]">
-              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          {otp && (
+            <div className="flex items-center gap-3 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-5 text-sm text-[#735c00]">
+              <KeyRound size={20} className="shrink-0" />
               <p>
-                This order was cancelled
-                {order.statusHistory.length > 0
-                  ? ` on ${formatDateTime(order.statusHistory[order.statusHistory.length - 1].at)}`
-                  : ""}
-                . Contact us if you believe this is a mistake.
+                Your order is out for delivery. Share this code with the delivery agent to confirm receipt:{" "}
+                <span className="text-lg font-bold tracking-[0.15em]">{otp}</span>
               </p>
             </div>
-          ) : (
-            <div className="rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
-              <div className="flex items-start justify-between">
-                {STATUS_STEPS.map((step, i) => {
-                  const reached = i <= currentStepIndex;
-                  const Icon = step.icon;
-                  return (
-                    <div key={step.status} className="flex flex-1 flex-col items-center text-center">
-                      <div className="flex w-full items-center">
-                        <div
-                          className={cn(
-                            "h-0.5 flex-1",
-                            i === 0 ? "invisible" : reached ? "bg-green-900" : "bg-cream-300"
-                          )}
-                        />
-                        <div
-                          className={cn(
-                            "flex size-9 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-                            reached
-                              ? "border-green-900 bg-green-900 text-white"
-                              : "border-cream-300 bg-cream-50 text-brown-500/60"
-                          )}
-                        >
-                          <Icon size={16} />
-                        </div>
-                        <div
-                          className={cn(
-                            "h-0.5 flex-1",
-                            i === STATUS_STEPS.length - 1
-                              ? "invisible"
-                              : i < currentStepIndex
-                                ? "bg-green-900"
-                                : "bg-cream-300"
-                          )}
-                        />
-                      </div>
-                      <p
-                        className={cn(
-                          "mt-2 text-[11px] font-bold uppercase tracking-[0.06em]",
-                          reached ? "text-green-950" : "text-brown-500/60"
-                        )}
-                      >
-                        {step.label}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           )}
+
+          <OrderStatusTimeline status={order.status} statusHistory={order.statusHistory} />
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div className="rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">

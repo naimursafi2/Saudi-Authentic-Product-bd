@@ -50,21 +50,73 @@ describe("Coupon integration", () => {
     await disconnectTestDb();
   });
 
-  it("only allows admin/super_admin to manage coupons — customer and co_admin are blocked", async () => {
+  it("blocks customers from managing coupons entirely", async () => {
     const { token: customerToken } = await createAuthedUser({ role: "customer" });
-    const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
 
     const asCustomer = await request(app)
       .post("/api/v1/coupons")
       .set(...authHeader(customerToken))
       .send({ code: "SAVE10", discountType: "percentage", discountValue: 10, startsAt: isoIn(-HOUR), expiresAt: isoIn(HOUR) });
     expect(asCustomer.status).toBe(403);
+  });
 
-    const asCoAdmin = await request(app)
+  it("gates co_admin coupon creation by discount size per ROLES_AND_PERMISSIONS_v2.md §4", async () => {
+    const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
+
+    // <=10% (default auto-approve threshold): created directly.
+    const small = await request(app)
       .post("/api/v1/coupons")
       .set(...authHeader(coAdminToken))
       .send({ code: "SAVE10", discountType: "percentage", discountValue: 10, startsAt: isoIn(-HOUR), expiresAt: isoIn(HOUR) });
-    expect(asCoAdmin.status).toBe(403);
+    expect(small.status).toBe(201);
+    expect(small.body.data.coupon.code).toBe("SAVE10");
+
+    // 10.01-25%: routed through the approval gate, not created immediately.
+    const medium = await request(app)
+      .post("/api/v1/coupons")
+      .set(...authHeader(coAdminToken))
+      .send({ code: "SAVE20", discountType: "percentage", discountValue: 20, startsAt: isoIn(-HOUR), expiresAt: isoIn(HOUR) });
+    expect(medium.status).toBe(202);
+    expect(medium.body.data.pendingActionId).toBeTruthy();
+    const notYetCreated = await CouponModel.findOne({ code: "SAVE20" });
+    expect(notYetCreated).toBeNull();
+
+    // >25%: forbidden outright for co_admin.
+    const large = await request(app)
+      .post("/api/v1/coupons")
+      .set(...authHeader(coAdminToken))
+      .send({ code: "SAVE50", discountType: "percentage", discountValue: 50, startsAt: isoIn(-HOUR), expiresAt: isoIn(HOUR) });
+    expect(large.status).toBe(403);
+
+    // Fixed-amount discounts aren't gated by the percentage thresholds.
+    const fixed = await request(app)
+      .post("/api/v1/coupons")
+      .set(...authHeader(coAdminToken))
+      .send({ code: "FLAT500", discountType: "fixed", discountValue: 500, startsAt: isoIn(-HOUR), expiresAt: isoIn(HOUR) });
+    expect(fixed.status).toBe(201);
+  });
+
+  it("lets a super_admin grant a gated coupon request, creating it with the original payload", async () => {
+    const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
+    const { token: superAdminToken } = await createAuthedUser({ role: "super_admin" });
+
+    const requestRes = await request(app)
+      .post("/api/v1/coupons")
+      .set(...authHeader(coAdminToken))
+      .send({ code: "SAVE20", discountType: "percentage", discountValue: 20, startsAt: isoIn(-HOUR), expiresAt: isoIn(HOUR) });
+    expect(requestRes.status).toBe(202);
+    const pendingActionId = requestRes.body.data.pendingActionId;
+
+    const grantRes = await request(app)
+      .patch(`/api/v1/pending-actions/${pendingActionId}/grant`)
+      .set(...authHeader(superAdminToken))
+      .send({});
+    expect(grantRes.status).toBe(200);
+    expect(grantRes.body.data.action.status).toBe("granted");
+
+    const created = await CouponModel.findOne({ code: "SAVE20" });
+    expect(created).not.toBeNull();
+    expect(created?.discountValue).toBe(20);
   });
 
   it("creates a coupon as admin, rejects a duplicate code, and lists it with a computed status", async () => {

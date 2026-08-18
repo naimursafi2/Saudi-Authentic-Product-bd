@@ -4,6 +4,7 @@ import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
+import { parseMultipartJsonFields } from "../middlewares/parseMultipartJson.middleware";
 import {
   createHomepageSectionSchema,
   listHomepageSectionsQuerySchema,
@@ -30,6 +31,7 @@ router.patch(
   authenticate,
   authorize("admin", "super_admin"),
   upload.single("image"),
+  parseMultipartJsonFields(["blocks"]),
   validate({ params: mongoIdParamSchema, body: updateHomepageSectionSchema }),
   homepageSectionController.updateSection
 );

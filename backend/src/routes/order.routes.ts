@@ -4,10 +4,15 @@ import { authenticate, requireEmailVerified } from "../middlewares/auth.middlewa
 import { authorize } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
+  assignAgentSchema,
   createOrderSchema,
+  deliveryFailedSchema,
+  deliveryStatusSchema,
+  listAssignedOrdersQuerySchema,
   listOrdersQuerySchema,
   trackOrderQuerySchema,
   updateOrderStatusSchema,
+  verifyOtpSchema,
 } from "../validators/order.validator";
 import { mongoIdParamSchema } from "../validators/common.validator";
 
@@ -27,18 +32,50 @@ router.post(
 );
 router.get("/mine", orderController.listMyOrders);
 
-// -- Staff (Admin / Co-Admin / Super Admin / Employee) --
+// -- Delivery Agent (self-scoped to their own assigned orders) --
+router.get(
+  "/assigned-to-me",
+  authorize("delivery_agent"),
+  validate({ query: listAssignedOrdersQuerySchema }),
+  orderController.listAssignedOrders
+);
+router.patch(
+  "/:id/delivery-status",
+  authorize("delivery_agent"),
+  validate({ params: mongoIdParamSchema, body: deliveryStatusSchema }),
+  orderController.updateDeliveryStatus
+);
+router.post(
+  "/:id/verify-otp",
+  authorize("delivery_agent"),
+  validate({ params: mongoIdParamSchema, body: verifyOtpSchema }),
+  orderController.verifyDeliveryOtp
+);
+router.patch(
+  "/:id/delivery-failed",
+  authorize("delivery_agent"),
+  validate({ params: mongoIdParamSchema, body: deliveryFailedSchema }),
+  orderController.markDeliveryFailed
+);
+
+// -- Staff (Admin / Co-Admin / Super Admin / Order Manager / Employee) --
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin", "employee"),
+  authorize("admin", "super_admin", "co_admin", "order_manager", "employee"),
   validate({ query: listOrdersQuerySchema }),
   orderController.listOrders
 );
 router.patch(
   "/:id/status",
-  authorize("admin", "super_admin", "co_admin"),
+  authorize("admin", "super_admin", "co_admin", "order_manager"),
   validate({ params: mongoIdParamSchema, body: updateOrderStatusSchema }),
   orderController.updateOrderStatus
+);
+router.patch(
+  "/:id/assign-agent",
+  authorize("admin", "super_admin", "co_admin", "order_manager"),
+  validate({ params: mongoIdParamSchema, body: assignAgentSchema }),
+  orderController.assignDeliveryAgent
 );
 
 // -- Owner or staff (order-detail authorization is enforced inside the controller) --

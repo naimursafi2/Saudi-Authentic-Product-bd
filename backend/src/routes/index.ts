@@ -19,6 +19,13 @@ import couponRoutes from "./coupon.routes";
 import navLinkRoutes from "./navLink.routes";
 import footerColumnRoutes from "./footerColumn.routes";
 import staticPageRoutes from "./staticPage.routes";
+import auditLogRoutes from "./auditLog.routes";
+import pendingActionRoutes from "./pendingAction.routes";
+import approvalSettingsRoutes from "./approvalSettings.routes";
+import investmentRoutes from "./investment.routes";
+import expenseRoutes from "./expense.routes";
+import refundRoutes from "./refund.routes";
+import financeRoutes from "./finance.routes";
 
 const router = Router();
 
@@ -42,5 +49,12 @@ router.use("/coupons", couponRoutes);
 router.use("/nav-links", navLinkRoutes);
 router.use("/footer-columns", footerColumnRoutes);
 router.use("/static-pages", staticPageRoutes);
+router.use("/audit-logs", auditLogRoutes);
+router.use("/pending-actions", pendingActionRoutes);
+router.use("/approval-settings", approvalSettingsRoutes);
+router.use("/investments", investmentRoutes);
+router.use("/expenses", expenseRoutes);
+router.use("/refunds", refundRoutes);
+router.use("/finance", financeRoutes);
 
 export default router;

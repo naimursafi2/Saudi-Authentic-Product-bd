@@ -48,7 +48,7 @@ export interface CreateStaffPayload {
   email: string;
   password: string;
   phone?: string;
-  role: "employee" | "co_admin" | "admin";
+  role: "employee" | "delivery_agent" | "co_admin" | "order_manager" | "admin";
   staffMeta?: {
     employeeId: string;
     department?: string;

@@ -110,6 +110,63 @@ export async function sendOrderConfirmationEmail(
   await safeSend(to, `Order confirmed — #${opts.orderNumber}`, html);
 }
 
+export async function sendDeliveryOtpEmail(
+  to: string,
+  name: string,
+  opts: { orderNumber: string; otp: string }
+): Promise<void> {
+  const html = layout(
+    "Your delivery verification code",
+    `<p>Hi ${name},</p>
+     <p>Your order <strong>#${opts.orderNumber}</strong> is out for delivery. Share this code with the
+     delivery agent once your order arrives to confirm receipt:</p>
+     <p style="font-size:28px;font-weight:bold;letter-spacing:0.15em;color:${BRAND.green};margin:20px 0;">${opts.otp}</p>
+     <p style="font-size:13px;color:#705a4c;">This code expires in 60 minutes and is also visible on your order tracking page.</p>`
+  );
+  await safeSend(to, `Delivery code — #${opts.orderNumber}`, html);
+}
+
+const PENDING_ACTION_LABELS: Record<string, string> = {
+  "coupon.create": "a new coupon",
+  "coupon.update": "a coupon update",
+  "product.delete": "a product deletion",
+  "refund.request": "a refund request",
+  "refund.approve": "a refund approval",
+  "expense.confirm": "an expense confirmation",
+};
+
+export async function sendPendingActionRequestedEmail(
+  to: string,
+  name: string,
+  opts: { actionType: string; requestedByName: string; note?: string }
+): Promise<void> {
+  const label = PENDING_ACTION_LABELS[opts.actionType] ?? opts.actionType;
+  const html = layout(
+    "Approval requested",
+    `<p>Hi ${name},</p>
+     <p><strong>${opts.requestedByName}</strong> has requested ${label} that requires your approval.</p>
+     ${opts.note ? `<p>Note: ${opts.note}</p>` : ""}
+     ${button("Review Request", `${FRONTEND_URL}/admin/approvals`)}`
+  );
+  await safeSend(to, "Approval requested — Saudi Authentic Product", html);
+}
+
+export async function sendPendingActionReviewedEmail(
+  to: string,
+  name: string,
+  opts: { actionType: string; status: "granted" | "denied"; reviewNote?: string }
+): Promise<void> {
+  const label = PENDING_ACTION_LABELS[opts.actionType] ?? opts.actionType;
+  const verb = opts.status === "granted" ? "approved" : "denied";
+  const html = layout(
+    `Your request was ${verb}`,
+    `<p>Hi ${name},</p>
+     <p>Your request for ${label} has been <strong>${verb}</strong> by a Super Admin.</p>
+     ${opts.reviewNote ? `<p>Note: ${opts.reviewNote}</p>` : ""}`
+  );
+  await safeSend(to, `Request ${verb} — Saudi Authentic Product`, html);
+}
+
 export async function sendLeaveStatusEmail(
   to: string,
   name: string,

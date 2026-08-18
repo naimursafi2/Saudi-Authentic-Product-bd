@@ -33,6 +33,24 @@ describe("authorize middleware", () => {
     const err = next.mock.calls[0][0] as ApiError;
     expect(err.statusCode).toBe(401);
   });
+
+  it("recognises the order_manager and delivery_agent roles", () => {
+    const managerReq = mockReq({ id: "u1", role: "order_manager", tokenVersion: 0, isEmailVerified: true });
+    const managerNext = jest.fn();
+    authorize("order_manager", "co_admin")(managerReq, res, managerNext as NextFunction);
+    expect(managerNext).toHaveBeenCalledWith();
+
+    const agentReq = mockReq({ id: "u2", role: "delivery_agent", tokenVersion: 0, isEmailVerified: true });
+    const agentNext = jest.fn();
+    authorize("delivery_agent")(agentReq, res, agentNext as NextFunction);
+    expect(agentNext).toHaveBeenCalledWith();
+
+    // a delivery agent is never implicitly granted order_manager-only routes
+    const deniedNext = jest.fn();
+    authorize("order_manager", "co_admin")(agentReq, res, deniedNext as NextFunction);
+    const err = deniedNext.mock.calls[0][0] as ApiError;
+    expect(err.statusCode).toBe(403);
+  });
 });
 
 describe("authorizeSelfOrRoles middleware", () => {

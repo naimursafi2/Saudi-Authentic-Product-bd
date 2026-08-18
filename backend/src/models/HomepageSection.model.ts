@@ -1,7 +1,8 @@
 import { Schema, model, type Document, type Model, type Types } from "mongoose";
+import { STATIC_PAGE_BLOCK_ICONS, type StaticPageBlockIcon } from "./StaticPage.model";
 
 /**
- * The five fixed types map 1:1 to the storefront's existing homepage
+ * The six fixed types map 1:1 to the storefront's existing homepage
  * components — one document each, lazily seeded by
  * `homepageSection.service.ts#ensureDefaultSections`, editable (title/
  * subtitle/description/visibility/order) but not deletable. `promoBanner`
@@ -14,6 +15,7 @@ import { Schema, model, type Document, type Model, type Types } from "mongoose";
  */
 export const HOMEPAGE_SECTION_TYPES = [
   "hero",
+  "trustStrip",
   "featuredCategories",
   "bestSellers",
   "productStory",
@@ -25,6 +27,22 @@ export type HomepageSectionType = (typeof HOMEPAGE_SECTION_TYPES)[number];
 
 export const PRODUCT_SHOWCASE_MODES = ["category", "bestSellers", "newArrivals", "onSale"] as const;
 export type ProductShowcaseMode = (typeof PRODUCT_SHOWCASE_MODES)[number];
+
+/** `trustStrip` only — one benefit/trust icon+label item. Reuses `StaticPage`'s icon allow-list. */
+export interface ITrustStripBlock {
+  icon: StaticPageBlockIcon;
+  label: string;
+  isVisible: boolean;
+}
+
+const trustStripBlockSchema = new Schema<ITrustStripBlock>(
+  {
+    icon: { type: String, required: true, enum: STATIC_PAGE_BLOCK_ICONS },
+    label: { type: String, required: true, trim: true, maxlength: 60 },
+    isVisible: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
 
 export interface IHomepageSection extends Document {
   _id: Types.ObjectId;
@@ -43,6 +61,8 @@ export interface IHomepageSection extends Document {
   productMode?: ProductShowcaseMode;
   /** `productShowcase` only — max products to display. */
   limit?: number;
+  /** `trustStrip` only — replaced wholesale on update. */
+  blocks?: ITrustStripBlock[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,6 +84,7 @@ const homepageSectionSchema = new Schema<IHomepageSection>(
     categorySlug: { type: String, trim: true },
     productMode: { type: String, enum: PRODUCT_SHOWCASE_MODES },
     limit: { type: Number, min: 1, max: 12 },
+    blocks: { type: [trustStripBlockSchema], default: undefined },
   },
   { timestamps: true }
 );
@@ -80,7 +101,10 @@ export const HomepageSectionModel: Model<IHomepageSection> = model<IHomepageSect
 );
 
 export const HOMEPAGE_SECTION_DEFAULTS: Array<
-  Pick<IHomepageSection, "type" | "title" | "subtitle" | "description" | "isVisible" | "sortOrder">
+  Pick<
+    IHomepageSection,
+    "type" | "title" | "subtitle" | "description" | "isVisible" | "sortOrder" | "blocks"
+  >
 > = [
   {
     type: "hero",
@@ -90,6 +114,21 @@ export const HOMEPAGE_SECTION_DEFAULTS: Array<
     description: undefined,
     isVisible: true,
     sortOrder: 0,
+    blocks: undefined,
+  },
+  {
+    type: "trustStrip",
+    title: undefined,
+    subtitle: undefined,
+    description: undefined,
+    isVisible: true,
+    sortOrder: 1,
+    blocks: [
+      { icon: "BadgeCheck", label: "100% Authentic", isVisible: true },
+      { icon: "Globe", label: "Imported from Saudi", isVisible: true },
+      { icon: "Truck", label: "Fast Delivery", isVisible: true },
+      { icon: "ShieldCheck", label: "Quality Assured", isVisible: true },
+    ],
   },
   {
     type: "featuredCategories",
@@ -97,7 +136,8 @@ export const HOMEPAGE_SECTION_DEFAULTS: Array<
     subtitle: undefined,
     description: undefined,
     isVisible: true,
-    sortOrder: 1,
+    sortOrder: 2,
+    blocks: undefined,
   },
   {
     type: "bestSellers",
@@ -105,7 +145,8 @@ export const HOMEPAGE_SECTION_DEFAULTS: Array<
     subtitle: undefined,
     description: undefined,
     isVisible: true,
-    sortOrder: 2,
+    sortOrder: 3,
+    blocks: undefined,
   },
   {
     type: "productStory",
@@ -115,6 +156,7 @@ export const HOMEPAGE_SECTION_DEFAULTS: Array<
       "Our journey begins in the sacred orchards of Madinah, where centuries-old traditions meet meticulous cultivation. We believe that true luxury lies in authenticity. Every product we bring to Bangladesh is a testament to the rich heritage of Saudi Arabia, carefully selected to ensure you experience the unparalleled quality and spiritual significance woven into each date.",
     isVisible: true,
     sortOrder: 7,
+    blocks: undefined,
   },
   {
     type: "customerReviews",
@@ -123,5 +165,6 @@ export const HOMEPAGE_SECTION_DEFAULTS: Array<
     description: undefined,
     isVisible: true,
     sortOrder: 8,
+    blocks: undefined,
   },
 ];

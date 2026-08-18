@@ -34,11 +34,20 @@ export interface ApiLeaveRequest {
 
 export type TaskPriority = "low" | "medium" | "high";
 export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskType =
+  | "packing"
+  | "product_counting"
+  | "stock_checking"
+  | "warehouse"
+  | "customer_support"
+  | "data_entry"
+  | "product_preparation";
 
 export interface ApiTask {
   _id: string;
   title: string;
   description?: string;
+  type: TaskType;
   assignedTo: string | { _id: string; name: string; email: string };
   assignedBy: string | { _id: string; name: string; email: string };
   dueDate?: string;

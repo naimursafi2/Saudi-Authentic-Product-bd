@@ -1,11 +1,8 @@
 import { Schema, model, type Document, type Model, type Types } from "mongoose";
+import { ORDER_STATUSES, type OrderStatus } from "../constants/orderStatus";
+import type { Role } from "../constants/roles";
 
-export type OrderStatus =
-  | "pending"
-  | "processing"
-  | "shipped"
-  | "delivered"
-  | "cancelled";
+export type { OrderStatus };
 
 export type DeliveryMethod = "standard" | "express";
 export type PaymentMethod = "cod" | "bkash" | "nagad";
@@ -45,7 +42,27 @@ export interface IOrder extends Document {
   discountBDT: number;
   totalBDT: number;
   status: OrderStatus;
-  statusHistory: { status: OrderStatus; at: Date; note?: string }[];
+  statusHistory: {
+    status: OrderStatus;
+    previousStatus?: OrderStatus;
+    at: Date;
+    note?: string;
+    changedBy: Types.ObjectId;
+    changedByRole: Role;
+  }[];
+  /** Set when an order reaches `assigned_to_agent` — the `delivery_agent` handling it. */
+  assignedAgent?: Types.ObjectId;
+  /** Plaintext, `select: false` — see `order.service.ts`'s OTP flow for why. Never
+   * exposed in a JSON response by default; the `toJSON` transform below strips it
+   * as defense-in-depth even if some future query accidentally re-selects it. */
+  otpCode?: string;
+  otpGeneratedAt?: Date;
+  otpExpiresAt?: Date;
+  otpVerifiedAt?: Date;
+  /** Set by the delivery agent on `delivered`/`delivery_failed`. */
+  deliveryNotes?: string;
+  /** Set by the delivery agent on `delivery_failed`. */
+  failureReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -98,7 +115,7 @@ const orderSchema = new Schema<IOrder>(
     totalBDT: { type: Number, required: true, min: 0 },
     status: {
       type: String,
-      enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
+      enum: ORDER_STATUSES,
       default: "pending",
       index: true,
     },
@@ -106,14 +123,32 @@ const orderSchema = new Schema<IOrder>(
       type: [
         {
           status: { type: String, required: true },
+          previousStatus: { type: String },
           at: { type: Date, default: Date.now },
           note: { type: String },
+          changedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          changedByRole: { type: String, required: true },
         },
       ],
       default: [],
     },
+    assignedAgent: { type: Schema.Types.ObjectId, ref: "User", index: true },
+    otpCode: { type: String, select: false },
+    otpGeneratedAt: { type: Date },
+    otpExpiresAt: { type: Date },
+    otpVerifiedAt: { type: Date },
+    deliveryNotes: { type: String, trim: true, maxlength: 1000 },
+    failureReason: { type: String, trim: true, maxlength: 500 },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      transform: (_doc, ret) => {
+        delete ret.otpCode;
+        return ret;
+      },
+    },
+  }
 );
 
 export const OrderModel: Model<IOrder> = model<IOrder>("Order", orderSchema);

@@ -27,12 +27,18 @@ export const getUser = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const updateRole = catchAsync(async (req: Request, res: Response) => {
-  const user = await userService.updateUserRole(paramStr(req.params.id), req.body.role, req.user!.id);
+  const user = await userService.updateUserRole(paramStr(req.params.id), req.body.role, {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
   sendSuccess(res, 200, "Role updated", { user });
 });
 
 export const updateStatus = catchAsync(async (req: Request, res: Response) => {
-  const user = await userService.updateUserStatus(paramStr(req.params.id), req.body.isActive, req.user!.id);
+  const user = await userService.updateUserStatus(paramStr(req.params.id), req.body.isActive, {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
   sendSuccess(res, 200, "Status updated", { user });
 });
 

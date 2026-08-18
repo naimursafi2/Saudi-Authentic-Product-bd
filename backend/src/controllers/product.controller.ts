@@ -30,7 +30,16 @@ export const updateProduct = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const deleteProduct = catchAsync(async (req: Request, res: Response) => {
-  await productService.deleteProduct(paramStr(req.params.id));
+  const result = await productService.deleteProduct(paramStr(req.params.id), {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
+  if (result.kind === "pending") {
+    sendSuccess(res, 202, "Product deletion requires Super Admin approval — submitted for review", {
+      pendingActionId: result.pendingActionId,
+    });
+    return;
+  }
   sendSuccess(res, 200, "Product deleted");
 });
 

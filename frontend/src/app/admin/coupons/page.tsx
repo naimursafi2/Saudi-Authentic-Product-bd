@@ -21,8 +21,7 @@ function formatDiscount(coupon: ApiCoupon): string {
 
 export default function AdminCouponsPage() {
   const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
-  const canManage = user?.role === "admin" || user?.role === "super_admin";
+  const canDelete = user?.role === "admin" || user?.role === "super_admin";
 
   const [coupons, setCoupons] = useState<ApiCoupon[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -32,6 +31,7 @@ export default function AdminCouponsPage() {
   const [editing, setEditing] = useState<ApiCoupon | "new" | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
 
   function load() {
     setIsLoading(true);
@@ -64,10 +64,13 @@ export default function AdminCouponsPage() {
         isActive: values.isActive,
       };
 
-      if (editing === "new") {
-        await createCoupon(payload);
-      } else if (editing) {
-        await updateCoupon(editing._id, payload);
+      const { data } =
+        editing === "new" ? await createCoupon(payload) : await updateCoupon((editing as ApiCoupon)._id, payload);
+
+      if (data.pendingActionId) {
+        setPendingNotice(
+          "This discount is above the auto-approve threshold and has been submitted for Super Admin approval — see Approvals."
+        );
       }
       setEditing(null);
       load();
@@ -84,19 +87,6 @@ export default function AdminCouponsPage() {
     load();
   }
 
-  if (isRestricted) {
-    return (
-      <div>
-        <PageHeader title="Coupons" />
-        <EmptyState
-          icon={Tag}
-          title="Access restricted"
-          description="Coupon management is available to Admin and Super Admin only."
-        />
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader
@@ -108,6 +98,12 @@ export default function AdminCouponsPage() {
           </Button>
         }
       />
+
+      {pendingNotice && (
+        <div className="mb-4 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+          {pendingNotice}
+        </div>
+      )}
 
       {isLoading ? (
         <TableSkeleton />
@@ -157,7 +153,7 @@ export default function AdminCouponsPage() {
                     >
                       <Pencil size={15} />
                     </button>
-                    {canManage && (
+                    {canDelete && (
                       <button
                         aria-label="Delete"
                         onClick={() => handleDelete(coupon)}

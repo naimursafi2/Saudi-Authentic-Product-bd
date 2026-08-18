@@ -32,6 +32,7 @@ import type { ApiCategory, ApiHeroSlide, ApiHomepageSection, HomepageSectionType
 
 const SECTION_LABELS: Record<HomepageSectionType, string> = {
   hero: "Hero Banner",
+  trustStrip: "Trust Strip",
   featuredCategories: "Featured Categories",
   bestSellers: "Best Sellers",
   productStory: "Product Story",
@@ -64,6 +65,7 @@ function sectionFormData(values: HomepageSectionFormValues, image: File | null):
   form.set("categorySlug", values.categorySlug);
   form.set("productMode", values.productMode);
   form.set("limit", String(values.limit));
+  form.set("blocks", JSON.stringify(values.blocks));
   if (image) form.set("image", image);
   return form;
 }

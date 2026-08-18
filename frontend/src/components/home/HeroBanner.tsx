@@ -1,14 +1,6 @@
-import { BadgeCheck, Globe2, ShieldCheck, Truck } from "lucide-react";
 import { listHeroSlides } from "@/lib/api/heroSlides";
 import { HeroCarousel, type HeroSlideData } from "@/components/home/HeroCarousel";
 import type { ApiHomepageSection } from "@/types/api";
-
-const BENEFITS = [
-  { icon: BadgeCheck, label: "100% Authentic" },
-  { icon: Globe2, label: "Imported from Saudi" },
-  { icon: Truck, label: "Fast Delivery" },
-  { icon: ShieldCheck, label: "Quality Assured" },
-];
 
 const FALLBACK_TITLE = "Authentic Saudi Products\nDelivered to Your Doorstep.";
 const FALLBACK_SUBTITLE =
@@ -41,21 +33,5 @@ export async function HeroBanner({ section }: { section?: ApiHomepageSection }) 
           },
         ];
 
-  return (
-    <>
-      <HeroCarousel slides={slides} />
-      <ul className="mx-auto grid w-full max-w-[1200px] grid-cols-2 gap-x-6 gap-y-5 border-b border-brown-600/10 px-6 py-8 sm:grid-cols-4 sm:gap-4 sm:px-10 lg:px-16">
-        {BENEFITS.map(({ icon: Icon, label }) => (
-          <li key={label} className="flex flex-col items-center gap-2 text-center sm:flex-row sm:text-left">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950 text-gold-500">
-              <Icon size={16} strokeWidth={2} />
-            </span>
-            <span className="text-xs font-bold uppercase tracking-[0.08em] text-green-950 sm:text-[13px]">
-              {label}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+  return <HeroCarousel slides={slides} />;
 }

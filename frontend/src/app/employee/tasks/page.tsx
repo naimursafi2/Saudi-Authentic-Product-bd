@@ -7,9 +7,18 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { cn } from "@/lib/utils";
-import type { ApiTask, TaskStatus } from "@/types/hr";
+import type { ApiTask, TaskStatus, TaskType } from "@/types/hr";
 
 const STATUS_OPTIONS: TaskStatus[] = ["todo", "in_progress", "done"];
+const TASK_TYPE_OPTIONS: TaskType[] = [
+  "packing",
+  "product_counting",
+  "stock_checking",
+  "warehouse",
+  "customer_support",
+  "data_entry",
+  "product_preparation",
+];
 
 const PRIORITY_ACCENT: Record<string, string> = {
   high: "border-l-[#8a4a3f]",
@@ -22,6 +31,7 @@ export default function EmployeeTasksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<TaskType | "">("");
 
   function load() {
     setIsLoading(true);
@@ -47,19 +57,36 @@ export default function EmployeeTasksPage() {
     }
   }
 
+  const visibleTasks = typeFilter ? tasks.filter((t) => t.type === typeFilter) : tasks;
+
   return (
     <div>
       <PageHeader title="My Tasks" description="Tasks assigned to you." />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as TaskType | "")}
+          className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+        >
+          <option value="">All task types</option>
+          {TASK_TYPE_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {t.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {isLoading ? (
         <TableSkeleton />
       ) : error ? (
         <ErrorState message={error} />
-      ) : tasks.length === 0 ? (
+      ) : visibleTasks.length === 0 ? (
         <EmptyState icon={ListChecks} title="No tasks assigned" description="You're all caught up." />
       ) : (
         <div className="flex flex-col gap-3">
-          {tasks.map((task) => (
+          {visibleTasks.map((task) => (
             <div
               key={task._id}
               className={cn(
@@ -71,6 +98,9 @@ export default function EmployeeTasksPage() {
                 <p className="font-semibold text-green-950">{task.title}</p>
                 {task.description && <p className="mt-1 text-sm text-brown-500">{task.description}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-brown-500">
+                  <span className="rounded-full bg-green-950/5 px-2.5 py-0.5 font-bold uppercase text-green-900">
+                    {task.type.replace(/_/g, " ")}
+                  </span>
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-0.5 font-bold uppercase",
