@@ -9,8 +9,8 @@ Bangladesh.
 
 ```
 Saudi-Authentic-Product/
-├── backend/     Express 5 + TypeScript + Mongoose REST API
-├── frontend/    Next.js 16 (App Router) + React 19 + TypeScript
+├── server/      Express 5 + TypeScript + Mongoose REST API
+├── client/      Next.js 16 (App Router) + React 19 + TypeScript
 ├── .gitignore   Shared by both apps
 ├── README.md    You are here
 └── CLAUDE.md    Architecture, conventions & rules for AI coding agents
@@ -34,7 +34,7 @@ form or state-management library — forms/data fetching are hand-rolled with
 
 ## Features
 
-- **Customer storefront** (`frontend/src/app/(site)`): home, shop (filterable
+- **Customer storefront** (`client/src/app/(site)`): home, shop (filterable
   catalog), product detail (image gallery, variant/quantity selection, a
   wishlist toggle alongside Add to Cart/Buy Now, reviews, delivery info,
   related products), categories, offers (discounted variants), cart,
@@ -82,7 +82,7 @@ form or state-management library — forms/data fetching are hand-rolled with
   `google-auth-library`) but stays inactive — button hidden, endpoint 503s —
   until a `GOOGLE_CLIENT_ID` is configured (see Environment variables).
 - **Admin / Co-Admin / Super Admin / Order Manager portal**
-  (`frontend/src/app/admin`, fully built): dashboard (live stats), products
+  (`client/src/app/admin`, fully built): dashboard (live stats), products
   (deletion is Super-Admin-direct / Co-Admin-request-only — Admin has no
   product-deletion access at all), categories, orders (including assigning
   a delivery agent once an order is ready for dispatch), refunds (Order
@@ -130,12 +130,12 @@ form or state-management library — forms/data fetching are hand-rolled with
   entry (actor, role, action, resource, before/after values, optional
   note), visible at `/admin/audit-logs` — scoped to the viewer's own
   actions unless they're admin/super_admin.
-- **Employee portal** (`frontend/src/app/employee`, fully built):
+- **Employee portal** (`client/src/app/employee`, fully built):
   check-in/out + attendance history, tasks (filterable by type — packing,
   product counting, stock checking, warehouse, customer support, data entry,
   product preparation), leave requests, performance history, salary/payment
   history, and a profile page (avatar + address).
-- **Delivery portal** (`frontend/src/app/delivery`, fully built, `delivery_agent`
+- **Delivery portal** (`client/src/app/delivery`, fully built, `delivery_agent`
   role only — structurally excluded from `/admin`): a dashboard of assigned-
   order counts, an assigned-orders list with a detail view for marking an
   order picked up / out for delivery, entering the customer's OTP to confirm
@@ -205,7 +205,7 @@ Requires Node.js 20+ and a MongoDB connection string.
 ### 1. Backend
 
 ```bash
-cd backend
+cd server
 npm install
 cp .env.example .env   # fill in MongoDB, JWT secrets, Cloudinary, SMTP
 npm run seed            # creates a super admin + sample staff, categories, products, homepage sections
@@ -220,7 +220,7 @@ npm start                # runs dist/server.js, http://localhost:5000
 ```
 
 > On machines affected by the local DNS resolver bug described in
-> `backend/scripts/dev-dns-preload.cjs` (SRV lookups for `mongodb+srv://`
+> `server/scripts/dev-dns-preload.cjs` (SRV lookups for `mongodb+srv://`
 > failing with `ECONNREFUSED` even though normal DNS works), both
 > `npm run dev:dns-fix` and `npm start` already load that DNS preload
 > automatically — no manual `NODE_OPTIONS` needed. `npm run dev` does not,
@@ -232,19 +232,19 @@ npm start                # runs dist/server.js, http://localhost:5000
 ### 2. Frontend
 
 ```bash
-cd frontend
+cd client
 npm install
 cp .env.example .env    # NEXT_PUBLIC_API_URL (defaults to http://localhost:5000/api/v1)
 npm run dev              # http://localhost:3000
 ```
 
-Seeded login (see `backend/src/seed/seed.ts` for the full list): a super
+Seeded login (see `server/src/seed/seed.ts` for the full list): a super
 admin from your `.env`, plus sample `admin`, `co_admin`, and two `employee`
 accounts, all with password `Employee123!`.
 
 ## Scripts
 
-Run from inside `backend/` or `frontend/` respectively:
+Run from inside `server/` or `client/` respectively:
 
 | Script                | Backend | Frontend |
 | --------------------- | ------- | -------- |
@@ -257,18 +257,18 @@ Run from inside `backend/` or `frontend/` respectively:
 | `npm test`             | ✅ Jest (unit + integration, see Testing below) | ✅ Vitest + RTL (`npm run test:watch` for watch mode) |
 | `npm run seed`         | ✅ bootstrap DB | — |
 
-`npm start` and `npm run dev:dns-fix` both load `backend/scripts/dev-dns-preload.cjs`
+`npm start` and `npm run dev:dns-fix` both load `server/scripts/dev-dns-preload.cjs`
 automatically (see the note above) — no manual `NODE_OPTIONS` needed on this
 machine.
 
 ## Testing
 
-- **Backend**: `npm test` runs Jest (`backend/jest.config.js`, ts-jest) over
-  `backend/src/tests/*.test.ts` — 10 unit-style specs covering `ApiError`,
+- **Backend**: `npm test` runs Jest (`server/jest.config.js`, ts-jest) over
+  `server/src/tests/*.test.ts` — 10 unit-style specs covering `ApiError`,
   app bootstrap, the `booleanish` zod helper, `notFoundHandler`, JWT utils,
   `paramStr`, the `authorize` RBAC middleware (including the
   `order_manager`/`delivery_agent` roles), shipping-fee calculation,
-  `slugify`, and the `validate` middleware — plus `backend/src/tests/
+  `slugify`, and the `validate` middleware — plus `server/src/tests/
   integration/*.integration.test.ts`, real end-to-end HTTP specs (auth,
   catalog RBAC/creation, order creation/stock/tracking, the full order status
   pipeline including RBAC/self-scoping/OTP for the delivery workflow,
@@ -290,11 +290,11 @@ machine.
 
 ## Environment variables
 
-Each app documents its own variables in `backend/.env.example` and
-`frontend/.env.example` — copy them to `.env` and fill in real values.
+Each app documents its own variables in `server/.env.example` and
+`client/.env.example` — copy them to `.env` and fill in real values.
 Never commit `.env` files; the root `.gitignore` already excludes them.
 
-**Backend** (`backend/.env.example`, validated by a Zod schema in
+**Backend** (`server/.env.example`, validated by a Zod schema in
 `src/config/env.ts` — the app fails fast on startup if a required var is
 missing/malformed):
 
@@ -310,10 +310,10 @@ missing/malformed):
 | `COOKIE_DOMAIN` | domain for the auth cookies |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | image uploads; blank → upload endpoints return 503, rest of the app still works |
 | `SMTP_SERVICE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | staff/customer email notifications; blank → sends become a silent logged no-op |
-| `GOOGLE_CLIENT_ID` | Google Sign-In OAuth Client ID; blank → `/auth/google` returns 503 and the frontend button stays hidden. Not a secret — see `backend/.env.example` for how to obtain one |
+| `GOOGLE_CLIENT_ID` | Google Sign-In OAuth Client ID; blank → `/auth/google` returns 503 and the frontend button stays hidden. Not a secret — see `server/.env.example` for how to obtain one |
 | `SEED_SUPER_ADMIN_NAME` / `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` | bootstrap super-admin account used by `npm run seed` |
 
-**Frontend** (`frontend/.env.example`):
+**Frontend** (`client/.env.example`):
 
 | Variable | Purpose |
 | --- | --- |
@@ -361,7 +361,7 @@ missing/malformed):
   sees the restricted state). `/admin/coupons` and `/admin/expenses` are
   **not** on this restricted list — co_admin has real, working access to
   both now.
-- No `frontend/src/middleware.ts` — admin/employee route protection is
+- No `client/src/middleware.ts` — admin/employee route protection is
   client-side only (`RoleGuard`); the backend is the real authorization
   boundary.
 - Storefront registration requires email verification for placing orders
@@ -388,11 +388,11 @@ missing/malformed):
 
 ## Notes
 
-- `frontend/AGENTS.md` is managed by the Next.js CLI itself (rewritten by
+- `client/AGENTS.md` is managed by the Next.js CLI itself (rewritten by
   `next dev` when it detects an AI coding agent) — it flags that this Next.js
   major version may differ from an agent's training data. Leave it in place;
   its presence is also what stops Next.js from re-creating a duplicate
-  `frontend/CLAUDE.md`, since this project keeps a single `CLAUDE.md` at the
+  `client/CLAUDE.md`, since this project keeps a single `CLAUDE.md` at the
   repo root.
 - Keep this README and `CLAUDE.md` up to date as the codebase changes — see
   the "Documentation maintenance" note at the end of `CLAUDE.md`.

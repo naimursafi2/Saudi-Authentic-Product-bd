@@ -1,4 +1,4 @@
-# Shared root .gitignore for both backend/ and frontend/.
+# Shared root .gitignore for both server/ and client/.
 # Patterns are unanchored so they match at any depth in either app.
 
 # Dependencies
