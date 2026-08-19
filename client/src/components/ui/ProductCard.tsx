@@ -9,6 +9,7 @@ import { StarRating } from "./StarRating";
 import { Button } from "./Button";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
+import { isStockOut, firstAvailableVariant } from "@/lib/stock";
 
 interface ProductCardProps {
   product: Product;
@@ -27,6 +28,10 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const { isWishlisted, toggleWishlist } = useWishlist();
   const defaultVariant = product.variants[0];
   const wishlisted = isWishlisted(product.id);
+  const stockOut = isStockOut(product);
+  // Quick-add targets the first variant that can actually ship, so a card
+  // whose default size sold out still adds something real to the cart.
+  const addableVariant = firstAvailableVariant(product);
   const discountPercent =
     defaultVariant.compareAtPriceBDT && defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT
       ? Math.round(
@@ -64,9 +69,14 @@ export function ProductCard({ product, className }: ProductCardProps) {
               {product.badge}
             </span>
           )}
-          {discountPercent != null && (
+          {discountPercent != null && !stockOut && (
             <span className="rounded-full border border-black/5 bg-[#8a4a3f] px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
               Save {discountPercent}%
+            </span>
+          )}
+          {stockOut && (
+            <span className="rounded-full border border-black/5 bg-brown-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
+              Stock Out
             </span>
           )}
         </div>
@@ -105,12 +115,15 @@ export function ProductCard({ product, className }: ProductCardProps) {
             type="button"
             variant="primary"
             size="xs"
-            aria-label={`Add ${product.name} to cart`}
-            onClick={() => addItem(product.id, defaultVariant.id, 1)}
+            disabled={!addableVariant}
+            aria-label={
+              addableVariant ? `Add ${product.name} to cart` : `${product.name} is out of stock`
+            }
+            onClick={() => addableVariant && addItem(product.id, addableVariant.id, 1)}
             className="w-full gap-2 rounded-full shadow-sm transition-all duration-300 hover:shadow-[0_6px_16px_rgba(1,45,29,0.25)]"
           >
             <ShoppingCart size={14} />
-            Add to Cart
+            {addableVariant ? "Add to Cart" : "Stock Out"}
           </Button>
         </div>
       </div>

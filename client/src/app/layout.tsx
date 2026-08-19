@@ -14,6 +14,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { CartDrawer } from "@/components/layout/CartDrawer";
+import { ImpersonationBanner } from "@/components/account/ImpersonationBanner";
 
 export const metadata: Metadata = {
   title: {
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <CartProvider>
             <WishlistProvider>
+              <ImpersonationBanner />
               {children}
               <CartDrawer />
             </WishlistProvider>

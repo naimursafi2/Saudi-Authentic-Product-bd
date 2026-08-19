@@ -20,8 +20,30 @@ export async function register(payload: RegisterPayload) {
   return api.post<{ user: ApiUser; accessToken: string }>("/auth/register", payload);
 }
 
+/** A 2FA-enabled account returns a challenge instead of a session — see
+ * `verifyTwoFactorLogin` for the second step. */
+export type LoginResponse =
+  | { user: ApiUser; accessToken: string; requiresTwoFactor?: undefined }
+  | { requiresTwoFactor: true; challengeToken: string; user?: undefined };
+
 export async function login(email: string, password: string) {
-  return api.post<{ user: ApiUser; accessToken: string }>("/auth/login", { email, password });
+  return api.post<LoginResponse>("/auth/login", { email, password });
+}
+
+export async function verifyTwoFactorLogin(challengeToken: string, code: string) {
+  return api.post<{ user: ApiUser; accessToken: string }>("/auth/2fa/verify", { challengeToken, code });
+}
+
+export async function startTwoFactorSetup() {
+  return api.post<{ secret: string; otpauthUrl: string; qrDataUrl: string }>("/auth/2fa/setup");
+}
+
+export async function enableTwoFactor(code: string) {
+  return api.post<{ recoveryCodes: string[] }>("/auth/2fa/enable", { code });
+}
+
+export async function disableTwoFactor(password: string) {
+  return api.post<null>("/auth/2fa/disable", { password });
 }
 
 export async function googleAuth(idToken: string) {
@@ -33,7 +55,7 @@ export async function logout() {
 }
 
 export async function getMe() {
-  return api.get<{ user: ApiUser }>("/auth/me");
+  return api.get<{ user: ApiUser; impersonatedBy?: string }>("/auth/me");
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {

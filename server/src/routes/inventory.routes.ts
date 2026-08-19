@@ -3,14 +3,37 @@ import * as inventoryController from "../controllers/inventory.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
-import { adjustStockSchema, listInventoryLogsQuerySchema } from "../validators/inventory.validator";
+import {
+  adjustStockSchema,
+  listInventoryLogsQuerySchema,
+  stockLevelsQuerySchema,
+} from "../validators/inventory.validator";
 
 const router = Router();
 
-router.use(authenticate, authorize("admin", "super_admin", "co_admin"));
+router.use(authenticate);
 
-router.get("/low-stock", inventoryController.lowStock);
-router.get("/logs", validate({ query: listInventoryLogsQuerySchema }), inventoryController.listLogs);
-router.post("/adjust", validate({ body: adjustStockSchema }), inventoryController.adjustStock);
+// Read-only live stock, also readable by `employee` (and `order_manager`) —
+// warehouse/stock-checking staff need the real count without any ability to
+// change it. Everything below stays admin-tier.
+router.get(
+  "/stock",
+  authorize("employee", "order_manager", "co_admin", "admin", "super_admin"),
+  validate({ query: stockLevelsQuerySchema }),
+  inventoryController.stockLevels
+);
+
+const ADMIN_TIER = authorize("admin", "super_admin", "co_admin");
+
+router.get("/low-stock", ADMIN_TIER, inventoryController.lowStock);
+router.get(
+  "/logs",
+  ADMIN_TIER,
+  validate({ query: listInventoryLogsQuerySchema }),
+  inventoryController.listLogs
+);
+// Applies immediately only for `super_admin`; every other role's adjustment is
+// queued for approval (see inventory.service.ts#adjustStock).
+router.post("/adjust", ADMIN_TIER, validate({ body: adjustStockSchema }), inventoryController.adjustStock);
 
 export default router;

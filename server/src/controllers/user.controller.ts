@@ -47,6 +47,22 @@ export const updateStaffMeta = catchAsync(async (req: Request, res: Response) =>
   sendSuccess(res, 200, "Staff details updated", { user });
 });
 
+export const unlockAccount = catchAsync(async (req: Request, res: Response) => {
+  const user = await userService.unlockUserAccount(paramStr(req.params.id), {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
+  sendSuccess(res, 200, "Account unlocked", { user });
+});
+
+export const impersonate = catchAsync(async (req: Request, res: Response) => {
+  const { accessToken, user } = await userService.impersonateUser(paramStr(req.params.id), {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
+  sendSuccess(res, 200, `Now acting as ${user.name}`, { accessToken, user });
+});
+
 export const addAddress = catchAsync(async (req: Request, res: Response) => {
   const user = await userService.addAddress(req.user!.id, req.body);
   sendSuccess(res, 201, "Address added", { user });

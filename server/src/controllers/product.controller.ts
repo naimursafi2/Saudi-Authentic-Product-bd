@@ -19,14 +19,35 @@ export const getProduct = catchAsync(async (req: Request, res: Response) => {
 
 export const createProduct = catchAsync(async (req: Request, res: Response) => {
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-  const product = await productService.createProduct(req.body, files);
-  sendSuccess(res, 201, "Product created", { product });
+  const actor = { id: req.user!.id, role: req.user!.role };
+  const { product, stockPendingActionId } = await productService.createProduct(req.body, actor, files);
+  sendSuccess(
+    res,
+    201,
+    stockPendingActionId
+      ? "Product created — its stock quantities need Super Admin approval before going live"
+      : "Product created",
+    { product, stockPendingActionId }
+  );
 });
 
 export const updateProduct = catchAsync(async (req: Request, res: Response) => {
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-  const product = await productService.updateProduct(paramStr(req.params.id), req.body, files);
-  sendSuccess(res, 200, "Product updated", { product });
+  const actor = { id: req.user!.id, role: req.user!.role };
+  const { product, stockPendingActionId } = await productService.updateProduct(
+    paramStr(req.params.id),
+    req.body,
+    actor,
+    files
+  );
+  sendSuccess(
+    res,
+    200,
+    stockPendingActionId
+      ? "Product updated — the stock change needs Super Admin approval before going live"
+      : "Product updated",
+    { product, stockPendingActionId }
+  );
 });
 
 export const deleteProduct = catchAsync(async (req: Request, res: Response) => {

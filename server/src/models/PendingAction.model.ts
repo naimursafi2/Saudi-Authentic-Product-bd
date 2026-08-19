@@ -12,6 +12,8 @@ export const PENDING_ACTION_TYPES = [
   "coupon.create",
   "coupon.update",
   "product.delete",
+  "product.stock.update",
+  "inventory.adjust",
   "refund.request",
   "refund.approve",
   "expense.confirm",

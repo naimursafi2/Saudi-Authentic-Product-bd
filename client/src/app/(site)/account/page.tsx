@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Heart, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Heart } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { AuthForms } from "@/components/account/AuthForms";
@@ -12,8 +13,16 @@ import { ProfileSection } from "@/components/account/ProfileSection";
 import { DashboardOverview } from "@/components/account/DashboardOverview";
 import { CustomerSidebar, type AccountTab } from "@/components/account/CustomerSidebar";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { Button, ButtonLink } from "@/components/ui/Button";
-import { ADMIN_PORTAL_ROLES, STAFF_ROLES } from "@/lib/roles";
+import { ButtonLink } from "@/components/ui/Button";
+import { STAFF_ROLES } from "@/lib/roles";
+import type { Role } from "@/types/api";
+
+/** Where each staff role lands immediately after sign-in — no intermediate choice screen. */
+function staffPortalPath(role: Role): string {
+  if (role === "employee") return "/employee";
+  if (role === "delivery_agent") return "/delivery";
+  return "/admin";
+}
 
 const TAB_COPY: Record<AccountTab, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Your account at a glance." },
@@ -27,8 +36,16 @@ export default function AccountPage() {
   const { user, status, logout } = useAuth();
   const { items: wishlistItems } = useWishlist();
   const [tab, setTab] = useState<AccountTab>("dashboard");
+  const router = useRouter();
+  const isStaff = Boolean(user && STAFF_ROLES.includes(user.role));
 
-  if (status === "loading") {
+  useEffect(() => {
+    if (status === "authenticated" && user && isStaff) {
+      router.replace(staffPortalPath(user.role));
+    }
+  }, [status, user, isStaff, router]);
+
+  if (status === "loading" || (status === "authenticated" && isStaff)) {
     return (
       <div className="mx-auto max-w-[1200px] px-6 py-24">
         <div className="h-40 w-full animate-pulse rounded-xl bg-cream-300" />
@@ -38,46 +55,6 @@ export default function AccountPage() {
 
   if (status === "unauthenticated" || !user) {
     return <AuthForms />;
-  }
-
-  const isStaff = STAFF_ROLES.includes(user.role);
-
-  if (isStaff) {
-    return (
-      <div className="mx-auto max-w-[1100px] px-6 py-10 sm:px-10 lg:py-14">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
-          <div>
-            <h1 className="font-serif text-2xl text-green-950">{user.name}</h1>
-            <p className="text-sm text-brown-500">{user.email}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {ADMIN_PORTAL_ROLES.includes(user.role) && (
-              <ButtonLink href="/admin" variant="outline" size="sm">
-                Admin Portal
-              </ButtonLink>
-            )}
-            {user.role === "employee" && (
-              <ButtonLink href="/employee" variant="outline" size="sm">
-                Employee Portal
-              </ButtonLink>
-            )}
-            {user.role === "delivery_agent" && (
-              <ButtonLink href="/delivery" variant="outline" size="sm">
-                Delivery Portal
-              </ButtonLink>
-            )}
-            <Button variant="ghost" size="sm" onClick={logout}>
-              <LogOut size={14} /> Sign Out
-            </Button>
-          </div>
-        </div>
-        <div className="rounded-xl border border-brown-600/10 bg-white p-8 text-center">
-          <p className="text-sm text-brown-600">
-            Staff accounts manage attendance, tasks and more from their dedicated portal above.
-          </p>
-        </div>
-      </div>
-    );
   }
 
   return (

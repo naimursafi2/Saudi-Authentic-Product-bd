@@ -126,10 +126,71 @@ export async function sendDeliveryOtpEmail(
   await safeSend(to, `Delivery code — #${opts.orderNumber}`, html);
 }
 
+export async function sendAccountLockedEmail(to: string, name: string, lockMinutes: number): Promise<void> {
+  const html = layout(
+    "Your account has been temporarily locked",
+    `<p>Hi ${name},</p>
+     <p>We detected too many failed sign-in attempts on your account, so it has been locked for
+     <strong>${lockMinutes} minutes</strong> as a precaution.</p>
+     <p>If this was you, simply wait and try again. If it wasn't, reset your password as soon as the lock lifts.</p>
+     ${button("Reset Password", `${FRONTEND_URL}/account`)}`
+  );
+  await safeSend(to, "Account temporarily locked — Saudi Authentic Product", html);
+}
+
+export async function sendNewOrderStaffAlertEmail(
+  to: string,
+  name: string,
+  opts: { orderNumber: string; totalBDT: number; customerName: string; itemCount: number }
+): Promise<void> {
+  const amount = new Intl.NumberFormat("en-IN").format(Math.round(opts.totalBDT));
+  const html = layout(
+    "New order received",
+    `<p>Hi ${name},</p>
+     <p>Order <strong>#${opts.orderNumber}</strong> has just been placed by <strong>${opts.customerName}</strong>.</p>
+     <p>${opts.itemCount} item(s) &middot; Total: <strong>৳ ${amount}</strong></p>
+     ${button("Open Orders", `${FRONTEND_URL}/admin/orders`)}`
+  );
+  await safeSend(to, `New order — #${opts.orderNumber}`, html);
+}
+
+export async function sendLowStockAlertEmail(
+  to: string,
+  name: string,
+  opts: { productName: string; variantLabel: string; stock: number; threshold: number }
+): Promise<void> {
+  const html = layout(
+    "Low stock alert",
+    `<p>Hi ${name},</p>
+     <p><strong>${opts.productName}</strong> (${opts.variantLabel}) has dropped to
+     <strong>${opts.stock}</strong> unit(s), at or below its threshold of ${opts.threshold}.</p>
+     ${button("Open Inventory", `${FRONTEND_URL}/admin/inventory`)}`
+  );
+  await safeSend(to, `Low stock — ${opts.productName}`, html);
+}
+
+export async function sendDeliveryFailedAlertEmail(
+  to: string,
+  name: string,
+  opts: { orderNumber: string; agentName: string; failureReason: string }
+): Promise<void> {
+  const html = layout(
+    "Delivery failed",
+    `<p>Hi ${name},</p>
+     <p>Delivery of order <strong>#${opts.orderNumber}</strong> failed and needs to be re-dispatched.</p>
+     <p>Agent: <strong>${opts.agentName}</strong></p>
+     <p>Reason: ${opts.failureReason}</p>
+     ${button("Open Orders", `${FRONTEND_URL}/admin/orders`)}`
+  );
+  await safeSend(to, `Delivery failed — #${opts.orderNumber}`, html);
+}
+
 const PENDING_ACTION_LABELS: Record<string, string> = {
   "coupon.create": "a new coupon",
   "coupon.update": "a coupon update",
   "product.delete": "a product deletion",
+  "product.stock.update": "a product stock update",
+  "inventory.adjust": "a stock adjustment",
   "refund.request": "a refund request",
   "refund.approve": "a refund approval",
   "expense.confirm": "an expense confirmation",

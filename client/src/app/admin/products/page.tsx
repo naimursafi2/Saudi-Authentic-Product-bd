@@ -69,11 +69,13 @@ export default function AdminProductsPage() {
       form.set("isFeatured", String(values.isFeatured));
       images.forEach((file) => form.append("images", file));
 
-      if (editing === "new") {
-        await createProduct(form);
-      } else if (editing) {
-        await updateProduct(editing._id, form);
-      }
+      const { data } =
+        editing === "new" ? await createProduct(form) : await updateProduct(editing!._id, form);
+      setPendingNotice(
+        data.stockPendingActionId
+          ? `Saved. The stock quantities for "${values.name}" need Super Admin approval before they go live — see Approvals.`
+          : null
+      );
       setEditing(null);
       load();
     } catch (err) {
@@ -146,7 +148,15 @@ export default function AdminProductsPage() {
                       <span className="font-medium text-green-950">{product.name}</span>
                     </td>
                     <td className="px-4 py-3 text-brown-600">{formatBDT(product.minPriceBDT)}</td>
-                    <td className="px-4 py-3 text-brown-600">{totalStock}</td>
+                    <td className="px-4 py-3">
+                      {totalStock === 0 ? (
+                        <span className="rounded-full bg-brown-600 px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">
+                          Stock Out
+                        </span>
+                      ) : (
+                        <span className="text-brown-600">{totalStock}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${

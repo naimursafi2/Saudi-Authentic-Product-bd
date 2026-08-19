@@ -7,6 +7,7 @@ import { ApiError } from "../utils/ApiError";
 import { computeShippingFee } from "../constants/shipping";
 import { recordStockChange } from "./inventory.service";
 import { sendOrderConfirmationEmail, sendDeliveryOtpEmail } from "./email.service";
+import { notifyNewOrder, notifyLowStock, notifyDeliveryFailed } from "./notification.service";
 import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
 import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
 import type { Role } from "../constants/roles";
@@ -158,17 +159,29 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
         reason: "order_placed",
         note: `Order ${orderNumber}`,
       });
+
+      // Alert only on the crossing, not on every further sale below the line,
+      // so a persistently low variant doesn't email staff on every order.
+      if (updated && variant) {
+        const before = variant.stock + item.quantity;
+        if (before > variant.lowStockThreshold && variant.stock <= variant.lowStockThreshold) {
+          void notifyLowStock({
+            productName: updated.name,
+            variantLabel: variant.label,
+            stock: variant.stock,
+            threshold: variant.lowStockThreshold,
+          });
+        }
+      }
     })
   );
 
   // Fire-and-forget — sendOrderConfirmationEmail already swallows its own
   // errors, and a real SMTP round-trip is too slow to make the customer
   // wait on before confirming their order.
-  void sendOrderConfirmationEmail(
-    input.shippingAddress.email,
-    `${input.shippingAddress.firstName} ${input.shippingAddress.lastName}`,
-    { orderNumber, totalBDT }
-  );
+  const customerName = `${input.shippingAddress.firstName} ${input.shippingAddress.lastName}`;
+  void sendOrderConfirmationEmail(input.shippingAddress.email, customerName, { orderNumber, totalBDT });
+  void notifyNewOrder({ orderNumber, totalBDT, customerName, itemCount: items.length });
 
   return order;
 }
@@ -411,5 +424,13 @@ export async function markDeliveryFailed(orderId: string, agentId: string, failu
   order.otpExpiresAt = undefined;
 
   await order.save();
+
+  const agent = await UserModel.findById(agentId).select("name");
+  void notifyDeliveryFailed({
+    orderNumber: order.orderNumber,
+    agentName: agent?.name ?? "Unknown agent",
+    failureReason,
+  });
+
   return order;
 }

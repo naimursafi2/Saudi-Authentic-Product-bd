@@ -73,6 +73,29 @@ export function setAuthFailureHandler(handler: (() => void) | null) {
   onAuthFailure = handler;
 }
 
+const IMPERSONATION_STORAGE_KEY = "sap:impersonation";
+
+/**
+ * While a Super Admin is impersonating someone, every request is sent as
+ * that user via `Authorization: Bearer` instead of the cookie session. The
+ * admin's own httpOnly cookies stay untouched underneath, so ending the
+ * impersonation is just dropping this token — no re-login needed. It lives
+ * in sessionStorage so it dies with the tab and never leaks into another.
+ */
+let impersonationToken: string | null =
+  typeof window === "undefined" ? null : window.sessionStorage.getItem(IMPERSONATION_STORAGE_KEY);
+
+export function getImpersonationToken(): string | null {
+  return impersonationToken;
+}
+
+export function setImpersonationToken(token: string | null) {
+  impersonationToken = token;
+  if (typeof window === "undefined") return;
+  if (token) window.sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, token);
+  else window.sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+}
+
 /**
  * Thin wrapper around fetch matching the backend's `{success, message, data,
  * pagination?}` envelope. Always sends cookies (`credentials: "include"`) so
@@ -86,6 +109,9 @@ export function setAuthFailureHandler(handler: (() => void) | null) {
 async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<ApiResult<T>> {
   const { method = "GET", body, isFormData = false, signal } = options;
 
+  const headers: Record<string, string> = isFormData ? {} : { "Content-Type": "application/json" };
+  if (impersonationToken) headers.Authorization = `Bearer ${impersonationToken}`;
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
@@ -93,7 +119,7 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
     // time — never let the browser or Next.js server-fetch cache serve a
     // stale response.
     cache: "no-store",
-    headers: isFormData ? undefined : { "Content-Type": "application/json" },
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
     signal,
   });
@@ -102,7 +128,12 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
   const payload = isJson ? ((await res.json()) as ApiEnvelope<T>) : null;
 
   if (!res.ok || !payload?.success) {
-    if (res.status === 401 && !isRetry && !NO_REFRESH_RETRY_PATHS.some((p) => path.startsWith(p))) {
+    // An expired impersonation token can't be refreshed — drop it so the
+    // next request falls back to the Super Admin's own cookie session.
+    if (res.status === 401 && impersonationToken) {
+      setImpersonationToken(null);
+      onAuthFailure?.();
+    } else if (res.status === 401 && !isRetry && !NO_REFRESH_RETRY_PATHS.some((p) => path.startsWith(p))) {
       const refreshed = await refreshAccessToken();
       if (refreshed) {
         return request<T>(path, options, true);

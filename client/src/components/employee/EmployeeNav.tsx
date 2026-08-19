@@ -10,6 +10,7 @@ import {
   Wallet,
   CalendarCheck,
   UserCircle,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/employee", label: "Dashboard", icon: LayoutDashboard },
   { href: "/employee/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/employee/tasks", label: "My Tasks", icon: ListChecks },
+  { href: "/employee/stock", label: "Stock Levels", icon: Boxes },
   { href: "/employee/leave", label: "Leave", icon: CalendarClock },
   { href: "/employee/performance", label: "Performance", icon: TrendingUp },
   { href: "/employee/salary", label: "Salary", icon: Wallet },

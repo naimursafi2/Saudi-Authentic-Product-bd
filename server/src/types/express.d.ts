@@ -8,6 +8,8 @@ declare global {
         role: Role;
         tokenVersion: number;
         isEmailVerified: boolean;
+        /** Set only when a Super Admin is acting as this user via support-login. */
+        impersonatedBy?: string;
       };
     }
   }

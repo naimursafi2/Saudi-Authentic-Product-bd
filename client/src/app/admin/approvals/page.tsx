@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ShieldCheck, Check, X, Settings2 } from "lucide-react";
+import { ShieldCheck, Check, X, Settings2, TriangleAlert } from "lucide-react";
 import { denyPendingAction, grantPendingAction, listPendingActions } from "@/lib/api/pendingActions";
 import { getApprovalSettings, updateApprovalSettings } from "@/lib/api/approvalSettings";
 import { ApiClientError } from "@/lib/api/client";
@@ -20,6 +20,8 @@ const ACTION_LABELS: Record<string, string> = {
   "coupon.create": "Create coupon",
   "coupon.update": "Update coupon",
   "product.delete": "Delete product",
+  "product.stock.update": "Product stock update",
+  "inventory.adjust": "Stock adjustment",
   "refund.request": "Refund request",
   "refund.approve": "Refund approval",
   "expense.confirm": "Expense confirmation",
@@ -42,6 +44,27 @@ function PayloadSummary({ action }: { action: ApiPendingAction }) {
       );
     case "product.delete":
       return <span>{String(p.productName ?? p.productId ?? "")}</span>;
+    case "inventory.adjust": {
+      const delta = Number(p.delta ?? 0);
+      return (
+        <span>
+          {String(p.productName ?? "")} ({String(p.variantLabel ?? "")}){" "}
+          <strong>
+            {delta > 0 ? "+" : ""}
+            {delta}
+          </strong>
+        </span>
+      );
+    }
+    case "product.stock.update": {
+      const stocks = (p.stocks ?? []) as { label: string; stock: number }[];
+      return (
+        <span>
+          {String(p.productName ?? "")} —{" "}
+          {stocks.map((s) => `${s.label}: ${s.stock}`).join(", ") || "no change"}
+        </span>
+      );
+    }
     case "refund.request":
       return <span>{String(p.requestedAmountBDT ?? "")} BDT</span>;
     case "refund.approve":
@@ -96,6 +119,17 @@ export default function AdminApprovalsPage() {
   }, []);
 
   async function handleGrant(action: ApiPendingAction) {
+    const conflicts = action.conflictingActionIds ?? [];
+    if (
+      conflicts.length > 0 &&
+      !confirm(
+        `Heads up: ${conflicts.length} other pending request(s) change the stock of the same variant.\n\n` +
+          "Granting this one applies it now; the others stay pending and will apply on top when granted. " +
+          "Review them together before approving.\n\nGrant this request anyway?"
+      )
+    ) {
+      return;
+    }
     const note = prompt("Note for this approval (optional):") ?? undefined;
     setActionError(null);
     setActingId(action._id);
@@ -267,6 +301,15 @@ export default function AdminApprovalsPage() {
                     </td>
                     <td className="px-4 py-3 text-brown-600">
                       <PayloadSummary action={action} />
+                      {(action.conflictingActionIds?.length ?? 0) > 0 && (
+                        <span
+                          title="Another pending request changes the stock of the same variant. Both will apply in the order you grant them."
+                          className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#fbeceb] px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-[#8a4a3f]"
+                        >
+                          <TriangleAlert size={11} />
+                          Conflicts with {action.conflictingActionIds!.length}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-brown-600">
                       {personName(action.requestedBy)}{" "}

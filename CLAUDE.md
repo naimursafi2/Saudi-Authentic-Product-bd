@@ -36,10 +36,10 @@ Register every new router in `routes/index.ts`.
 
 | Base path | Purpose | Role restrictions (beyond `authenticate`) |
 | --- | --- | --- |
-| `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification. Login/register/google/refresh/forgot/reset/verify-email/resend-verification are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password` require auth; `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
-| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates | create/role/status/staff-meta: `admin`,`super_admin`; list/get: + `co_admin`; all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
+| `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification, plus 2FA (`POST /2fa/setup`, `/2fa/enable`, `/2fa/disable`, `/2fa/verify` — see "Security hardening" below). Login/register/google/refresh/forgot/reset/verify-email/resend-verification/`2fa/verify` are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password`, `/2fa/setup`, `/2fa/enable`, `/2fa/disable` require auth; `/2fa/verify` is public (it carries its own short-lived challenge token); `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
+| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates; `PATCH /:id/unlock` (clear a failed-login lockout); `POST /:id/impersonate` (support-login) | create/role/status/staff-meta/unlock: `admin`,`super_admin`; list/get: + `co_admin`; impersonate: `super_admin` only (and never onto another `super_admin`); all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
-| `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
+| `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
 | `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
 | `/reviews` | public: recent reviews, reviews by product; customer creates one review per product; staff lists all/deletes | list-all/delete: `admin`,`super_admin`,`co_admin` |
 | `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
@@ -47,7 +47,7 @@ Register every new router in `routes/index.ts`.
 | `/tasks` | employee lists own (`/mine`) + updates own status; staff creates/lists (filterable by `type`)/updates/deletes; every task has a required `type` (packing/product_counting/stock_checking/warehouse/customer_support/data_entry/product_preparation) for task-based access categorization | create/list/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/performance-reviews` | employee lists own reviews; staff creates/lists | create/list: `admin`,`super_admin`,`co_admin` |
 | `/salary-payments` | employee lists own payment history; admin creates payment/lists all/updates status/sends notify email | `admin`,`super_admin` **only** — co_admin is deliberately excluded |
-| `/inventory` | low-stock list, logs, manual stock adjustment | `admin`,`super_admin`,`co_admin` for everything (router-level) |
+| `/inventory` | `GET /stock` (read-only live per-variant stock), low-stock list, logs, manual stock adjustment | `GET /stock`: + `employee`,`order_manager` (read-only — warehouse staff need the real count, not the ability to change it); low-stock/logs/adjust: `admin`,`super_admin`,`co_admin`. `POST /adjust` applies immediately **only** for `super_admin`; every other role gets `202 {pendingActionId}` and live stock is unchanged — see "Stock-change approval gate" below |
 | `/reports` | any staff: `/employee-dashboard`; admin/co-admin: `/dashboard`, `/sales` | dashboard/sales: `admin`,`super_admin`,`co_admin` |
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | `admin`,`super_admin` only |
 | `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
@@ -61,7 +61,7 @@ Register every new router in `routes/index.ts`.
 | `/approval-settings` | `GET /`, `PATCH /` (singleton) — the Super-Admin-editable numeric thresholds the approval gate checks against | `super_admin` only |
 | `/investments` | `GET /` (list), `POST /` (create) — append-only partner investment ledger, no update/delete route | list: `admin`,`super_admin`; create: `super_admin` only |
 | `/expenses` | `GET /`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject` | list/create: `co_admin`,`admin`,`super_admin` (co_admin scoped to own submissions); confirm/reject: `admin`,`super_admin` only |
-| `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `order_manager`,`co_admin`,`admin`,`super_admin`; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
+| `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` — a `customer` viewer is force-scoped server-side to their own refunds (same pattern as `co_admin`'s own-submissions scoping), which is what powers the account portal's per-order refund status; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
 | `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot | `admin`,`super_admin` only — `co_admin` finance visibility is off by default per the spec |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
@@ -202,7 +202,8 @@ status changes).
 
 **`PendingAction`** (`models/PendingAction.model.ts`,
 `services/pendingAction.service.ts`): `actionType` (one of
-`coupon.create`/`coupon.update`/`product.delete`/`refund.request`/
+`coupon.create`/`coupon.update`/`product.delete`/`product.stock.update`/
+`inventory.adjust`/`refund.request`/
 `refund.approve`/`expense.confirm`), `payload` (the intended change, applied
 **verbatim** on grant — a Super Admin can never silently edit what was
 requested, only approve or deny it), `requestedBy`/`requestedByRole`,
@@ -214,7 +215,7 @@ granting/denying (`grantPendingAction()`/`denyPendingAction()`, both
 original requester the outcome. Each gated action type registers its own
 "apply" function via `registerPendingActionHandler(actionType, handler)` at
 the bottom of its owning service (`coupon.service.ts`, `product.service.ts`,
-`refund.service.ts`, `expense.service.ts`) rather than
+`inventory.service.ts`, `refund.service.ts`, `expense.service.ts`) rather than
 `pendingAction.service.ts` importing those services directly — the services
 import *this* module to request a grant, so the reverse import would be
 circular; since every route file (and therefore every service) is imported
@@ -242,6 +243,95 @@ otherwise-broad product control, per the spec. `/admin/products`'s delete
 button reflects this: hidden for `admin`, a "Request deletion" action for
 `co_admin`, a normal "Delete" action for `super_admin`.
 
+**Stock-change approval gate** — **only `super_admin` changes stock
+directly. Every other role, `admin` included, has its stock change parked in
+the approval queue while the live count stays exactly as it was.** This is
+stricter than the discount/refund gates (which have thresholds); there is no
+threshold here, any stock change by a non-Super-Admin is gated. Two entry
+points funnel into two action types:
+
+- `inventory.adjust` — `POST /inventory/adjust` (the manual delta correction
+  on `/admin/inventory`). Responds `202 {pendingActionId}`. The payload holds
+  the **delta, not a target number**, and `applyStockDelta` re-evaluates it
+  against whatever stock is current *at grant time* — so units sold while the
+  request waited are still accounted for. `adjustStock()` pre-validates that
+  the delta wouldn't go negative before queuing, so an obviously-invalid
+  request fails fast rather than at grant time.
+- `product.stock.update` — the stock fields inside `POST`/`PATCH /products`.
+  The product form submits content and stock together, so `updateProduct`
+  **splits them**: the live stock is carried over onto the incoming variants
+  (matched by variant id, falling back to array position — see "Variant
+  identity across edits" below) and applies
+  untouched, while the submitted quantities go to the queue. One submit can
+  therefore ship a description edit instantly and hold its stock change —
+  the response carries `stockPendingActionId` when that happened, which
+  `/admin/products` surfaces as a notice. `createProduct` does the same: a
+  non-Super-Admin's new product is saved with **0 stock** and the requested
+  quantities queued, so nothing goes live unapproved. No pending action is
+  created when the submitted stock matches what's already stored, so a plain
+  title/description edit never produces an empty approval request.
+
+Both handlers are registered at the bottom of `inventory.service.ts` (not
+`product.service.ts`) so all stock writing lives in one module;
+`product.service.ts` calls `requestVariantStockUpdate()` to express the
+intent. Approval gates **when** a change goes live — it does not replace the
+`InventoryLog` history, which is still written at the moment the change
+actually applies, with the same who/delta/balance-after/timestamp fields as
+an ungated change. Automatic stock movement (order placed, cancelled,
+returned) is **never** gated — it's system-driven, not someone editing a
+number.
+
+**Variant identity across edits**: the admin product form round-trips each
+existing variant's `id` (`ProductFormVariant.id` ← `ApiProduct.variants[]._id`),
+and `updateProduct` reuses that `_id` when rebuilding the variants array.
+Without this, the wholesale replacement minted a fresh `_id` on every save,
+orphaning the `variantId` already stored on cart lines and order items — an
+unrelated description edit could silently break existing carts. Two separate
+matching rules, deliberately: **identity** is matched strictly (only an id
+that genuinely belongs to *this* product preserves the `_id`; a foreign or
+stale id makes it a new variant, so an id can't be grafted in from another
+product), while **stock carry-over** falls back to array position when no
+match is found — so a caller that doesn't round-trip ids at all (an older
+client, a direct API call) can never silently zero out a variant's stock.
+Because ids are now stable, a queued `product.stock.update` still resolves to
+the right variant after later edits; `setVariantStock()` keeps its label
+fallback as a second line of defence.
+
+**Overlapping stock requests**: `listPendingActions()` annotates every
+returned action with `conflictingActionIds` — the other **still-pending**
+stock requests writing to a variant this one also touches
+(`stockTargetVariantIds()` extracts targets from both stock action types).
+It's computed across the whole queue, not just the page being viewed, so
+pagination can't hide a conflict, and it's symmetric (each side lists the
+other). `/admin/approvals` renders it as a "Conflicts with N" badge and the
+Grant button raises an extra confirm explaining that granting one leaves the
+others pending to apply on top. Granting a conflicted request also records
+the overlap in its audit-log entry (`conflictingActionIds` in `newValue`
+plus a human-readable `note`), leaving a permanent trace that the grant
+raced another request. Nothing blocks the grant — see Known limitations.
+
+Stock has exactly one source of truth, `Product.variants[].stock`; there is
+no denormalized copy anywhere, and `lib/api/client.ts` sets `cache:
+"no-store"` on every request, so the storefront, listings, admin portal and
+the Employee portal's read-only `/employee/stock` view (backed by `GET
+/inventory/stock`, the one inventory route `employee`/`order_manager` can
+reach) all show the same live number without any cache-invalidation step.
+Zero stock renders as a **"Stock Out" badge** rather than a `0`, and
+disables ordering — see `lib/stock.ts` (`totalStock`, `isStockOut`,
+`firstAvailableVariant`) for the shared helpers `ProductCard` and
+`ProductInfo` use.
+
+**Product content edits are logged, never gated** — per the spec, `admin`
+and `co_admin` edit a product's title/description (and the other fields in
+`AUDITED_PRODUCT_FIELDS`: slug, tagline, origin, badge, storage
+instructions, best-seller/featured flags) **directly and immediately**, with
+no approval step. Each such edit writes one `AuditLog` entry recording the
+actor and role, the changed fields' old and new values, and the timestamp,
+with a `note` naming exactly which fields moved. `diffProductFields()`
+compares before/after so unchanged fields are excluded and a submit that
+changes nothing writes no entry at all. Visible to Super Admin at
+`/admin/audit-logs`.
+
 **`AuditLog`** (`models/AuditLog.model.ts`, `services/auditLog.service.ts`):
 append-only, `{actor, actorRole, action, resource, resourceId?, oldValue?,
 newValue?, note?, createdAt}` — `action`/`resource` are free-form
@@ -259,7 +349,7 @@ list view (reachable by every admin-portal role plus `order_manager`).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -317,10 +407,15 @@ breakdown.
   existing `order.service.ts#updateOrderStatus`, reusing its transition
   validation) and **auto-logs a confirmed `Expense`** (category `"refund"`,
   linked via `linkedExpense`/`linkedRefund`) — exactly as the spec requires.
-  `/admin/refunds` (staff-only UI for now — there is no self-service
-  customer-facing "request a refund" page yet, even though the backend
-  already accepts a `customer`-initiated request; that's a real gap, not a
-  design choice, see Known limitations).
+  Two UIs drive this: `/admin/refunds` for staff, and the customer's own
+  "Request a Refund" action in `components/account/OrderHistory.tsx` — it
+  appears on an order card only once `Order.status === "returned"` (matching
+  the backend's own precondition, so the button is never offered when the
+  request would 400), pre-fills the amount with the order total, and is
+  replaced by a read-only refund-status line once a request exists.
+  `OrderHistory` gets that status by calling the same `GET /refunds` the
+  admin page uses — the endpoint force-scopes a `customer` viewer to their
+  own refunds server-side, so no per-order lookup endpoint was needed.
 
 #### Homepage content management (not a general CMS)
 
@@ -544,6 +639,66 @@ Cloud Console setup steps — an OAuth Client ID has not been provisioned on
 this machine, so Google Sign-In is wired end-to-end but inactive until one is
 added.
 
+#### Security hardening (2FA, lockout, idle timeout, impersonation)
+
+All four policy numbers live in `constants/security.ts` as **fixed policy
+constants, deliberately not `ApprovalSettings` fields** — they are not
+Super-Admin-tunable, so the "any new Super-Admin-editable threshold belongs
+on `ApprovalSettings`" rule doesn't apply to them. The `User` model gained
+`failedLoginAttempts`, `lockedUntil`, `lastSeenAt`, `twoFactorEnabled`,
+`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` (all
+three `select: false` **and** stripped in the `toJSON` transform — defense in
+depth, same pattern as `Order.otpCode`).
+
+- **Account lockout** (`auth.service.ts#login`): a wrong password increments
+  `failedLoginAttempts`; reaching `MAX_FAILED_LOGIN_ATTEMPTS` (5) sets
+  `lockedUntil` to `ACCOUNT_LOCK_DURATION_MS` (15 min) ahead, resets the
+  counter, fires `sendAccountLockedEmail`, and 403s. While locked, even the
+  *correct* password is refused. Any successful password check clears both
+  fields. `PATCH /users/:id/unlock` (`admin`/`super_admin`) clears a lockout
+  early and is audit-logged; `/admin/customers` and `/admin/employees` show
+  a "Locked" badge plus an "Unlock" action.
+- **Two-factor authentication** (`services/twoFactor.service.ts`, TOTP via
+  `otplib` + `qrcode`). **`otplib` is pinned to v12 on purpose** — v13 is
+  ESM-only and its `@scure/base` dependency cannot be parsed by this repo's
+  CommonJS ts-jest setup, breaking every test suite. Do not upgrade it
+  without migrating Jest's `transformIgnorePatterns` first. Enrolment is
+  two-step so an abandoned setup never half-enrols an account: `POST
+  /auth/2fa/setup` parks a secret in `twoFactorPendingSecret` and returns the
+  otpauth URI + a QR data URL; `POST /auth/2fa/enable` verifies a live code,
+  promotes the secret, and returns 8 single-use recovery codes (bcrypt-hashed
+  at rest — the plaintext exists only in that one response). `POST
+  /auth/2fa/disable` requires the account password. At login, a 2FA-enabled
+  account gets `{requiresTwoFactor: true, challengeToken}` instead of a
+  session — a 10-minute, `purpose`-scoped, `tokenVersion`-bound JWT — which
+  `POST /auth/2fa/verify` exchanges for real cookies. `verifyTwoFactorCode()`
+  accepts a TOTP code *or* a recovery code, splicing a consumed recovery code
+  out immediately so it can't be replayed. Frontend: `TwoFactorSection.tsx`
+  inside `ProfileSection` (so every role's profile page gets it), and a
+  code-entry step inside `AuthForms.tsx`.
+- **Idle-session timeout** (`enforceInactivityWindow()` in
+  `auth.middleware.ts`, plus `isStaffSessionIdle()` guarding
+  `refreshSession`): staff roles only (`INACTIVITY_ENFORCED_ROLES`) —
+  **customers are deliberately exempt**, since killing an idle storefront
+  session mid-shop is a UX regression, not a security win. The `lastSeenAt`
+  write is throttled to `ACTIVITY_WRITE_GRANULARITY_MS` (1 min) so an active
+  session doesn't turn every authenticated request into a DB write. Note this
+  is per-*user*, not per-device — there's one `lastSeenAt` per account.
+- **Impersonation / support-login** (`user.service.ts#impersonateUser`,
+  `POST /users/:id/impersonate`, `super_admin` only): mints a 30-minute
+  `signImpersonationToken()` carrying the target's `sub`/`role`/
+  `tokenVersion` plus an `impersonatedBy` claim. **No cookies are touched
+  and no refresh token is issued** — the frontend holds it in
+  `sessionStorage` and sends it as `Authorization: Bearer`
+  (`client.ts#setImpersonationToken`), so the Super Admin's own cookie
+  session stays intact underneath and "stop impersonating" is just dropping
+  the token — no stop endpoint exists or is needed. `authenticate` skips the
+  idle-timeout check and the `lastSeenAt` write for an impersonation token
+  (it's the Super Admin's activity, not the target's) and surfaces
+  `req.user.impersonatedBy`, which `GET /auth/me` returns so
+  `ImpersonationBanner.tsx` (mounted in the root layout) can't be navigated
+  away from. Impersonating another `super_admin` 403s. Start is audit-logged.
+
 **Uploads**: `multer` (memory storage) → `uploadBufferToCloudinary()` in
 `config/cloudinary.ts`. Guarded by `isCloudinaryConfigured`; returns a clear
 503 if Cloudinary env vars are unset rather than a confusing SDK error.
@@ -552,15 +707,33 @@ added.
 **Email**: `services/email.service.ts` exports `sendPasswordResetEmail`,
 `sendDeliveryOtpEmail`,
 `sendStaffWelcomeEmail`, `sendOrderConfirmationEmail`, `sendLeaveStatusEmail`,
-`sendTaskAssignedEmail`, `sendSalaryPaymentEmail` — all HTML via a shared
+`sendTaskAssignedEmail`, `sendSalaryPaymentEmail`, `sendAccountLockedEmail`,
+`sendNewOrderStaffAlertEmail`, `sendLowStockAlertEmail`,
+`sendDeliveryFailedAlertEmail` — all HTML via a shared
 `layout()`/`button()` helper, routed through `safeSend()` (catches/logs,
 never throws) → `config/mailer.ts` (nodemailer transporter, lazily created)
 → guarded by `isSmtpConfigured`. **All email sends are fire-and-forget
 (`void sendXEmail(...)`, never `await`)** — confirmed at every call site
 (`leave.service.ts`, `order.service.ts`, `user.service.ts`, `auth.service.ts`,
-`task.service.ts`, `salary.service.ts`) — a real SMTP round-trip is too slow
+`task.service.ts`, `salary.service.ts`, `notification.service.ts`) — a real
+SMTP round-trip is too slow
 to block the request, and `safeSend()` already swallows and logs failures so
 callers never need to handle rejections.
+
+**Operational notifications** (`services/notification.service.ts`): the last
+three senders above are staff *fan-outs* rather than one-recipient
+transactional mail — `notifyNewOrder`, `notifyLowStock`,
+`notifyDeliveryFailed` resolve every active user in the roles that own that
+workflow (`order_manager`/`co_admin`/`admin`/`super_admin` for order events;
+`co_admin`/`admin`/`super_admin` for inventory) and email them all. This is
+deliberately **not a general notification matrix** — there is no per-user
+subscription model, no in-app inbox, and no digest/batching; it is three
+specific events chosen for day-to-day operations. The low-stock alert fires
+only on the *crossing* (stock was above the variant's `lowStockThreshold`
+before the decrement and is at/below it after), so a persistently low variant
+doesn't email staff on every sale. The whole module swallows its own errors
+(`fanOut`'s try/catch) on top of `safeSend()`, so a mail outage can never
+fail the order or delivery update that triggered it.
 
 **⚠️ Express 5 `req.query` gotcha**: `req.query` is a **getter with no
 setter** that **re-parses `req.url` from scratch on every access** (see
@@ -578,8 +751,9 @@ new middleware that needs to modify `req.query`.
 `shipping`, `slugify`, `validateMiddleware`; `rbac.test.ts` includes cases
 locking in the `order_manager`/`delivery_agent` role strings), plus
 `backend/src/tests/integration/*.integration.test.ts` — real
-HTTP-through-Mongoose integration specs (`auth`, `catalog`, `order`,
-`orderStatus`, `task`, `coupon`, `approvalGate`, `finance`) run against an
+HTTP-through-Mongoose integration specs (`auth`, `emailVerification`,
+`catalog`, `order`, `orderStatus`, `task`, `coupon`, `approvalGate`,
+`stockApproval`, `finance`, `security`, `notification`) run against an
 actual in-memory MongoDB via `mongodb-memory-server`
 (`tests/integration/setup.ts` starts/stops it and wipes collections between
 tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
@@ -598,12 +772,40 @@ staff-hidden visibility), `task.integration.test.ts` (required `type` field,
 super_admin grant materializing the original payload),
 `approvalGate.integration.test.ts` (product-deletion gating across
 `super_admin`/`co_admin`/`admin`, grant/deny, audit-log recording and
-per-role visibility scoping, threshold-settings edit), and
+per-role visibility scoping, threshold-settings edit),
+`stockApproval.integration.test.ts` (stock gating from both entry points —
+that live stock and `InventoryLog` stay untouched until a grant, that a deny
+leaves them untouched permanently, that `admin` is gated too, that a queued
+delta is re-evaluated against stock that moved while it waited, that one
+product submit ships its description immediately while holding its stock,
+that a new product starts at 0 until approved, that an unchanged stock value
+creates no request, and that `employee` can read `GET /inventory/stock` but
+gets 403 on `POST /inventory/adjust`; variant-identity cases — an `_id`
+survives an unrelated edit, a newly added variant gets a fresh one, a foreign
+id is ignored, and reordering variants doesn't scramble which stock belongs
+to which; overlapping-request cases — symmetric conflict flagging, no false
+positive across different variants of one product, a conflict between the two
+different stock action types, and the flag clearing plus the audit note once
+one side is granted — plus the title/description half:
+immediate application, field-level old/new audit entries naming only what
+changed, no entry for a no-op submit, and super-admin visibility at
+`/audit-logs`), and
 `finance.integration.test.ts` (investment RBAC, co_admin expense submission
-+ threshold-gated confirmation, and a full refund walk from request through
++ threshold-gated confirmation, a full refund walk from request through
 Order-Manager review to Admin approval — including the above-threshold
 grant path — asserting the order transitions to `"refunded"` and a linked
-`Expense` is auto-logged). All suites run together via `npm test` (Jest +
+`Expense` is auto-logged, plus a customer-initiated request proving
+`GET /refunds` scopes a customer to only their own),
+`security.integration.test.ts` (lockout after N failed attempts + admin
+unlock + counter reset, TOTP enrolment/login-challenge/recovery-code
+single-use, secret-and-recovery-code non-leakage through `GET /auth/me`,
+staff-idle-timeout vs. customer-exempt, and impersonation RBAC including
+the super-admin-on-super-admin refusal), and
+`notification.integration.test.ts` (which staff roles each operational
+alert fans out to, deactivated-staff exclusion, and that a mail failure
+never propagates — it `jest.mock`s `email.service` and imports
+`notification.service` *after* the mock, so the stubbed senders are what
+gets wired in). All suites run together via `npm test` (Jest +
 ts-jest, `backend/jest.config.js`, `tsconfig.jest.json` since the main
 `tsconfig.json` excludes `src/tests/**/*` from the build).
 
@@ -648,9 +850,12 @@ their own "All Orders"/"View More" shortcuts) or the existing `OrderHistory`
 the same `ProductCard` grid as the standalone `/wishlist` page. Sidebar items
 are deliberately scoped to features the API actually has — no
 promo-code/payment-method/support-ticket nav items were added since no
-backend exists for them. Staff roles see a redirect card to `/admin`,
-`/employee`, or `/delivery` (whichever portal matches their role) instead of
-the dashboard; when signed out, renders `AuthForms` —
+backend exists for them. A signed-in staff account never sees this dashboard
+at all — `staffPortalPath(role)` `router.replace()`s it straight to `/admin`,
+`/employee`, or `/delivery` (whichever portal matches its role) while
+rendering the loading placeholder, so there is no intermediate
+"Dashboard / Logout" choice screen; each portal's own layout carries the
+Sign Out control. When signed out, renders `AuthForms` —
 the single Sign In / Register / Forgot Password form shared by **every**
 role, see "Registration" and "Forgot / reset password" above), `/account/reset-password` (Set a New
 Password — Confirm Password field + live strength meter, see above),
@@ -708,9 +913,15 @@ nav-hidden from co_admin), `/admin/navigation` (header nav links —
 nav-hidden from co_admin), `/admin/footer` (footer link columns — nav-hidden
 from co_admin), `/admin/pages` (About/Contact/Shipping Policy body copy —
 nav-hidden from co_admin), `/admin/settings` (site settings, including
-social links — nav-hidden from co_admin). `order_manager`'s nav
+social links — nav-hidden from co_admin), `/admin/profile` (avatar, contact
+details, password, two-factor authentication, and address — reachable by
+**every** admin-portal role including `order_manager`/`co_admin`, since it's
+only ever scoped to the caller's own account; reuses the same
+`ProfileSection`/`AddressBook` components as the Employee and Delivery
+portals rather than a parallel implementation). `order_manager`'s nav
 (`AdminNav.tsx`) is explicitly restricted to `Dashboard`, `Orders`,
-`Refunds`, and `Audit Logs` — every other item declares an explicit `roles`
+`Refunds`, `Audit Logs`, and `Profile` — every other item declares an
+explicit `roles`
 list that excludes it — so an Order Manager reaches the same `/admin` shell
 as everyone else but sees a much smaller nav; the real boundary is still
 backend `authorize()`.
@@ -745,7 +956,11 @@ Grant-Based Approval Workflow's review step.
 Guarded by `RoleGuard allowed={["employee"]}` in `app/employee/layout.tsx`:
 `/employee` (dashboard), `/employee/attendance` (check-in/out + history),
 `/employee/tasks` (a `type` filter dropdown plus a type badge on each task,
-alongside the existing priority badge/status dropdown), `/employee/leave`,
+alongside the existing priority badge/status dropdown), `/employee/stock`
+(read-only live per-variant stock with a search box, backed by `GET
+/inventory/stock` — supports the `stock_checking`/`warehouse` task types;
+the same live numbers the storefront shows, with a "Stock Out" badge at
+zero, and no way to change them from here), `/employee/leave`,
 `/employee/performance`, `/employee/salary`, `/employee/profile` (avatar +
 address — the `ProfileSection`/`AddressBook` components were already
 generic/backend-supported for every role, this page just adds the missing
@@ -791,17 +1006,29 @@ refresh itself, logout, forgot/reset-password, verify-email/
 resend-verification) triggers one `POST /auth/refresh` and, if that
 succeeds, a single retry of the original request; concurrent 401s across
 multiple in-flight requests share one refresh call instead of each firing
-their own. Only when the refresh itself fails (the 30-day refresh-token
-cookie is also expired/invalid) does `AuthContext` drop out of its
-signed-in state — via `setAuthFailureHandler()`, a small callback registry
-`client.ts` exposes so `AuthContext` can react immediately instead of
-waiting for its next `GET /auth/me` poll. A session that sits open past the
-access-token TTL now survives transparently instead of 401ing the next
+their own. Only when the refresh itself fails does `AuthContext` drop out of
+its signed-in state — via `setAuthFailureHandler()`, a small callback
+registry `client.ts` exposes so `AuthContext` can react immediately instead
+of waiting for its next `GET /auth/me` poll. A session that sits open past
+the access-token TTL now survives transparently instead of 401ing the next
 mutating request (e.g. placing an order) and silently signing the user out
 — confirmed live: registered a customer with a temporarily-shortened
 `JWT_ACCESS_EXPIRES_IN=5s`, waited past expiry, and the next request
 (`GET /auth/me`) 401'd, silently refreshed, and retried successfully with no
 redirect to sign-in.
+
+**Session lifetime is capped at 15 days.** `JWT_REFRESH_EXPIRES_IN` and
+`utils/cookies.ts#REFRESH_TOKEN_MAX_AGE_MS` are both **15 days** (they must
+stay in sync — the JWT expiry and the cookie `maxAge` are set independently,
+so changing one without the other silently breaks the cap in one direction
+or the other). Past that the refresh call itself fails and a real login is
+required; the silent-refresh loop above cannot extend a session
+indefinitely. Staff sessions additionally die after 30 minutes of inactivity
+— see "Security hardening" above. While a Super Admin is impersonating, the
+client sends an `Authorization: Bearer` token instead of relying on cookies
+and skips the refresh path entirely (an impersonation token is not
+refreshable); a 401 on it just clears the token so the next request falls
+back to the Super Admin's own cookie session.
 
 **Cart & wishlist are client-side only**: `CartContext` and `WishlistContext`
 persist to `localStorage` (`sap:cart`, `sap:wishlist` keys) and resolve full
@@ -982,29 +1209,35 @@ need it.
   frontend checkout never redirects to a gateway. Treat "select bKash/Nagad
   at checkout" as UI-only until a real gateway (e.g. bKash/SSLCommerz) is
   integrated.
-- **No customer-facing "request a refund" UI** — `POST /refunds` already
-  accepts a `customer`-initiated request on their own order (see "Finance
-  module" above), but there is no page/button anywhere in the storefront or
-  account portal that calls it; today a refund request can only be created
-  from `/admin/refunds` by staff. This is a real, unfilled gap, not a
-  deliberate scope boundary.
 - **The approval-gate system covers a fixed, spec-defined list of actions**
-  (`coupon.create`/`.update`, `product.delete`, `refund.request`/`.approve`,
-  `expense.confirm`) — role changes, settings changes, and other sensitive
+  (`coupon.create`/`.update`, `product.delete`, `product.stock.update`,
+  `inventory.adjust`, `refund.request`/`.approve`, `expense.confirm`) — role
+  changes, settings changes, product content edits, and other sensitive
   actions are audit-*logged* (see "Approval-gate system & audit logging"
   above) but are **not** routed through the Grant-Based Approval Workflow;
-  only the six action types above create a `PendingAction`.
-- **No 2FA, session-timeout enforcement, account-lockout, or
-  impersonation/support-login feature** — ROLES_AND_PERMISSIONS_v2.md §13/§15
-  describe these, but they were out of scope for the approval-gate/finance
-  build and have not been implemented; existing auth security (bcrypt,
-  JWT cookies, `authLimiter` rate limiting, logout-all via `tokenVersion`)
-  is unchanged, see "Security" below.
-- **No general notification matrix** — only approval-gate-related
-  notifications exist (a Super Admin is emailed when a request needs their
-  review; the requester is emailed the grant/deny outcome). The wider event
-  list in ROLES_AND_PERMISSIONS_v2.md §16 (new-order alerts, low-stock
-  alerts, delivery-failure escalation, etc.) is not implemented.
+  only the eight action types above create a `PendingAction`.
+- **A queued stock change is still not *locked* against concurrent edits** —
+  two staff members can each queue a change to the same variant and both
+  apply in grant order (`inventory.adjust` deltas compose correctly;
+  `product.stock.update` carries absolute values, so it's last-grant-wins).
+  The reviewer is now warned about the overlap before granting (see
+  "Overlapping stock requests" above), but nothing blocks or auto-supersedes
+  the second request — resolving it is a human decision.
+- **2FA is opt-in per account and cannot be enforced or admin-reset** — there
+  is no setting that requires it for staff roles, and no admin-side reset
+  path if a user loses both their authenticator and all eight recovery codes
+  (recovery is a manual database edit). See "Security hardening" above.
+- **The idle-session timeout is per-user, not per-device** — it's driven by a
+  single `User.lastSeenAt`, so activity in one browser keeps every session
+  for that account alive. There is no session list and no per-device
+  revocation beyond the existing all-sessions logout (`tokenVersion`).
+- **Notification coverage is deliberately partial** — three operational
+  events (new order, low stock, delivery failure) plus the approval-gate and
+  transactional emails (see "Operational notifications" above). The rest of
+  ROLES_AND_PERMISSIONS_v2.md §16 is not implemented, and there is no
+  per-user notification-preference model, no in-app inbox, and no
+  digest/batching — a busy day means one email per order to every
+  order-owning staff account.
 - **Cart/wishlist don't persist server-side or cross-device** — they're
   `localStorage`-only (see "Cart & wishlist are client-side only" above).
 - **No `frontend/src/middleware.ts`** — route protection is entirely

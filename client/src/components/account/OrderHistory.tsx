@@ -2,12 +2,38 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Package, Search } from "lucide-react";
+import { Package, Search, Undo2 } from "lucide-react";
 import { listMyOrders } from "@/lib/api/orders";
+import { createRefund, listRefunds } from "@/lib/api/finance";
+import { ApiClientError } from "@/lib/api/client";
 import { formatBDT, cn } from "@/lib/utils";
-import { ButtonLink } from "@/components/ui/Button";
+import { ButtonLink, Button } from "@/components/ui/Button";
+import { Modal } from "@/components/admin/Modal";
 import { OrderStatusTimeline } from "@/components/account/OrderStatusTimeline";
-import type { ApiOrder, OrderStatus } from "@/types/api";
+import type { ApiOrder, ApiRefund, OrderStatus, RefundReasonCategory } from "@/types/api";
+
+const REASON_CATEGORIES: RefundReasonCategory[] = [
+  "damaged",
+  "wrong_item",
+  "not_as_described",
+  "changed_mind",
+  "other",
+];
+
+const REFUND_STATUS_LABEL: Record<ApiRefund["status"], string> = {
+  pending_review: "Refund requested — pending review",
+  pending_approval: "Refund pending financial approval",
+  approved: "Refund approved",
+  rejected: "Refund request rejected",
+};
+
+const fieldClasses =
+  "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
+const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
+
+function refundOrderId(order: ApiRefund["order"]): string {
+  return typeof order === "string" ? order : order._id;
+}
 
 const STATUS_CLASSES: Record<OrderStatus, string> = {
   pending: "bg-cream-300 text-brown-600",
@@ -28,8 +54,22 @@ const STATUS_CLASSES: Record<OrderStatus, string> = {
 
 export function OrderHistory() {
   const [orders, setOrders] = useState<ApiOrder[]>([]);
+  const [refunds, setRefunds] = useState<ApiRefund[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [refundOrder, setRefundOrder] = useState<ApiOrder | null>(null);
+  const [reasonCategory, setReasonCategory] = useState<RefundReasonCategory>("other");
+  const [requestedAmountBDT, setRequestedAmountBDT] = useState("");
+  const [note, setNote] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function loadRefunds() {
+    listRefunds({ limit: 100 })
+      .then(({ data }) => setRefunds(data.refunds))
+      .catch(() => setRefunds([]));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -43,10 +83,40 @@ export function OrderHistory() {
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
+    loadRefunds();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function openRefundRequest(order: ApiOrder) {
+    setFormError(null);
+    setReasonCategory("other");
+    setRequestedAmountBDT(String(order.totalBDT));
+    setNote("");
+    setRefundOrder(order);
+  }
+
+  async function handleRefundSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!refundOrder) return;
+    setFormError(null);
+    setIsSubmitting(true);
+    try {
+      await createRefund({
+        orderId: refundOrder._id,
+        reasonCategory,
+        requestedAmountBDT: Number(requestedAmountBDT),
+        note: note || undefined,
+      });
+      setRefundOrder(null);
+      loadRefunds();
+    } catch (err) {
+      setFormError(err instanceof ApiClientError ? err.message : "Could not submit refund request.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -144,9 +214,84 @@ export function OrderHistory() {
               </Link>
               <span className="text-base font-semibold text-green-950">{formatBDT(order.totalBDT)}</span>
             </div>
+
+            {order.status === "returned" &&
+              (() => {
+                const existingRefund = refunds.find((r) => refundOrderId(r.order) === order._id);
+                if (existingRefund) {
+                  return (
+                    <p className="flex items-center gap-1.5 border-t border-brown-600/10 pt-3 text-xs font-semibold text-brown-600">
+                      <Undo2 size={13} /> {REFUND_STATUS_LABEL[existingRefund.status]}
+                    </p>
+                  );
+                }
+                return (
+                  <div className="border-t border-brown-600/10 pt-3">
+                    <Button variant="outline" size="xs" onClick={() => openRefundRequest(order)}>
+                      <Undo2 size={13} /> Request a Refund
+                    </Button>
+                  </div>
+                );
+              })()}
           </div>
         ))}
       </div>
+
+      {refundOrder && (
+        <Modal title={`Request a Refund — #${refundOrder.orderNumber}`} onClose={() => setRefundOrder(null)}>
+          <form onSubmit={handleRefundSubmit} className="flex flex-col gap-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClasses}>Reason *</label>
+                <select
+                  value={reasonCategory}
+                  onChange={(e) => setReasonCategory(e.target.value as RefundReasonCategory)}
+                  className={fieldClasses}
+                >
+                  {REASON_CATEGORIES.map((r) => (
+                    <option key={r} value={r}>
+                      {r.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClasses}>Amount (BDT) *</label>
+                <input
+                  required
+                  type="number"
+                  min={0}
+                  max={refundOrder.totalBDT}
+                  value={requestedAmountBDT}
+                  onChange={(e) => setRequestedAmountBDT(e.target.value)}
+                  className={fieldClasses}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelClasses}>Note</label>
+              <textarea
+                rows={3}
+                placeholder="Tell us more about the issue (optional)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className={fieldClasses}
+              />
+            </div>
+
+            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+
+            <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
+              <Button type="button" variant="outline" size="sm" onClick={() => setRefundOrder(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Submit Request"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -69,5 +69,19 @@ router.patch(
   validate({ params: mongoIdParamSchema, body: updateStaffMetaSchema }),
   userController.updateStaffMeta
 );
+router.patch(
+  "/:id/unlock",
+  authorize("admin", "super_admin"),
+  validate({ params: mongoIdParamSchema }),
+  userController.unlockAccount
+);
+// Support-login. Super Admin only, and never onto another Super Admin —
+// see user.service.ts#impersonateUser.
+router.post(
+  "/:id/impersonate",
+  authorize("super_admin"),
+  validate({ params: mongoIdParamSchema }),
+  userController.impersonate
+);
 
 export default router;

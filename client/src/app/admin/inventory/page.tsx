@@ -38,6 +38,7 @@ export default function AdminInventoryPage() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
 
   function loadLowStock() {
     setIsLowStockLoading(true);
@@ -75,12 +76,17 @@ export default function AdminInventoryPage() {
     setFormError(null);
     setIsSubmitting(true);
     try {
-      await adjustStock({
+      const { data } = await adjustStock({
         productId: values.productId,
         variantId: values.variantId,
         delta: values.delta,
         note: values.note || undefined,
       });
+      setPendingNotice(
+        data?.pendingActionId
+          ? "Stock changes need Super Admin approval — this adjustment was submitted for review and is not live yet."
+          : null
+      );
       setIsAdjusting(false);
       loadLogs();
       loadLowStock();
@@ -102,6 +108,12 @@ export default function AdminInventoryPage() {
           </Button>
         }
       />
+
+      {pendingNotice && (
+        <div className="mb-6 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+          {pendingNotice}
+        </div>
+      )}
 
       <div className="mb-8">
         <h2 className="mb-3 font-serif text-lg text-green-950">Low Stock Alerts</h2>

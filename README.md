@@ -113,9 +113,11 @@ form or state-management library — forms/data fetching are hand-rolled with
   and Audit Logs — a real least-privilege role, not the full admin-tier
   surface.
 - **Approval-gate system (Grant-Based Approval Workflow)** — a single
-  reusable `PendingAction` queue gates six sensitive action types (coupon
+  reusable `PendingAction` queue gates eight sensitive action types (coupon
   create/update above a configurable discount size, product deletion by
-  co_admin, refund requests by co_admin, refund approvals above a
+  co_admin, **every stock change by anyone other than a Super Admin** — both
+  the manual inventory adjustment and the stock fields on the product form,
+  refund requests by co_admin, refund approvals above a
   configurable amount by admin, and expense confirmation above a
   configurable amount by co_admin): the initiating request returns
   `202 {pendingActionId}` instead of applying immediately, a super_admin
@@ -124,8 +126,28 @@ form or state-management library — forms/data fetching are hand-rolled with
   emailed at the relevant step. The four thresholds that decide what gets
   auto-approved vs. gated are stored in a single `ApprovalSettings`
   singleton, editable only by super_admin — never hardcoded.
+- **Stock control** — stock lives in exactly one place (`Product.variants[].stock`)
+  and every surface reads it live: the storefront, product listings, the
+  admin portal, and a read-only Stock Levels page in the employee portal for
+  warehouse/stock-checking work. Zero stock shows a **Stock Out** badge
+  instead of a number and disables Add to Cart / Buy Now. Changing it is
+  Super-Admin-only: an Admin's or Co-Admin's adjustment — whether made on the
+  inventory page or through the stock fields on the product form — is queued
+  for approval and the visible count does not move until it's granted, at
+  which point it applies immediately and writes the usual inventory-history
+  entry (who, delta, resulting balance, timestamp). A single product save can
+  therefore publish a description change instantly while its stock change
+  waits. Automatic stock movement from orders, cancellations and returns is
+  never gated. Saving a product preserves each variant's identity, so an
+  unrelated edit no longer orphans the variant reference stored on existing
+  cart lines and orders. When two pending requests would change the same
+  variant's stock, the approvals queue flags both with a conflict badge and
+  warns before granting, and the grant is recorded in the audit log as having
+  raced another request.
 - **General audit logging** — every sensitive mutation (role/status changes,
-  coupon create/update/delete, product deletion, approval-settings edits,
+  coupon create/update/delete, product creation/deletion, **product content
+  edits such as title and description — these apply immediately and are
+  logged rather than approval-gated**, approval-settings edits,
   and every approval-gate grant/deny) writes an append-only `AuditLog`
   entry (actor, role, action, resource, before/after values, optional
   note), visible at `/admin/audit-logs` — scoped to the viewer's own
@@ -133,8 +155,9 @@ form or state-management library — forms/data fetching are hand-rolled with
 - **Employee portal** (`client/src/app/employee`, fully built):
   check-in/out + attendance history, tasks (filterable by type — packing,
   product counting, stock checking, warehouse, customer support, data entry,
-  product preparation), leave requests, performance history, salary/payment
-  history, and a profile page (avatar + address).
+  product preparation), a read-only Stock Levels page showing the same live
+  per-variant counts the storefront does, leave requests, performance
+  history, salary/payment history, and a profile page (avatar + address).
 - **Delivery portal** (`client/src/app/delivery`, fully built, `delivery_agent`
   role only — structurally excluded from `/admin`): a dashboard of assigned-
   order counts, an assigned-orders list with a detail view for marking an
@@ -161,7 +184,10 @@ form or state-management library — forms/data fetching are hand-rolled with
   above a configurable threshold); a `Refund` workflow (customer/staff
   request on a `returned` order → Order Manager review → Admin/Super Admin
   financial approval, gated by amount for Admin, with an auto-created
-  confirmed `Expense` on approval and the order flipped to `refunded`); and
+  confirmed `Expense` on approval and the order flipped to `refunded`) —
+  customers request one themselves from the My Orders tab of their account
+  dashboard, which also shows the live status of a refund they've already
+  requested; and
   a finance summary (`/admin/finance`) combining live order revenue (reused
   from the existing sales-report calculation, not duplicated), total
   investment, total confirmed expenses (by category), and net profit/loss —
@@ -194,9 +220,29 @@ form or state-management library — forms/data fetching are hand-rolled with
   here. This and the homepage system above are **not** a general CMS or page
   builder — every editable surface is a fixed, known type; there's still no
   arbitrary page/route creation.
+- **Security hardening** — optional TOTP two-factor authentication for any
+  account (authenticator-app enrolment with a QR code, eight single-use
+  recovery codes, a code-entry step at login, self-service disable behind a
+  password check); automatic account lockout for 15 minutes after 5 failed
+  password attempts, with an admin "Unlock" action on the Customers and
+  Employees pages; a 30-minute idle-session timeout enforced for staff roles
+  only (customers are deliberately exempt so an idle storefront session
+  isn't killed mid-shop); and Super-Admin support-login (impersonation) —
+  a short-lived, non-refreshable bearer token that acts as the target user
+  while leaving the Super Admin's own session intact underneath, shown
+  behind a persistent banner and recorded in the audit log. Impersonating
+  another Super Admin is refused.
 - SMTP email notifications (fire-and-forget, never block a request): order
   confirmations, staff welcome, leave status, task assignment, password
-  reset, and salary/payment notices (paid or pending-reminder copy).
+  reset, email verification, delivery OTP, approval-gate requests/outcomes,
+  account-lockout warnings, and salary/payment notices (paid or
+  pending-reminder copy). Three operational alerts fan out to the staff
+  roles that own the workflow: a new order (order manager/co-admin/admin/
+  super admin), a variant crossing its low-stock threshold (co-admin/admin/
+  super admin, fired only on the crossing so a persistently low variant
+  doesn't email on every sale), and a failed delivery (order manager/
+  co-admin/admin/super admin). This is not a full notification matrix —
+  there's no per-user subscription model and no in-app inbox.
 
 ## Getting started
 
@@ -277,13 +323,27 @@ machine.
   RBAC, grant/deny flows, threshold-setting edits — and the full Finance
   module — investment/expense RBAC, expense over-threshold approval-gating,
   a complete refund request→review→approve walk through a real `returned`
-  order, and finance-summary math) run with `supertest` against an actual
-  in-memory MongoDB via `mongodb-memory-server`. 103 tests passing as of the
-  Finance/Approval-gate build. Coverage is still partial, not exhaustive.
+  order, a customer-initiated refund request with per-customer list scoping,
+  and finance-summary math — plus the security-hardening suite: account
+  lockout/unlock, TOTP enrolment and login challenge, recovery-code
+  single-use, staff-vs-customer idle-session timeout, and impersonation
+  RBAC; the operational-notification fan-out, asserting which staff
+  roles each alert targets; and the stock-approval suite — that live stock
+  and inventory history stay untouched until a Super Admin grants, that a
+  deny leaves them untouched, that Admin is gated too, that a queued delta is
+  re-evaluated against stock that moved while it waited, that one product
+  save can ship a description edit while holding its stock change, that
+  employees can read stock but not change it, that variant ids survive
+  unrelated edits while foreign ids are ignored, that overlapping pending
+  requests are flagged symmetrically and clear once resolved, and that
+  title/description edits apply immediately with field-level old/new audit
+  entries) run with `supertest` against an actual
+  in-memory MongoDB via `mongodb-memory-server`. 139 tests passing as of the
+  stock-approval build. Coverage is still partial, not exhaustive.
 - **Frontend**: `npm test` runs Vitest (`vitest.config.mts`, jsdom
   environment) with React Testing Library. Covers pure-logic modules
-  (`lib/utils`, `lib/passwordStrength`, `lib/mappers`), one component
-  (`PasswordStrengthMeter`), and `CartContext` (add/remove/quantity/
+  (`lib/utils`, `lib/passwordStrength`, `lib/mappers`, `lib/stock`), one
+  component (`PasswordStrengthMeter`), and `CartContext` (add/remove/quantity/
   localStorage persistence, with `lib/api/products` mocked). No
   Playwright/e2e browser testing exists — verify visual/UI changes manually
   in a browser.
@@ -306,7 +366,7 @@ missing/malformed):
 | `CLIENT_ORIGIN` | allowed CORS origin(s), comma-separated |
 | `MONGODB_URI` | MongoDB connection string |
 | `JWT_ACCESS_SECRET` / `JWT_ACCESS_EXPIRES_IN` | access token signing secret / TTL |
-| `JWT_REFRESH_SECRET` / `JWT_REFRESH_EXPIRES_IN` | refresh token signing secret / TTL |
+| `JWT_REFRESH_SECRET` / `JWT_REFRESH_EXPIRES_IN` | refresh token signing secret / TTL (default `15d` — after this a real login is required, silent refresh no longer works) |
 | `COOKIE_DOMAIN` | domain for the auth cookies |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | image uploads; blank → upload endpoints return 503, rest of the app still works |
 | `SMTP_SERVICE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | staff/customer email notifications; blank → sends become a silent logged no-op |
@@ -331,22 +391,29 @@ missing/malformed):
   `Order.isPaid` for them; only a `cod` order that reaches `delivered` gets
   marked paid. Treat non-COD checkout as UI-only until a real gateway is
   wired up.
-- No customer-facing "request a refund" UI — `POST /refunds` already accepts
-  a customer-initiated request on their own order, but no page or button in
-  the storefront/account portal calls it yet; a refund request can only be
-  created from `/admin/refunds` by staff today.
-- The approval-gate system covers a fixed, spec-defined list of six action
-  types (coupon create/update, product deletion, refund request/approval,
-  expense confirmation) — role changes, settings changes, and other
+- The approval-gate system covers a fixed, spec-defined list of eight action
+  types (coupon create/update, product deletion, product stock update,
+  inventory adjustment, refund request/approval, expense confirmation) —
+  role changes, settings changes, product content edits, and other
   sensitive actions are audit-logged but do not go through the
   grant/deny `PendingAction` queue.
-- No 2FA, session-timeout enforcement, account lockout, or
-  impersonation/support-login feature.
-- No general notification matrix — only approval-gate-related emails exist
-  (a super_admin is notified when a request needs review; the requester is
-  notified of the grant/deny outcome). Broader event notifications (new-order
-  alerts, low-stock alerts, delivery-failure escalation, etc.) are not
-  implemented.
+- Two queued stock changes to the same variant are flagged for the reviewer
+  but not locked — both still apply in grant order (deltas compose; absolute
+  updates are last-grant-wins). Nothing blocks the grant or auto-supersedes
+  the second request; resolving the overlap is a human decision.
+- Two-factor authentication is opt-in per account, not enforceable — there's
+  no admin setting to require it for staff roles, and no admin-side reset if
+  a user loses both their authenticator and every recovery code (the only
+  recovery is a database edit).
+- The idle-session timeout is per-user, not per-device: it's driven by a
+  single `lastSeenAt` on the user document, so activity in one browser keeps
+  every session for that account alive. There is no session list or
+  per-device revocation beyond the existing all-sessions logout.
+- Notification coverage is deliberately partial — three operational events
+  (new order, low stock, delivery failure) plus the approval-gate and
+  transactional emails. There is no per-user notification preference model,
+  no in-app notification inbox, and no digest/batching, so a busy day means
+  one email per order to every order-owning staff account.
 - Cart and wishlist are `localStorage`-only; they don't persist server-side
   or follow a customer across devices/browsers.
 - Co-admin's `/admin/salary`, `/admin/finance`, `/admin/investments`,

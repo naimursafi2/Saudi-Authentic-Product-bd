@@ -4,7 +4,7 @@ import { env, isProduction } from "../config/env";
 const REFRESH_COOKIE_PATH = `${env.API_PREFIX}/auth/refresh`;
 
 const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
-const REFRESH_TOKEN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const REFRESH_TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000; // 15 days
 
 function baseCookieOptions() {
   return {

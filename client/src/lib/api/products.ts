@@ -49,12 +49,18 @@ export async function getProductByIdForAdmin(id: string) {
   return api.get<{ product: ApiProduct }>(`/products/admin/${id}`);
 }
 
+/** Content applies immediately; `stockPendingActionId` comes back when the
+ * submitted stock quantities were queued for Super Admin approval instead
+ * (everyone but `super_admin` — see `/admin/approvals`). */
 export async function createProduct(formData: FormData) {
-  return api.postForm<{ product: ApiProduct }>("/products", formData);
+  return api.postForm<{ product: ApiProduct; stockPendingActionId?: string }>("/products", formData);
 }
 
 export async function updateProduct(id: string, formData: FormData) {
-  return api.patchForm<{ product: ApiProduct }>(`/products/${id}`, formData);
+  return api.patchForm<{ product: ApiProduct; stockPendingActionId?: string }>(
+    `/products/${id}`,
+    formData
+  );
 }
 
 /** `super_admin` deletes directly; `co_admin`'s request comes back as a

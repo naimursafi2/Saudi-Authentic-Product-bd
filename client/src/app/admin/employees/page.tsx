@@ -1,8 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, UserCog } from "lucide-react";
-import { listUsers, createStaff, updateUserRole, updateUserStatus, updateStaffMeta } from "@/lib/api/users";
+import {
+  listUsers,
+  createStaff,
+  updateUserRole,
+  updateUserStatus,
+  updateStaffMeta,
+  unlockUser,
+  impersonateUser,
+} from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -14,9 +23,15 @@ import type { ApiUser } from "@/types/api";
 
 const STAFF_ROLES = ["employee", "delivery_agent", "co_admin", "order_manager", "admin", "super_admin"] as const;
 
+function isLocked(user: ApiUser): boolean {
+  return Boolean(user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now());
+}
+
 export default function AdminEmployeesPage() {
-  const { user } = useAuth();
+  const { user, startImpersonation } = useAuth();
+  const router = useRouter();
   const canManage = user?.role === "admin" || user?.role === "super_admin";
+  const canImpersonate = user?.role === "super_admin";
 
   const [staff, setStaff] = useState<ApiUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +39,36 @@ export default function AdminEmployeesPage() {
   const [editing, setEditing] = useState<ApiUser | "new" | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function handleUnlock(person: ApiUser) {
+    setActionError(null);
+    setActingId(person._id);
+    try {
+      await unlockUser(person._id);
+      load();
+    } catch (err) {
+      setActionError(err instanceof ApiClientError ? err.message : "Could not unlock this account.");
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function handleImpersonate(person: ApiUser) {
+    if (!confirm(`Sign in as ${person.name}? This is recorded in the audit log.`)) return;
+    setActionError(null);
+    setActingId(person._id);
+    try {
+      const { data } = await impersonateUser(person._id);
+      await startImpersonation(data.accessToken);
+      router.push("/account");
+    } catch (err) {
+      setActionError(err instanceof ApiClientError ? err.message : "Could not start a support login.");
+    } finally {
+      setActingId(null);
+    }
+  }
 
   function load() {
     setIsLoading(true);
@@ -38,7 +83,6 @@ export default function AdminEmployeesPage() {
       .finally(() => setIsLoading(false));
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(load, []);
 
   async function handleSubmit(values: EmployeeFormValues) {
@@ -94,6 +138,8 @@ export default function AdminEmployeesPage() {
         }
       />
 
+      {actionError && <p className="mb-4 text-sm text-[#8a4a3f]">{actionError}</p>}
+
       {isLoading ? (
         <TableSkeleton />
       ) : error ? (
@@ -126,13 +172,20 @@ export default function AdminEmployeesPage() {
                     {[person.staffMeta?.department, person.staffMeta?.designation].filter(Boolean).join(" / ") || "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
-                        person.isActive ? "bg-[#e9f3ee] text-green-900" : "bg-cream-300 text-brown-500"
-                      }`}
-                    >
-                      {person.isActive ? "Active" : "Inactive"}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
+                          person.isActive ? "bg-[#e9f3ee] text-green-900" : "bg-cream-300 text-brown-500"
+                        }`}
+                      >
+                        {person.isActive ? "Active" : "Inactive"}
+                      </span>
+                      {isLocked(person) && (
+                        <span className="rounded-full bg-[#fbeceb] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a4a3f]">
+                          Locked
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-brown-600">
                     {person.staffMeta?.joinedAt
@@ -142,12 +195,32 @@ export default function AdminEmployeesPage() {
                   {canManage && (
                     <td className="px-4 py-3 text-right">
                       {person.role !== "super_admin" && (
-                        <button
-                          onClick={() => setEditing(person)}
-                          className="text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex justify-end gap-3">
+                          {isLocked(person) && (
+                            <button
+                              onClick={() => handleUnlock(person)}
+                              disabled={actingId === person._id}
+                              className="text-xs font-bold uppercase tracking-wide text-[#8a4a3f] hover:underline disabled:opacity-50"
+                            >
+                              Unlock
+                            </button>
+                          )}
+                          {canImpersonate && person.isActive && (
+                            <button
+                              onClick={() => handleImpersonate(person)}
+                              disabled={actingId === person._id}
+                              className="text-xs font-bold uppercase tracking-wide text-brown-600 hover:underline disabled:opacity-50"
+                            >
+                              Sign in as
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setEditing(person)}
+                            className="text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       )}
                     </td>
                   )}

@@ -83,6 +83,54 @@ export async function createPendingAction(
   return action;
 }
 
+/** The two gated action types that write a variant's stock. */
+const STOCK_ACTION_TYPES: PendingActionType[] = ["inventory.adjust", "product.stock.update"];
+
+/**
+ * Which variant ids a pending stock request would write to. Empty for every
+ * other action type — only stock requests can collide with each other.
+ */
+function stockTargetVariantIds(action: Pick<IPendingAction, "actionType" | "payload">): string[] {
+  if (action.actionType === "inventory.adjust") {
+    const variantId = action.payload.variantId;
+    return typeof variantId === "string" ? [variantId] : [];
+  }
+  if (action.actionType === "product.stock.update") {
+    const stocks = (action.payload.stocks ?? []) as { variantId?: unknown }[];
+    return stocks.map((s) => s.variantId).filter((id): id is string => typeof id === "string");
+  }
+  return [];
+}
+
+/**
+ * Maps each still-pending stock request to the other still-pending requests
+ * targeting a variant it also touches. Two queued changes to one variant both
+ * apply in grant order — deltas compose, but absolute updates are
+ * last-grant-wins — so the reviewer needs to see the overlap before granting
+ * rather than discovering it afterwards. Computed across the whole queue, not
+ * just the page being viewed, so pagination can't hide a conflict.
+ */
+async function buildStockConflictMap(): Promise<Map<string, string[]>> {
+  const pendingStockActions = await PendingActionModel.find({
+    status: "pending",
+    actionType: { $in: STOCK_ACTION_TYPES },
+  }).select("actionType payload");
+
+  const targets = pendingStockActions.map((action) => ({
+    id: action._id.toString(),
+    variantIds: new Set(stockTargetVariantIds(action)),
+  }));
+
+  const conflicts = new Map<string, string[]>();
+  for (const a of targets) {
+    const overlapping = targets
+      .filter((b) => b.id !== a.id && [...b.variantIds].some((id) => a.variantIds.has(id)))
+      .map((b) => b.id);
+    if (overlapping.length > 0) conflicts.set(a.id, overlapping);
+  }
+  return conflicts;
+}
+
 export async function listPendingActions(filter: {
   status?: PendingActionStatus;
   actionType?: PendingActionType;
@@ -94,7 +142,7 @@ export async function listPendingActions(filter: {
   if (filter.actionType) query.actionType = filter.actionType;
 
   const skip = (filter.page - 1) * filter.limit;
-  const [actions, total] = await Promise.all([
+  const [actions, total, conflicts] = await Promise.all([
     PendingActionModel.find(query)
       .populate("requestedBy", "name email")
       .populate("reviewedBy", "name email")
@@ -102,10 +150,14 @@ export async function listPendingActions(filter: {
       .skip(skip)
       .limit(filter.limit),
     PendingActionModel.countDocuments(query),
+    buildStockConflictMap(),
   ]);
 
   return {
-    actions,
+    actions: actions.map((action) => ({
+      ...action.toObject(),
+      conflictingActionIds: conflicts.get(action._id.toString()) ?? [],
+    })),
     pagination: {
       page: filter.page,
       limit: filter.limit,
@@ -131,6 +183,13 @@ export async function grantPendingAction(
 ): Promise<IPendingAction> {
   const action = await loadPendingAction(id);
 
+  // Captured before applying: once this grant lands, the other requests are
+  // still pending but now race against a stock level this grant just moved.
+  // Recording it leaves a permanent trace of the overlap in the audit log.
+  const conflicts = STOCK_ACTION_TYPES.includes(action.actionType)
+    ? ((await buildStockConflictMap()).get(action._id.toString()) ?? [])
+    : [];
+
   const handler = handlers.get(action.actionType);
   if (!handler) {
     throw ApiError.internal(`No handler registered for action type "${action.actionType}"`);
@@ -144,14 +203,19 @@ export async function grantPendingAction(
   action.resultResourceId = result.resourceId;
   await action.save();
 
+  const conflictNote =
+    conflicts.length > 0
+      ? `Granted while ${conflicts.length} other pending stock request(s) target the same variant: ${conflicts.join(", ")}`
+      : undefined;
+
   await recordAuditLog({
     actor: reviewer.id,
     actorRole: reviewer.role,
     action: `${action.actionType}.grant`,
     resource: "PendingAction",
     resourceId: action._id.toString(),
-    newValue: { status: "granted", resultResourceId: result.resourceId },
-    note: reviewNote,
+    newValue: { status: "granted", resultResourceId: result.resourceId, conflictingActionIds: conflicts },
+    note: [reviewNote, conflictNote].filter(Boolean).join(" — ") || undefined,
   });
 
   const requesterUser = await UserModel.findById(action.requestedBy);

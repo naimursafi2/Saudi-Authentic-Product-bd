@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import { sendStaffWelcomeEmail } from "./email.service";
 import { recordAuditLog } from "./auditLog.service";
+import { signImpersonationToken } from "../utils/jwt";
 import type {
   AddAddressInput,
   CreateStaffInput,
@@ -123,6 +124,61 @@ export async function updateUserStatus(id: string, isActive: boolean, actor: { i
     resourceId: id,
     oldValue: { isActive: previousStatus },
     newValue: { isActive },
+  });
+
+  return user;
+}
+
+/**
+ * Support-login: mints a short-lived bearer token acting as `id`, stamped
+ * with the Super Admin who started it. No refresh token is issued and no
+ * cookies are touched — the Super Admin's own session stays intact
+ * underneath, and the impersonation dies on its own when the token expires.
+ * Impersonating another Super Admin is refused so the role can't be used to
+ * sidestep peer accountability.
+ */
+export async function impersonateUser(id: string, actor: { id: string; role: Role }) {
+  if (id === actor.id) throw ApiError.badRequest("You cannot impersonate yourself");
+
+  const target = await UserModel.findById(id);
+  if (!target) throw ApiError.notFound("User not found");
+  if (!target.isActive) throw ApiError.badRequest("This account is deactivated");
+  if (target.role === "super_admin") throw ApiError.forbidden("Super Admin accounts cannot be impersonated");
+
+  const accessToken = signImpersonationToken({
+    sub: target._id.toString(),
+    role: target.role,
+    tokenVersion: target.tokenVersion,
+    impersonatedBy: actor.id,
+  });
+
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "user.impersonate.start",
+    resource: "User",
+    resourceId: id,
+    newValue: { targetEmail: target.email, targetRole: target.role },
+  });
+
+  return { accessToken, user: target };
+}
+
+/** Clears a lockout applied by the failed-login limiter, without waiting it out. */
+export async function unlockUserAccount(id: string, actor: { id: string; role: Role }) {
+  const user = await UserModel.findById(id);
+  if (!user) throw ApiError.notFound("User not found");
+
+  user.lockedUntil = undefined;
+  user.failedLoginAttempts = 0;
+  await user.save();
+
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "user.unlock",
+    resource: "User",
+    resourceId: id,
   });
 
   return user;

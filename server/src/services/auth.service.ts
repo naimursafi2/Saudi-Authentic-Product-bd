@@ -9,9 +9,18 @@ import {
   verifyPasswordResetToken,
   signEmailVerificationToken,
   verifyEmailVerificationToken,
+  signTwoFactorChallengeToken,
+  verifyTwoFactorChallengeToken,
 } from "../utils/jwt";
-import { sendPasswordResetEmail, sendVerificationEmail } from "./email.service";
+import { sendPasswordResetEmail, sendVerificationEmail, sendAccountLockedEmail } from "./email.service";
 import { verifyGoogleIdToken } from "../config/google";
+import { verifyTwoFactorCode } from "./twoFactor.service";
+import {
+  ACCOUNT_LOCK_DURATION_MS,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+  INACTIVITY_ENFORCED_ROLES,
+  STAFF_INACTIVITY_TIMEOUT_MS,
+} from "../constants/security";
 import type { LoginInput, RegisterInput } from "../validators/auth.validator";
 
 function issueTokens(user: IUser) {
@@ -92,7 +101,18 @@ export async function googleAuth(idToken: string) {
   return { user, tokens: issueTokens(user) };
 }
 
-export async function login(input: LoginInput) {
+export type LoginResult =
+  | { kind: "session"; user: IUser; tokens: ReturnType<typeof issueTokens> }
+  | { kind: "two-factor-required"; challengeToken: string };
+
+/**
+ * A wrong password increments `failedLoginAttempts`; hitting
+ * `MAX_FAILED_LOGIN_ATTEMPTS` locks the account for
+ * `ACCOUNT_LOCK_DURATION_MS`. Both counters reset on any successful password
+ * check, so a legitimate user who mistypes a few times is never penalised
+ * once they get in.
+ */
+export async function login(input: LoginInput): Promise<LoginResult> {
   const user = await UserModel.findOne({ email: input.email }).select("+password");
   if (!user) {
     throw ApiError.unauthorized("Invalid email or password");
@@ -100,10 +120,64 @@ export async function login(input: LoginInput) {
   if (!user.isActive) {
     throw ApiError.forbidden("This account has been deactivated. Contact an administrator.");
   }
+  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+    const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    throw ApiError.forbidden(
+      `Too many failed sign-in attempts. This account is locked for another ${minutes} minute(s).`
+    );
+  }
 
   const isMatch = await user.comparePassword(input.password);
   if (!isMatch) {
+    user.failedLoginAttempts += 1;
+    if (user.failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+      user.lockedUntil = new Date(Date.now() + ACCOUNT_LOCK_DURATION_MS);
+      user.failedLoginAttempts = 0;
+      await user.save();
+      void sendAccountLockedEmail(user.email, user.name, ACCOUNT_LOCK_DURATION_MS / 60000);
+      throw ApiError.forbidden(
+        `Too many failed sign-in attempts. This account is locked for ${ACCOUNT_LOCK_DURATION_MS / 60000} minutes.`
+      );
+    }
+    await user.save();
     throw ApiError.unauthorized("Invalid email or password");
+  }
+
+  user.failedLoginAttempts = 0;
+  user.lockedUntil = undefined;
+  user.lastSeenAt = new Date();
+  await user.save();
+
+  if (user.twoFactorEnabled) {
+    return {
+      kind: "two-factor-required",
+      challengeToken: signTwoFactorChallengeToken({
+        sub: user._id.toString(),
+        tokenVersion: user.tokenVersion,
+      }),
+    };
+  }
+
+  return { kind: "session", user, tokens: issueTokens(user) };
+}
+
+/** Second step of a 2FA login — exchanges a valid challenge token plus a
+ * TOTP/recovery code for a real session. */
+export async function completeTwoFactorLogin(challengeToken: string, code: string) {
+  let payload;
+  try {
+    payload = verifyTwoFactorChallengeToken(challengeToken);
+  } catch {
+    throw ApiError.unauthorized("This sign-in attempt has expired — please log in again");
+  }
+
+  const user = await UserModel.findById(payload.sub);
+  if (!user || !user.isActive || user.tokenVersion !== payload.tokenVersion) {
+    throw ApiError.unauthorized("This sign-in attempt has expired — please log in again");
+  }
+
+  if (!(await verifyTwoFactorCode(user._id.toString(), code))) {
+    throw ApiError.unauthorized("That authentication code is not valid");
   }
 
   return { user, tokens: issueTokens(user) };
@@ -121,8 +195,22 @@ export async function refreshSession(refreshToken: string) {
   if (!user || !user.isActive || user.tokenVersion !== payload.tokenVersion) {
     throw ApiError.unauthorized("Invalid or expired refresh token");
   }
+  if (isStaffSessionIdle(user)) {
+    throw ApiError.unauthorized("Signed out due to inactivity — please log in again");
+  }
+
+  user.lastSeenAt = new Date();
+  await user.save();
 
   return { user, tokens: issueTokens(user) };
+}
+
+/** Staff-only idle-session check — see `constants/security.ts` for why
+ * customers are exempt. */
+export function isStaffSessionIdle(user: IUser): boolean {
+  if (!INACTIVITY_ENFORCED_ROLES.includes(user.role)) return false;
+  if (!user.lastSeenAt) return false;
+  return Date.now() - user.lastSeenAt.getTime() > STAFF_INACTIVITY_TIMEOUT_MS;
 }
 
 /** Invalidate all existing sessions for a user (logout-all / password change). */

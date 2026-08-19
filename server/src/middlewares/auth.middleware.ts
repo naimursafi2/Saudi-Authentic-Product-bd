@@ -1,7 +1,30 @@
 import type { NextFunction, Request, Response } from "express";
 import { ApiError } from "../utils/ApiError";
 import { verifyAccessToken } from "../utils/jwt";
-import { UserModel } from "../models/User.model";
+import { UserModel, type IUser } from "../models/User.model";
+import {
+  ACTIVITY_WRITE_GRANULARITY_MS,
+  INACTIVITY_ENFORCED_ROLES,
+  STAFF_INACTIVITY_TIMEOUT_MS,
+} from "../constants/security";
+
+/**
+ * Staff-only sliding idle timeout. The `lastSeenAt` write is throttled to
+ * `ACTIVITY_WRITE_GRANULARITY_MS` so an active session doesn't turn every
+ * authenticated request into a database write.
+ */
+async function enforceInactivityWindow(user: Pick<IUser, "_id" | "role" | "lastSeenAt">) {
+  if (!INACTIVITY_ENFORCED_ROLES.includes(user.role)) return;
+
+  const now = Date.now();
+  const lastSeen = user.lastSeenAt?.getTime();
+  if (lastSeen !== undefined && now - lastSeen > STAFF_INACTIVITY_TIMEOUT_MS) {
+    throw ApiError.unauthorized("Signed out due to inactivity — please log in again");
+  }
+  if (lastSeen === undefined || now - lastSeen > ACTIVITY_WRITE_GRANULARITY_MS) {
+    await UserModel.updateOne({ _id: user._id }, { lastSeenAt: new Date(now) });
+  }
+}
 
 /**
  * Verifies the access token (from the `accessToken` httpOnly cookie, or an
@@ -23,7 +46,9 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
     const payload = verifyAccessToken(token);
 
-    const user = await UserModel.findById(payload.sub).select("role isActive isEmailVerified tokenVersion");
+    const user = await UserModel.findById(payload.sub).select(
+      "role isActive isEmailVerified tokenVersion lastSeenAt"
+    );
     if (!user || !user.isActive) {
       throw ApiError.unauthorized("Your account is no longer active");
     }
@@ -31,11 +56,19 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw ApiError.unauthorized("Session expired, please log in again");
     }
 
+    // An impersonation token is already short-lived and belongs to the Super
+    // Admin's activity, not the target user's — don't idle-expire it or let
+    // it stamp `lastSeenAt` on someone else's account.
+    if (!payload.impersonatedBy) {
+      await enforceInactivityWindow(user);
+    }
+
     req.user = {
       id: user._id.toString(),
       role: user.role,
       tokenVersion: user.tokenVersion,
       isEmailVerified: user.isEmailVerified,
+      impersonatedBy: payload.impersonatedBy,
     };
     next();
   } catch (err) {

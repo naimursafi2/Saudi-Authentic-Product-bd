@@ -26,7 +26,7 @@ router.post(
 );
 router.get(
   "/",
-  authorize("order_manager", "co_admin", "admin", "super_admin"),
+  authorize("customer", "order_manager", "co_admin", "admin", "super_admin"),
   validate({ query: listRefundsQuerySchema }),
   refundController.listRefunds
 );

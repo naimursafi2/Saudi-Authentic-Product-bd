@@ -90,4 +90,12 @@ export async function updateStaffMeta(
   return api.patch<{ user: ApiUser }>(`/users/${id}/staff-meta`, payload);
 }
 
+export async function unlockUser(id: string) {
+  return api.patch<{ user: ApiUser }>(`/users/${id}/unlock`, {});
+}
+
+export async function impersonateUser(id: string) {
+  return api.post<{ accessToken: string; user: ApiUser }>(`/users/${id}/impersonate`);
+}
+
 export type { ApiAddress };

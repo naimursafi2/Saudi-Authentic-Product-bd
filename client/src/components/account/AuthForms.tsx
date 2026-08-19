@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { KeyRound, LogIn, MapPin, Plus, UserPlus, X } from "lucide-react";
+import { KeyRound, LogIn, MapPin, Plus, ShieldCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -33,7 +33,12 @@ const HEADER: Record<Tab, { icon: typeof LogIn; title: string; subtitle: string 
 
 export function AuthForms() {
   const [tab, setTab] = useState<Tab>("login");
-  const { login, register } = useAuth();
+  const { login, register, completeTwoFactorLogin } = useAuth();
+
+  // Set once the password step succeeds on a 2FA-enabled account — the form
+  // then swaps to the code-entry step until it's cleared.
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
 
   // Shared / login+register fields
   const [name, setName] = useState("");
@@ -76,7 +81,10 @@ export function AuthForms() {
     setIsSubmitting(true);
     try {
       if (tab === "login") {
-        await login(email, password);
+        const outcome = await login(email, password);
+        if ("challengeToken" in outcome) {
+          setChallengeToken(outcome.challengeToken);
+        }
       } else if (tab === "register") {
         await register({
           name,
@@ -95,6 +103,72 @@ export function AuthForms() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleTwoFactorSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!challengeToken) return;
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await completeTwoFactorLogin(challengeToken, twoFactorCode.trim());
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function cancelTwoFactor() {
+    setChallengeToken(null);
+    setTwoFactorCode("");
+    setPassword("");
+    setError(null);
+  }
+
+  if (challengeToken) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
+        <div className="text-center">
+          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-green-950 text-gold-500">
+            <ShieldCheck size={24} />
+          </span>
+          <h1 className="font-serif text-3xl text-green-950">Two-Step Verification</h1>
+          <p className="mt-2 text-sm text-brown-500">
+            Enter the 6-digit code from your authenticator app, or one of your recovery codes.
+          </p>
+        </div>
+
+        <form
+          onSubmit={handleTwoFactorSubmit}
+          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+        >
+          <div>
+            <label className={labelClasses}>Authentication Code</label>
+            <input
+              required
+              autoFocus
+              autoComplete="one-time-code"
+              value={twoFactorCode}
+              onChange={(e) => setTwoFactorCode(e.target.value)}
+              placeholder="123456"
+              className={cn(fieldClasses, "text-center text-lg tracking-[0.3em]")}
+            />
+          </div>
+          {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+          <Button type="submit" variant="primary" size="lg" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? "Verifying..." : "Verify & Sign In"}
+          </Button>
+          <button
+            type="button"
+            onClick={cancelTwoFactor}
+            className="text-center text-xs font-bold uppercase tracking-[0.08em] text-brown-500 hover:text-green-950"
+          >
+            Back to Sign In
+          </button>
+        </form>
+      </div>
+    );
   }
 
   const Header = HEADER[tab];

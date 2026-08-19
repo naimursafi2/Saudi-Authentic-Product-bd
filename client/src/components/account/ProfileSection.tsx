@@ -9,6 +9,7 @@ import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { TwoFactorSection } from "@/components/account/TwoFactorSection";
 import type { ApiUser } from "@/types/api";
 
 const fieldClasses =
@@ -243,6 +244,8 @@ export function ProfileSection({ user }: { user: ApiUser }) {
         <h2 className="mb-4 font-serif text-lg text-green-950">Change Password</h2>
         <ChangePasswordForm />
       </div>
+
+      <TwoFactorSection user={user} />
     </div>
   );
 }

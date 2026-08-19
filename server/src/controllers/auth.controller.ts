@@ -4,6 +4,7 @@ import { sendSuccess } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 import { setAuthCookies, clearAuthCookies } from "../utils/cookies";
 import * as authService from "../services/auth.service";
+import * as twoFactorService from "../services/twoFactor.service";
 import { UserModel } from "../models/User.model";
 
 export const register = catchAsync(async (req: Request, res: Response) => {
@@ -13,9 +14,41 @@ export const register = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const login = catchAsync(async (req: Request, res: Response) => {
-  const { user, tokens } = await authService.login(req.body);
+  const result = await authService.login(req.body);
+  if (result.kind === "two-factor-required") {
+    sendSuccess(res, 200, "Enter the code from your authenticator app", {
+      requiresTwoFactor: true,
+      challengeToken: result.challengeToken,
+    });
+    return;
+  }
+  setAuthCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
+  sendSuccess(res, 200, "Logged in successfully", {
+    user: result.user,
+    accessToken: result.tokens.accessToken,
+  });
+});
+
+export const verifyTwoFactorLogin = catchAsync(async (req: Request, res: Response) => {
+  const { challengeToken, code } = req.body;
+  const { user, tokens } = await authService.completeTwoFactorLogin(challengeToken, code);
   setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
   sendSuccess(res, 200, "Logged in successfully", { user, accessToken: tokens.accessToken });
+});
+
+export const startTwoFactorSetup = catchAsync(async (req: Request, res: Response) => {
+  const setup = await twoFactorService.startTwoFactorSetup(req.user!.id);
+  sendSuccess(res, 200, "Scan this code with your authenticator app", setup);
+});
+
+export const enableTwoFactor = catchAsync(async (req: Request, res: Response) => {
+  const { recoveryCodes } = await twoFactorService.enableTwoFactor(req.user!.id, req.user!.role, req.body.code);
+  sendSuccess(res, 200, "Two-factor authentication is now enabled", { recoveryCodes });
+});
+
+export const disableTwoFactor = catchAsync(async (req: Request, res: Response) => {
+  await twoFactorService.disableTwoFactor(req.user!.id, req.user!.role, req.body.password);
+  sendSuccess(res, 200, "Two-factor authentication disabled");
 });
 
 export const googleAuth = catchAsync(async (req: Request, res: Response) => {
@@ -47,7 +80,7 @@ export const logoutAll = catchAsync(async (req: Request, res: Response) => {
 export const me = catchAsync(async (req: Request, res: Response) => {
   const user = await UserModel.findById(req.user!.id);
   if (!user) throw ApiError.notFound("User not found");
-  sendSuccess(res, 200, "Current user", { user });
+  sendSuccess(res, 200, "Current user", { user, impersonatedBy: req.user!.impersonatedBy });
 });
 
 export const changePassword = catchAsync(async (req: Request, res: Response) => {

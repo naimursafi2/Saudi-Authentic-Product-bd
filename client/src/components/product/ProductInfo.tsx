@@ -60,13 +60,18 @@ export function ProductInfo({ product }: { product: Product }) {
         />
       </div>
 
-      <div className="flex items-center gap-3 border-b border-green-900/10 pb-6">
+      <div className="flex flex-wrap items-center gap-3 border-b border-green-900/10 pb-6">
         <span className="text-3xl font-semibold text-green-950">
           {formatBDT(variant.priceBDT)}
         </span>
         {variant.compareAtPriceBDT && (
           <span className="text-lg text-brown-500/60 line-through">
             {formatBDT(variant.compareAtPriceBDT)}
+          </span>
+        )}
+        {variant.stock === 0 && (
+          <span className="rounded-full bg-brown-600 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">
+            Stock Out
           </span>
         )}
       </div>
@@ -100,11 +105,14 @@ export function ProductInfo({ product }: { product: Product }) {
           Quantity
         </p>
         <QuantityInput value={quantity} onChange={setQuantity} max={Math.max(1, variant.stock)} />
-        {variant.stock === 0 && (
-          <p className="mt-2 text-xs font-semibold text-[#8a4a3f]">Out of stock</p>
-        )}
-        {variant.stock > 0 && variant.stock <= 5 && (
-          <p className="mt-2 text-xs font-semibold text-brown-600">Only {variant.stock} left</p>
+        {variant.stock === 0 ? (
+          <p className="mt-2 text-xs font-semibold text-[#8a4a3f]">
+            This size is out of stock and can&apos;t be ordered right now.
+          </p>
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-brown-600">
+            {variant.stock <= 5 ? `Only ${variant.stock} left` : `${variant.stock} in stock`}
+          </p>
         )}
       </div>
 

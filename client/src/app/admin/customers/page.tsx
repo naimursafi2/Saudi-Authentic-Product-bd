@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Users, Search } from "lucide-react";
-import { listUsers, updateUserStatus } from "@/lib/api/users";
+import { impersonateUser, listUsers, unlockUser, updateUserStatus } from "@/lib/api/users";
+import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -11,9 +13,16 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import type { ApiUser, Pagination } from "@/types/api";
 
+function isLocked(user: ApiUser): boolean {
+  return Boolean(user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now());
+}
+
 export default function AdminCustomersPage() {
-  const { user } = useAuth();
+  const { user, startImpersonation } = useAuth();
+  const router = useRouter();
   const canManageStatus = user?.role !== "co_admin";
+  const canImpersonate = user?.role === "super_admin";
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [customers, setCustomers] = useState<ApiUser[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -59,6 +68,34 @@ export default function AdminCustomersPage() {
     }
   }
 
+  async function handleUnlock(customer: ApiUser) {
+    setActionError(null);
+    setUpdatingId(customer._id);
+    try {
+      await unlockUser(customer._id);
+      load();
+    } catch (err) {
+      setActionError(err instanceof ApiClientError ? err.message : "Could not unlock this account.");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function handleImpersonate(customer: ApiUser) {
+    if (!confirm(`Sign in as ${customer.name}? This is recorded in the audit log.`)) return;
+    setActionError(null);
+    setUpdatingId(customer._id);
+    try {
+      const { data } = await impersonateUser(customer._id);
+      await startImpersonation(data.accessToken);
+      router.push("/account");
+    } catch (err) {
+      setActionError(err instanceof ApiClientError ? err.message : "Could not start a support login.");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Customers" description="Browse registered customers and manage account access." />
@@ -74,6 +111,8 @@ export default function AdminCustomersPage() {
           />
         </div>
       </div>
+
+      {actionError && <p className="mb-4 text-sm text-[#8a4a3f]">{actionError}</p>}
 
       {isLoading ? (
         <TableSkeleton />
@@ -96,7 +135,7 @@ export default function AdminCustomersPage() {
                 <th className="px-4 py-3">Addresses</th>
                 <th className="px-4 py-3">Joined</th>
                 <th className="px-4 py-3">Status</th>
-                {canManageStatus && <th className="px-4 py-3" />}
+                {(canManageStatus || canImpersonate) && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody>
@@ -110,22 +149,53 @@ export default function AdminCustomersPage() {
                     {new Date(customer.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={customer.isActive ? "active" : "inactive"} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StatusBadge status={customer.isActive ? "active" : "inactive"} />
+                      {isLocked(customer) && (
+                        <span className="rounded-full bg-[#fbeceb] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a4a3f]">
+                          Locked
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  {canManageStatus && (
+                  {(canManageStatus || canImpersonate) && (
                     <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={updatingId === customer._id}
-                        onClick={() => handleToggleStatus(customer)}
-                      >
-                        {updatingId === customer._id
-                          ? "Updating..."
-                          : customer.isActive
-                            ? "Deactivate"
-                            : "Reactivate"}
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        {canManageStatus && isLocked(customer) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={updatingId === customer._id}
+                            onClick={() => handleUnlock(customer)}
+                          >
+                            Unlock
+                          </Button>
+                        )}
+                        {canImpersonate && customer.isActive && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={updatingId === customer._id}
+                            onClick={() => handleImpersonate(customer)}
+                          >
+                            Sign in as
+                          </Button>
+                        )}
+                        {canManageStatus && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={updatingId === customer._id}
+                            onClick={() => handleToggleStatus(customer)}
+                          >
+                            {updatingId === customer._id
+                              ? "Updating..."
+                              : customer.isActive
+                                ? "Deactivate"
+                                : "Reactivate"}
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>

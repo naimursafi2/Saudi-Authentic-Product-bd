@@ -109,6 +109,17 @@ export interface LowStockEntry {
   lowStockVariants: { _id: string; label: string; stock: number; lowStockThreshold: number }[];
 }
 
+/** Read-only live stock snapshot from `GET /inventory/stock`. */
+export interface StockLevelProduct {
+  _id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  image?: string;
+  totalStock: number;
+  variants: { variantId: string; label: string; stock: number; lowStockThreshold: number }[];
+}
+
 export interface SalesSummary {
   totalRevenueBDT: number;
   totalOrders: number;

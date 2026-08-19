@@ -13,5 +13,10 @@ export const listInventoryLogsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
 
+export const stockLevelsQuerySchema = z.object({
+  search: z.string().trim().min(1).max(120).optional(),
+});
+
 export type AdjustStockInput = z.infer<typeof adjustStockSchema>;
+export type StockLevelsQuery = z.infer<typeof stockLevelsQuerySchema>;
 export type ListInventoryLogsQuery = z.infer<typeof listInventoryLogsQuerySchema>;

@@ -274,6 +274,26 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     expect(listRes.body.data.refunds[0].status).toBe("pending_review");
   });
 
+  it("lets a customer request a refund on their own returned order and see only their own refunds", async () => {
+    const { orderId, customerToken } = await createReturnedOrder();
+    const { token: otherCustomerToken } = await createAuthedUser({ role: "customer" });
+
+    const requestRes = await request(app)
+      .post("/api/v1/refunds")
+      .set(...authHeader(customerToken))
+      .send({ orderId, reasonCategory: "damaged", requestedAmountBDT: 1000 });
+    expect(requestRes.status).toBe(201);
+    expect(requestRes.body.data.refund.status).toBe("pending_review");
+
+    const ownList = await request(app).get("/api/v1/refunds").set(...authHeader(customerToken));
+    expect(ownList.status).toBe(200);
+    expect(ownList.body.data.refunds).toHaveLength(1);
+
+    const otherList = await request(app).get("/api/v1/refunds").set(...authHeader(otherCustomerToken));
+    expect(otherList.status).toBe(200);
+    expect(otherList.body.data.refunds).toHaveLength(0);
+  });
+
   it("exposes a finance summary to admin/super_admin only, combining revenue, investment, and confirmed expenses", async () => {
     const { token: superAdminToken } = await createAuthedUser({ role: "super_admin" });
     const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });

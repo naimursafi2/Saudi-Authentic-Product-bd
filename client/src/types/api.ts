@@ -55,6 +55,9 @@ export interface ApiUser {
   avatar?: { url: string; publicId: string };
   isActive: boolean;
   isEmailVerified: boolean;
+  twoFactorEnabled: boolean;
+  /** Set while a failed-login lockout is in effect. */
+  lockedUntil?: string;
   addresses: ApiAddress[];
   staffMeta?: ApiStaffMeta;
   createdAt: string;
@@ -365,6 +368,8 @@ export type PendingActionType =
   | "coupon.create"
   | "coupon.update"
   | "product.delete"
+  | "product.stock.update"
+  | "inventory.adjust"
   | "refund.request"
   | "refund.approve"
   | "expense.confirm";
@@ -374,6 +379,13 @@ export interface ApiPendingAction {
   _id: string;
   actionType: PendingActionType;
   payload: Record<string, unknown>;
+  /**
+   * Other still-pending stock requests writing to a variant this one also
+   * touches. Both would apply in grant order — deltas compose, absolute
+   * updates are last-grant-wins — so the reviewer is warned before granting.
+   * Always empty for non-stock action types.
+   */
+  conflictingActionIds?: string[];
   requestedBy: string | { _id: string; name: string; email: string };
   requestedByRole: Role;
   status: PendingActionStatus;

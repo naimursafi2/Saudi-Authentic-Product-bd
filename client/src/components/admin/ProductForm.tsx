@@ -7,6 +7,13 @@ import type { ApiProduct, ProductBadge } from "@/types/api";
 import type { Category } from "@/types/product";
 
 export interface ProductFormVariant {
+  /**
+   * Existing variant's id, round-tripped so saving the product keeps the same
+   * `_id`. Without it the backend mints a new id on every save, orphaning the
+   * `variantId` already stored on cart lines and order items. Undefined for a
+   * variant the user just added.
+   */
+  id?: string;
   label: string;
   priceBDT: number;
   compareAtPriceBDT?: number;
@@ -56,6 +63,7 @@ function fromProduct(product?: ApiProduct): ProductFormValues {
     categories: product.categories.map((c) => (typeof c === "string" ? c : c._id)),
     badge: product.badge,
     variants: product.variants.map((v) => ({
+      id: v._id,
       label: v.label,
       priceBDT: v.priceBDT,
       compareAtPriceBDT: v.compareAtPriceBDT,

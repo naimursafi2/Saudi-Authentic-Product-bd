@@ -2,6 +2,15 @@ import { z } from "zod";
 import { booleanish } from "./common.validator";
 
 const variantSchema = z.object({
+  /**
+   * The existing variant's id, round-tripped by the admin form so an edit
+   * keeps the same `_id` instead of minting a new one — otherwise every
+   * product save orphans the `variantId` stored on existing cart lines and
+   * order items. Absent for a newly added variant; an id that doesn't belong
+   * to the product being edited is ignored (treated as new), so it can't be
+   * used to graft a variant id in from elsewhere.
+   */
+  id: z.string().length(24).optional(),
   label: z.string().trim().min(1).max(40),
   priceBDT: z.number().positive(),
   compareAtPriceBDT: z.number().positive().optional(),
