@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as performanceController from "../controllers/performance.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createPerformanceReviewSchema,
@@ -18,13 +18,13 @@ router.get("/mine", performanceController.listMine);
 // -- Admin / Co-Admin / Super Admin --
 router.post(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("performance.manage"),
   validate({ body: createPerformanceReviewSchema }),
   performanceController.create
 );
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("performance.view"),
   validate({ query: listPerformanceReviewsQuerySchema }),
   performanceController.list
 );

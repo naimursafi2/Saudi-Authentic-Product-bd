@@ -38,18 +38,18 @@ function refundOrderId(order: ApiRefund["order"]): string {
 const STATUS_CLASSES: Record<OrderStatus, string> = {
   pending: "bg-cream-300 text-brown-600",
   confirmed: "bg-cream-300 text-brown-600",
-  processing: "bg-[#fcf8ee] text-[#735c00]",
-  packed: "bg-[#fcf8ee] text-[#735c00]",
-  ready_for_dispatch: "bg-[#fcf8ee] text-[#735c00]",
-  assigned_to_agent: "bg-[#e9f3ee] text-green-900",
-  picked_up: "bg-[#e9f3ee] text-green-900",
-  out_for_delivery: "bg-[#e9f3ee] text-green-900",
-  otp_verified: "bg-[#e9f3ee] text-green-900",
-  delivered: "bg-green-900 text-white",
-  delivery_failed: "bg-[#fbeceb] text-[#8a4a3f]",
-  cancelled: "bg-[#fbeceb] text-[#8a4a3f]",
-  returned: "bg-[#fbeceb] text-[#8a4a3f]",
-  refunded: "bg-[#fbeceb] text-[#8a4a3f]",
+  processing: "bg-gold-soft text-gold-700",
+  packed: "bg-gold-soft text-gold-700",
+  ready_for_dispatch: "bg-gold-soft text-gold-700",
+  assigned_to_agent: "bg-success-soft text-green-900",
+  picked_up: "bg-success-soft text-green-900",
+  out_for_delivery: "bg-success-soft text-green-900",
+  otp_verified: "bg-success-soft text-green-900",
+  delivered: "bg-brand-deep-2 text-white",
+  delivery_failed: "bg-danger-soft text-danger",
+  cancelled: "bg-danger-soft text-danger",
+  returned: "bg-danger-soft text-danger",
+  refunded: "bg-danger-soft text-danger",
 };
 
 export function OrderHistory() {
@@ -122,7 +122,7 @@ export function OrderHistory() {
     return (
       <div className="flex flex-col gap-3">
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="h-32 w-full animate-pulse rounded-xl bg-white" />
+          <div key={i} className="h-32 w-full animate-pulse rounded-xl bg-surface" />
         ))}
       </div>
     );
@@ -130,7 +130,7 @@ export function OrderHistory() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-dashed border-[#8a4a3f]/30 bg-white py-16 text-center text-sm text-[#8a4a3f]">
+      <div className="rounded-xl border border-dashed border-danger/30 bg-surface py-16 text-center text-sm text-danger">
         {error}
       </div>
     );
@@ -138,7 +138,7 @@ export function OrderHistory() {
 
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-brown-500/30 bg-white py-16 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-brown-500/30 bg-surface py-16 text-center">
         <Package size={32} className="text-brown-500/50" />
         <p className="text-sm text-brown-500">You haven&apos;t placed any orders yet.</p>
         <ButtonLink href="/shop" variant="primary" size="sm">
@@ -164,7 +164,7 @@ export function OrderHistory() {
         {orders.map((order) => (
           <div
             key={order._id}
-            className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-white p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow hover:shadow-md"
+            className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow hover:shadow-md"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -279,7 +279,7 @@ export function OrderHistory() {
               />
             </div>
 
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
 
             <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
               <Button type="button" variant="outline" size="sm" onClick={() => setRefundOrder(null)}>
@@ -298,7 +298,7 @@ export function OrderHistory() {
 
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-brown-600/10 bg-white p-4 text-center">
+    <div className="rounded-xl border border-brown-600/10 bg-surface p-4 text-center">
       <span className="block text-xl font-semibold text-green-950">{value}</span>
       <span className="block text-[11px] font-bold uppercase tracking-wide text-brown-500">{label}</span>
     </div>

@@ -134,7 +134,7 @@ export function AuthForms() {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
         <div className="text-center">
-          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-green-950 text-gold-500">
+          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-brand-deep text-gold-500">
             <ShieldCheck size={24} />
           </span>
           <h1 className="font-serif text-3xl text-green-950">Two-Step Verification</h1>
@@ -145,7 +145,7 @@ export function AuthForms() {
 
         <form
           onSubmit={handleTwoFactorSubmit}
-          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
         >
           <div>
             <label className={labelClasses}>Authentication Code</label>
@@ -159,7 +159,7 @@ export function AuthForms() {
               className={cn(fieldClasses, "text-center text-lg tracking-[0.3em]")}
             />
           </div>
-          {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           <Button type="submit" variant="primary" size="lg" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? "Verifying..." : "Verify & Sign In"}
           </Button>
@@ -180,7 +180,7 @@ export function AuthForms() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
       <div className="text-center">
-        <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-green-950 text-gold-500">
+        <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-brand-deep text-gold-500">
           <Header.icon size={24} />
         </span>
         <h1 className="font-serif text-3xl text-green-950">{Header.title}</h1>
@@ -198,7 +198,7 @@ export function AuthForms() {
               }}
               className={cn(
                 "flex-1 cursor-pointer rounded py-2 text-xs font-bold uppercase tracking-[0.08em] transition-colors",
-                tab === t ? "bg-green-900 text-white" : "text-brown-600 hover:bg-green-950/5"
+                tab === t ? "bg-brand-deep-2 text-white" : "text-brown-600 hover:bg-green-950/5"
               )}
             >
               {t === "login" ? "Sign In" : "Register"}
@@ -208,7 +208,7 @@ export function AuthForms() {
       )}
 
       {tab === "forgot" && forgotSent ? (
-        <div className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-white p-6 text-center shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 text-center shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <p className="text-sm text-brown-600">
             If an account exists for <span className="font-semibold text-green-950">{email}</span>, a
             reset link has been sent.
@@ -226,7 +226,7 @@ export function AuthForms() {
       ) : (
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
         >
           {tab === "register" && (
             <div>
@@ -301,9 +301,9 @@ export function AuthForms() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
-                inputClassName={cn(fieldClasses, passwordsMismatch && "border-[#8a4a3f]/50")}
+                inputClassName={cn(fieldClasses, passwordsMismatch && "border-danger/50")}
               />
-              {passwordsMismatch && <p className="mt-1 text-xs text-[#8a4a3f]">Passwords do not match.</p>}
+              {passwordsMismatch && <p className="mt-1 text-xs text-danger">Passwords do not match.</p>}
             </div>
           )}
 
@@ -323,7 +323,7 @@ export function AuthForms() {
                       setCityArea("");
                     }}
                     aria-label="Remove address"
-                    className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                    className="cursor-pointer text-brown-500 hover:text-danger"
                   >
                     <X size={14} />
                   </button>
@@ -362,7 +362,7 @@ export function AuthForms() {
               </button>
             ))}
 
-          {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" disabled={isSubmitting}>
             {isSubmitting
               ? "Please wait..."
@@ -395,6 +395,26 @@ export function AuthForms() {
             </>
           )}
         </form>
+      )}
+
+      {/* The header has a single "Sign In" action and no separate Sign Up
+          button, so this is the primary route into registration (the tab bar
+          above is the other). Mirrored for the reverse direction so someone
+          who lands on Register can get back to signing in. */}
+      {tab !== "forgot" && (
+        <p className="text-center text-sm text-brown-500">
+          {tab === "login" ? "Don't have an account? " : "Already have an account? "}
+          <button
+            type="button"
+            onClick={() => {
+              setTab(tab === "login" ? "register" : "login");
+              setError(null);
+            }}
+            className="cursor-pointer font-bold text-green-950 underline underline-offset-2 hover:text-gold-600"
+          >
+            {tab === "login" ? "Sign up" : "Sign in"}
+          </button>
+        </p>
       )}
 
       {tab !== "forgot" && (

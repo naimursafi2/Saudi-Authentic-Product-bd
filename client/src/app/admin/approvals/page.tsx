@@ -77,8 +77,8 @@ function PayloadSummary({ action }: { action: ApiPendingAction }) {
 }
 
 export default function AdminApprovalsPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role !== "super_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("approvals.manage");
 
   const [actions, setActions] = useState<ApiPendingAction[]>([]);
   const [statusFilter, setStatusFilter] = useState<PendingActionStatus>("pending");
@@ -199,7 +199,7 @@ export default function AdminApprovalsPage() {
         {settings && (
           <form
             onSubmit={handleSaveSettings}
-            className="grid grid-cols-1 gap-4 rounded-lg border border-brown-600/10 bg-white p-6 sm:grid-cols-2 lg:grid-cols-4"
+            className="grid grid-cols-1 gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 sm:grid-cols-2 lg:grid-cols-4"
           >
             <div>
               <label className={labelClasses}>Coupon Auto-Approve (%)</label>
@@ -245,7 +245,7 @@ export default function AdminApprovalsPage() {
                 className={fieldClasses}
               />
             </div>
-            {settingsError && <p className="text-sm text-[#8a4a3f] sm:col-span-2 lg:col-span-4">{settingsError}</p>}
+            {settingsError && <p className="text-sm text-danger sm:col-span-2 lg:col-span-4">{settingsError}</p>}
             <div className="sm:col-span-2 lg:col-span-4">
               <Button type="submit" variant="primary" size="sm" disabled={isSavingSettings}>
                 <Settings2 size={14} /> {isSavingSettings ? "Saving..." : "Save Thresholds"}
@@ -264,7 +264,7 @@ export default function AdminApprovalsPage() {
               key={s}
               onClick={() => setStatusFilter(s)}
               className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
-                statusFilter === s ? "bg-green-900 text-white" : "bg-cream-300 text-brown-600"
+                statusFilter === s ? "bg-brand-deep-2 text-white" : "bg-cream-300 text-brown-600"
               }`}
             >
               {s}
@@ -272,7 +272,7 @@ export default function AdminApprovalsPage() {
           ))}
         </div>
 
-        {actionError && <p className="mb-4 text-sm text-[#8a4a3f]">{actionError}</p>}
+        {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
 
         {isLoading ? (
           <TableSkeleton />
@@ -281,7 +281,7 @@ export default function AdminApprovalsPage() {
         ) : actions.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="Nothing here" description={`No ${statusFilter} requests.`} />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -304,7 +304,7 @@ export default function AdminApprovalsPage() {
                       {(action.conflictingActionIds?.length ?? 0) > 0 && (
                         <span
                           title="Another pending request changes the stock of the same variant. Both will apply in the order you grant them."
-                          className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#fbeceb] px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-[#8a4a3f]"
+                          className="ml-2 inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-danger"
                         >
                           <TriangleAlert size={11} />
                           Conflicts with {action.conflictingActionIds!.length}
@@ -336,7 +336,7 @@ export default function AdminApprovalsPage() {
                             aria-label="Deny"
                             disabled={actingId === action._id}
                             onClick={() => handleDeny(action)}
-                            className="cursor-pointer text-[#8a4a3f] hover:text-[#6f3b32] disabled:opacity-50"
+                            className="cursor-pointer text-danger hover:text-danger-strong disabled:opacity-50"
                           >
                             <X size={16} />
                           </button>

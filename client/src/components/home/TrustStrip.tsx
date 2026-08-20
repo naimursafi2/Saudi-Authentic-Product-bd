@@ -28,7 +28,7 @@ export function TrustStrip({ section }: { section?: ApiHomepageSection }) {
           BadgeCheck;
         return (
           <li key={`${block.icon}-${i}`} className="flex flex-col items-center gap-2 text-center sm:flex-row sm:text-left">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950 text-gold-500">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-deep text-gold-500">
               <Icon size={16} strokeWidth={2} />
             </span>
             <span className="text-xs font-bold uppercase tracking-[0.08em] text-green-950 sm:text-[13px]">

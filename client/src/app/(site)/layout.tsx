@@ -7,9 +7,9 @@ import { getSiteSettings } from "@/lib/api/siteSettings";
 import { toCategory } from "@/lib/mappers";
 
 /**
- * Fetches everything the header/announcement bar need ONCE, in parallel, on
- * the server — replacing what used to be 4 separate uncoordinated fetches
- * (3 client-side hooks inside Header, plus AnnouncementBar's own duplicate
+ * Fetches everything the header/announcement strip need ONCE, in parallel,
+ * on the server — replacing what used to be several separate uncoordinated
+ * fetches (client-side hooks inside Header, plus a duplicate
  * site-settings call) that all fired only after the page hydrated, one
  * after another, against a Render free-tier backend that can take 50s+ to
  * wake up. Any one of these failing just falls back to empty/default
@@ -51,7 +51,10 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
   return (
     <>
-      <AnnouncementBar text={settings?.announcementText} />
+      <AnnouncementBar
+        enabled={settings?.announcementEnabled}
+        text={settings?.announcementText}
+      />
       <Header initialCategories={categories} initialNavLinks={navLinks} initialSettings={settings} />
       <main className="flex-1">{children}</main>
       <Footer settings={settings} />

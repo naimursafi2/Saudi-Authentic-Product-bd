@@ -1,5 +1,7 @@
 "use client";
 
+import { PRODUCT_GRID_CLASS } from "@/lib/utils";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
@@ -80,7 +82,7 @@ export default function AccountPage() {
           {tab === "orders" && <OrderHistory />}
           {tab === "wishlist" &&
             (wishlistItems.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-brown-500/30 bg-white py-16 text-center">
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-brown-500/30 bg-surface py-16 text-center">
                 <Heart size={28} className="text-brown-500/40" />
                 <p className="text-sm text-brown-500">Your wishlist is empty.</p>
                 <ButtonLink href="/shop" variant="primary" size="sm">
@@ -88,7 +90,7 @@ export default function AccountPage() {
                 </ButtonLink>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              <div className={PRODUCT_GRID_CLASS}>
                 {wishlistItems.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

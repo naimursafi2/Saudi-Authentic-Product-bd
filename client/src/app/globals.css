@@ -1,7 +1,26 @@
 @import "tailwindcss";
 
-@theme inline {
-  /* Brand colors — Saudi Authentic Product */
+/**
+ * Dark mode works by REDEFINING the palette variables under
+ * `[data-theme="dark"]`, not by sprinkling `dark:` variants across ~140
+ * component files. That means `@theme` must NOT be `inline` here: `inline`
+ * bakes the literal color into every utility, which can never be overridden
+ * at runtime. Plain `@theme` makes each utility emit
+ * `var(--color-<token>)`, so a scoped redefinition below flips the whole
+ * app — storefront, admin, employee and delivery portals alike — with no
+ * per-component work.
+ *
+ * The tokens are therefore ROLE-based, not literally "cream" or "green":
+ *   cream-*  = page/surface backgrounds (light in light mode, near-black in dark)
+ *   green-*  = primary text and the brand's dark accents (inverts to light in dark)
+ *   brown-*  = muted/secondary text
+ *   gold-*   = the brand accent, deliberately near-constant across themes
+ * Keep that mapping in mind before changing a value: a "cream" token that
+ * stops being a background, or a "green" token that stops being foreground,
+ * breaks dark mode everywhere at once.
+ */
+@theme {
+  /* Brand colors — Saudi Authentic Product (light mode values) */
   --color-cream-50: #fefdfb;
   --color-cream-100: #fbf9f5;
   --color-cream-200: #f5f3ef;
@@ -22,6 +41,96 @@
 
   --color-ink-900: #1b1c1a;
 
+  /**
+   * Raised surfaces (cards, modals, table rows) that used to be a literal
+   * `bg-white`. A hardcoded white card cannot flip, so every solid card
+   * background uses `bg-surface` instead — see the dark override below.
+   */
+  --color-surface: #ffffff;
+  --color-surface-muted: #fbf9f5;
+
+  /**
+   * CONSTANT across both themes — deliberately not overridden below.
+   *
+   * The green ramp above inverts (it is the foreground role), but the brand
+   * also uses deep green as a SURFACE: primary buttons, the footer, dark
+   * panel headers, and the hero's image scrim. Those must stay dark in dark
+   * mode, so they use these tokens instead of `bg-green-950`. `on-brand` is
+   * the light text that sits on them. Rule of thumb: green-* for text,
+   * brand-deep-* for a dark background, on-brand for text on that
+   * background.
+   */
+  --color-brand-deep: #012d1d;
+  --color-brand-deep-2: #1b4332;
+  --color-brand-deep-3: #235240;
+  --color-on-brand: #fbf9f5;
+
+  /**
+   * Status accents. These replace what used to be ~230 raw hex literals
+   * (`text-[#8a4a3f]`, `bg-[#fcf8ee]`, …) scattered across components; a
+   * literal can never respond to the theme, so tinted chips stayed pale in
+   * dark mode and dark accent text became unreadable on dark surfaces.
+   *
+   * Pairing rule — a `*-soft` background always carries its matching
+   * foreground: `danger-soft` + `danger`, `gold-soft` + `gold-700`,
+   * `success-soft` + `green-900`. Both halves invert together, so the
+   * contrast ratio is preserved rather than merely surviving by luck.
+   */
+  --color-danger: #8a4a3f;
+  --color-danger-strong: #6f3b32;
+  --color-danger-soft: #fbeceb;
+  --color-danger-border: #f0c9c3;
+  --color-gold-soft: #fcf8ee;
+  --color-success-soft: #e9f3ee;
+  --color-warning-soft: #f8dac8;
+
+  /**
+   * CONSTANT across themes, like the brand-deep family above.
+   * `danger-solid` is a filled badge/banner that always carries white text
+   * ("Save 14%", the impersonation bar, the weak-password meter). Lightening
+   * it in dark mode would break that white text, so it stays put.
+   */
+  --color-danger-solid: #8a4a3f;
+
+  /**
+   * Text that sits on a gold fill (primary CTA, cart/wishlist count badges,
+   * the selected variant chip). Gold stays a light, high-luminance colour in
+   * BOTH themes, so its foreground must stay dark in both — using
+   * `text-green-950` here inverted to near-white in dark mode and dropped
+   * the gold CTA to a 1.6:1 contrast ratio.
+   */
+  --color-on-gold: #012d1d;
+
+  /**
+   * ProductVisual's five decorative gradient tones — the generated artwork
+   * shown in place of a missing product photo. Also CONSTANT: this stands in
+   * for photography, and a photo doesn't recolour with the theme, so neither
+   * should its placeholder. Tokenised purely to get the hex out of the
+   * component, not to make it themeable.
+   */
+  --color-visual-green-1: #1b4332;
+  --color-visual-green-2: #0f2a20;
+  --color-visual-green-3: #012d1d;
+  --color-visual-cream-1: #f5efe1;
+  --color-visual-cream-2: #eadfc4;
+  --color-visual-cream-3: #d9c68f;
+  --color-visual-gold-1: #e9cd7a;
+  --color-visual-gold-2: #d4af37;
+  --color-visual-gold-3: #a9822a;
+  --color-visual-brown-1: #c9a789;
+  --color-visual-brown-2: #a5826a;
+  --color-visual-brown-3: #705a4c;
+  --color-visual-plum-1: #e7c9c9;
+  --color-visual-plum-2: #c99a94;
+  --color-visual-plum-3: #8a5a52;
+
+  /** The header bar's soft neutral grey pill. */
+  --color-navbar: #e5e5e5;
+  --color-navbar-inner: #f2f2f2;
+
+  /** Hairline borders — was a hardcoded rgba() in the `*` rule below. */
+  --color-hairline: rgba(113, 121, 115, 0.15);
+
   --font-serif: "EB Garamond", "Times New Roman", serif;
   --font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
 }
@@ -29,10 +138,73 @@
 :root {
   --background: var(--color-cream-100);
   --foreground: var(--color-ink-900);
+  color-scheme: light;
+}
+
+/**
+ * Dark mode. Set by ThemeProvider as `data-theme="dark"` on <html>, and by
+ * the inline pre-hydration script in app/layout.tsx so a returning dark-mode
+ * visitor never sees a white flash before React boots.
+ *
+ * Roles invert: the cream ramp becomes progressively lighter dark greys
+ * (cream-50 is the deepest, matching its light-mode job as the "lightest,
+ * furthest-back" surface), and the green ramp becomes light foreground.
+ */
+[data-theme="dark"] {
+  --color-cream-50: #14171a;
+  --color-cream-100: #181c20;
+  --color-cream-200: #1e2328;
+  --color-cream-300: #262c32;
+  --color-cream-400: #2f363d;
+
+  /* Formerly the darkest text color — now the brightest foreground. */
+  --color-green-950: #eef2f0;
+  --color-green-900: #cdd8d2;
+  --color-green-800: #b3c2ba;
+
+  /* Accent stays gold, nudged brighter so it holds contrast on dark. */
+  --color-gold-500: #e0bd4f;
+  --color-gold-600: #cba63a;
+  --color-gold-700: #f0d98a;
+
+  /* Muted/secondary text. */
+  --color-brown-500: #9aa4a0;
+  --color-brown-600: #aeb8b4;
+  --color-brown-700: #c3ccc8;
+
+  --color-ink-900: #eef2f0;
+
+  --color-surface: #1e2328;
+  --color-surface-muted: #262c32;
+
+  --color-navbar: #1e2328;
+  --color-navbar-inner: #262c32;
+
+  /**
+   * Status accents inverted. Foregrounds become light tints of the same hue
+   * and the `*-soft` chip backgrounds become deep, desaturated versions of
+   * it — so a "Limited" or "New" chip reads as a quiet tinted pill on a dark
+   * card instead of the glaring near-white block a fixed light hex produced.
+   * `danger-solid` and the `visual-*` gradients are intentionally absent
+   * here; see their comments above.
+   */
+  --color-danger: #f0a99c;
+  --color-danger-strong: #f7c9c1;
+  --color-danger-soft: #3b2420;
+  --color-danger-border: #6b3f37;
+  --color-gold-soft: #332a14;
+  --color-success-soft: #16301f;
+  --color-warning-soft: #3a2a1c;
+
+  --color-hairline: rgba(190, 200, 195, 0.14);
+
+  --background: var(--color-cream-100);
+  --foreground: var(--color-ink-900);
+  color-scheme: dark;
 }
 
 * {
-  border-color: rgba(113, 121, 115, 0.15);
+  border-color: var(--color-hairline);
 }
 
 html {
@@ -48,6 +220,70 @@ body {
 ::selection {
   background-color: var(--color-gold-500);
   color: var(--color-green-950);
+}
+
+/**
+ * ThemeToggle renders both its icons and lets CSS pick one, so the right
+ * icon is already correct in server-rendered markup and during the
+ * pre-hydration paint — no hydration mismatch, no flicker.
+ */
+.icon-when-dark {
+  display: none;
+}
+[data-theme="dark"] .icon-when-light {
+  display: none;
+}
+[data-theme="dark"] .icon-when-dark {
+  display: inline-block;
+}
+
+/**
+ * Dual-handle price range slider (components/shop/FilterSidebar.tsx).
+ *
+ * Two native range inputs are stacked on one track. The input itself is
+ * `pointer-events: none` so the bare track never swallows a click and the
+ * upper input can't block the lower one; only the thumbs are interactive.
+ * Thumb styling has to be duplicated per engine — `::-webkit-slider-thumb`
+ * and `::-moz-range-thumb` cannot be combined in one selector list, since
+ * an unrecognised pseudo-element invalidates the whole rule.
+ */
+.range-thumb {
+  pointer-events: none;
+}
+.range-thumb:focus {
+  outline: none;
+}
+.range-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: var(--color-brand-deep-2);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  cursor: grab;
+}
+.range-thumb::-webkit-slider-thumb:active {
+  cursor: grabbing;
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: var(--color-brand-deep-2);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  cursor: grab;
+}
+.range-thumb:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
+}
+.range-thumb:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
 }
 
 /* Hide scrollbar for horizontally scrolling review strip, category rows etc. */

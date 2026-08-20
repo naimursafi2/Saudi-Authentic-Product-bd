@@ -100,7 +100,7 @@ export default function AdminCouponsPage() {
       />
 
       {pendingNotice && (
-        <div className="mb-4 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+        <div className="mb-4 rounded-lg border border-gold-500/40 bg-gold-soft p-4 text-sm text-gold-700">
           {pendingNotice}
         </div>
       )}
@@ -112,7 +112,7 @@ export default function AdminCouponsPage() {
       ) : coupons.length === 0 ? (
         <EmptyState icon={Tag} title="No coupons yet" description="Create your first coupon to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -157,7 +157,7 @@ export default function AdminCouponsPage() {
                       <button
                         aria-label="Delete"
                         onClick={() => handleDelete(coupon)}
-                        className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-brown-500 hover:text-danger"
                       >
                         <Trash2 size={15} />
                       </button>

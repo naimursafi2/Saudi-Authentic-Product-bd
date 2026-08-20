@@ -6,7 +6,7 @@ import type { ApiHomepageSection } from "@/types/api";
 export function PromoBanner({ section }: { section: ApiHomepageSection }) {
   return (
     <section className="mx-auto max-w-[1200px] px-6 py-10 sm:px-10 lg:px-16">
-      <div className="relative flex flex-col overflow-hidden rounded-lg bg-green-900 sm:flex-row sm:items-center">
+      <div className="relative flex flex-col overflow-hidden rounded-lg bg-brand-deep-2 sm:flex-row sm:items-center">
         {section.image?.url && (
           <div className="relative h-48 w-full shrink-0 sm:h-auto sm:w-2/5">
             <Image
@@ -20,12 +20,12 @@ export function PromoBanner({ section }: { section: ApiHomepageSection }) {
         )}
         <div className="flex flex-1 flex-col items-start gap-3 px-6 py-8 sm:px-10">
           {section.title && (
-            <h2 className="font-serif text-2xl font-semibold text-cream-100 sm:text-3xl">
+            <h2 className="font-serif text-2xl font-semibold text-on-brand sm:text-3xl">
               {section.title}
             </h2>
           )}
           {section.description && (
-            <p className="max-w-lg text-sm leading-relaxed text-cream-100/80">
+            <p className="max-w-lg text-sm leading-relaxed text-on-brand/80">
               {section.description}
             </p>
           )}

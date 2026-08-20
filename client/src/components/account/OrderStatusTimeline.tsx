@@ -58,7 +58,7 @@ export function OrderStatusTimeline({
   const branchCopy = BRANCH_STATUS_COPY[status];
   if (branchCopy) {
     return (
-      <div className="flex items-start gap-3 rounded-lg border border-[#f0c9c3] bg-[#fbeceb] p-5 text-sm text-[#8a4a3f]">
+      <div className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-soft p-5 text-sm text-danger">
         <AlertCircle size={18} className="mt-0.5 shrink-0" />
         <p>
           {branchCopy}
@@ -72,7 +72,7 @@ export function OrderStatusTimeline({
   const currentStepIndex = ORDER_STATUS_STEPS.findIndex((s) => s.status === status);
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+    <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
       <div className="flex min-w-[720px] items-start justify-between">
         {ORDER_STATUS_STEPS.map((step, i) => {
           const reached = i <= currentStepIndex;
@@ -81,13 +81,13 @@ export function OrderStatusTimeline({
             <div key={step.status} className="flex flex-1 flex-col items-center text-center">
               <div className="flex w-full items-center">
                 <div
-                  className={cn("h-0.5 flex-1", i === 0 ? "invisible" : reached ? "bg-green-900" : "bg-cream-300")}
+                  className={cn("h-0.5 flex-1", i === 0 ? "invisible" : reached ? "bg-brand-deep-2" : "bg-cream-300")}
                 />
                 <div
                   className={cn(
                     "flex size-9 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
                     reached
-                      ? "border-green-900 bg-green-900 text-white"
+                      ? "border-green-900 bg-brand-deep-2 text-white"
                       : "border-cream-300 bg-cream-50 text-brown-500/60"
                   )}
                 >
@@ -99,7 +99,7 @@ export function OrderStatusTimeline({
                     i === ORDER_STATUS_STEPS.length - 1
                       ? "invisible"
                       : i < currentStepIndex
-                        ? "bg-green-900"
+                        ? "bg-brand-deep-2"
                         : "bg-cream-300"
                   )}
                 />

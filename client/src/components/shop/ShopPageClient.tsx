@@ -11,8 +11,11 @@ import { FilterSidebar } from "./FilterSidebar";
 import { SortBar } from "./SortBar";
 import { Pagination } from "./Pagination";
 import { DEFAULT_FILTERS, type ShopFilters } from "./types";
+import { SHOP_GRID_CLASS } from "@/lib/utils";
 
-const PAGE_SIZE = 6;
+/** 20 divides evenly by every column count the product grid uses (2/3/4/5),
+ * so a full page never ends in an orphaned part-row. */
+const PAGE_SIZE = 20;
 
 export function ShopPageClient() {
   const searchParams = useSearchParams();
@@ -65,15 +68,19 @@ export function ShopPageClient() {
       );
     }
 
+    if (filters.origins.length > 0) {
+      list = list.filter((p) => filters.origins.includes(p.origin));
+    }
+
+    if (filters.badges.length > 0) {
+      list = list.filter((p) => p.badge != null && filters.badges.includes(p.badge));
+    }
+
     if (filters.minPrice != null) {
       list = list.filter((p) => p.variants[0].priceBDT >= filters.minPrice!);
     }
     if (filters.maxPrice != null) {
       list = list.filter((p) => p.variants[0].priceBDT <= filters.maxPrice!);
-    }
-
-    if (filters.minRating > 0) {
-      list = list.filter((p) => p.ratingAverage >= filters.minRating);
     }
 
     if (filters.inStockOnly) {
@@ -106,6 +113,32 @@ export function ShopPageClient() {
     return list;
   }, [filters, products]);
 
+  // Facet options come from the catalogue itself, so the sidebar can never
+  // offer an Origin or Flag that no product has. Derived from all loaded
+  // products (not the filtered list) so selecting one option doesn't make
+  // the others disappear.
+  const originOptions = useMemo(
+    () => [...new Set(products.map((p) => p.origin).filter(Boolean))].sort(),
+    [products]
+  );
+  const badgeOptions = useMemo(
+    () => [...new Set(products.map((p) => p.badge).filter((b): b is NonNullable<typeof b> => b != null))].sort(),
+    [products]
+  );
+
+  // The price slider's end stops, taken from the catalogue and rounded
+  // outward to a tidy 50 BDT so the handles land on round numbers. Derived
+  // from all products, not the filtered list — otherwise narrowing the range
+  // would shrink the track under the user's cursor mid-drag.
+  const priceBounds = useMemo(() => {
+    const prices = products.map((p) => p.variants[0].priceBDT).filter((n) => Number.isFinite(n));
+    if (prices.length === 0) return { min: 0, max: 0 };
+    return {
+      min: Math.floor(Math.min(...prices) / 50) * 50,
+      max: Math.ceil(Math.max(...prices) / 50) * 50,
+    };
+  }, [products]);
+
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageItems = filtered.slice(
@@ -124,14 +157,14 @@ export function ShopPageClient() {
         <FilterSidebar
           filters={filters}
           categories={categories}
+          origins={originOptions}
+          badges={badgeOptions}
+          priceBounds={priceBounds}
           onChange={updateFilters}
-          onApplyPrice={(min, max) =>
-            updateFilters((prev) => ({
-              ...prev,
-              minPrice: min ? Number(min) : null,
-              maxPrice: max ? Number(max) : null,
-            }))
+          onPriceChange={(min, max) =>
+            updateFilters((prev) => ({ ...prev, minPrice: min, maxPrice: max }))
           }
+          onReset={() => updateFilters(DEFAULT_FILTERS)}
           className="hidden lg:flex lg:w-[260px] lg:shrink-0"
         />
 
@@ -147,7 +180,7 @@ export function ShopPageClient() {
           />
 
           {isLoading ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className={SHOP_GRID_CLASS}>
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="aspect-[4/3] w-full animate-pulse rounded-lg bg-cream-300" />
               ))}
@@ -169,7 +202,7 @@ export function ShopPageClient() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className={SHOP_GRID_CLASS}>
               {pageItems.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
@@ -201,14 +234,14 @@ export function ShopPageClient() {
             <FilterSidebar
               filters={filters}
               categories={categories}
+              origins={originOptions}
+              badges={badgeOptions}
+              priceBounds={priceBounds}
               onChange={updateFilters}
-              onApplyPrice={(min, max) =>
-                updateFilters((prev) => ({
-                  ...prev,
-                  minPrice: min ? Number(min) : null,
-                  maxPrice: max ? Number(max) : null,
-                }))
+              onPriceChange={(min, max) =>
+                updateFilters((prev) => ({ ...prev, minPrice: min, maxPrice: max }))
               }
+              onReset={() => updateFilters(DEFAULT_FILTERS)}
             />
           </div>
         </div>

@@ -8,9 +8,16 @@ Order Manager / Employee / Delivery Agent portals. Currency is displayed in
 Bangladesh), not a bug. Two independent apps, no shared code between them:
 
 ```
-backend/    Express 5 + TypeScript + Mongoose (MongoDB) REST API
-frontend/   Next.js 16 (App Router) + React 19 + TypeScript + Tailwind v4
+server/    Express 5 + TypeScript + Mongoose (MongoDB) REST API
+client/    Next.js 16 (App Router) + React 19 + TypeScript + Tailwind v4
 ```
+
+**Directory naming:** the two app folders on disk are `server/` and
+`client/`. Much of the rest of this file (and `README.md`) still spells them
+`backend/` and `frontend/` from an earlier layout — read those as `server/`
+and `client/` respectively. Deployment targets Vercel (client) and Render
+(server), which is why they sit on different origins; see the comment in
+`client/src/proxy.ts` for what that implies for cookies.
 
 Not a git repository at the time this file was first written; a `.git` now
 exists at the root (see `git status` if unsure) — still be careful with
@@ -49,9 +56,9 @@ Register every new router in `routes/index.ts`.
 | `/salary-payments` | employee lists own payment history; admin creates payment/lists all/updates status/sends notify email | `admin`,`super_admin` **only** — co_admin is deliberately excluded |
 | `/inventory` | `GET /stock` (read-only live per-variant stock), low-stock list, logs, manual stock adjustment | `GET /stock`: + `employee`,`order_manager` (read-only — warehouse staff need the real count, not the ability to change it); low-stock/logs/adjust: `admin`,`super_admin`,`co_admin`. `POST /adjust` applies immediately **only** for `super_admin`; every other role gets `202 {pendingActionId}` and live stock is unchanged — see "Stock-change approval gate" below |
 | `/reports` | any staff: `/employee-dashboard`; admin/co-admin: `/dashboard`, `/sales` | dashboard/sales: `admin`,`super_admin`,`co_admin` |
-| `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | `admin`,`super_admin` only |
-| `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | `admin`,`super_admin` only |
-| `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement/contact/footer | `admin`,`super_admin` only |
+| `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
+| `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
+| `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement strip (`announcementEnabled` + `announcementText`)/contact/footer | `admin`,`super_admin` only — `co_admin` is **not** able to reach site settings (unlike `/hero-slides` and `/homepage-sections`, whose create/update do allow `co_admin`) |
 | `/coupons` | `POST /validate` (authenticated customer, preview a discount); `GET /`, `POST /`, `PATCH /:id` (create/update — may be gated through the approval system, see "Approval-gate system" below); `DELETE /:id` | list/create/update: `co_admin`,`admin`,`super_admin`; delete: `admin`,`super_admin` only; `/validate` just requires `authenticate` |
 | `/nav-links` | public list (sorted, visible-only by default); admin create/update/delete of the storefront header's top-level nav links | create/update/delete: `admin`,`super_admin` only |
 | `/footer-columns` | public list (sorted, visible-only by default); admin create/update/delete of the storefront footer's link columns (each with an embedded, wholesale-replaced `links[]`) | create/update/delete: `admin`,`super_admin` only |
@@ -62,7 +69,8 @@ Register every new router in `routes/index.ts`.
 | `/investments` | `GET /` (list), `POST /` (create) — append-only partner investment ledger, no update/delete route | list: `admin`,`super_admin`; create: `super_admin` only |
 | `/expenses` | `GET /`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject` | list/create: `co_admin`,`admin`,`super_admin` (co_admin scoped to own submissions); confirm/reject: `admin`,`super_admin` only |
 | `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` — a `customer` viewer is force-scoped server-side to their own refunds (same pattern as `co_admin`'s own-submissions scoping), which is what powers the account portal's per-order refund status; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
-| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot | `admin`,`super_admin` only — `co_admin` finance visibility is off by default per the spec |
+| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot | `finance.view` (`admin`,`super_admin` by default) — `co_admin` finance visibility is off by default per the spec |
+| `/roles` | `GET /permissions` (the permission catalogue, grouped + labelled), `GET /` (all roles with assigned-user counts), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` (one user's effective permissions) and `PATCH /users/:userId` (assign/clear a custom role) | read: `roles.view`; author roles: `roles.manage`; assign a role to a person: `employees.manage` — see "Roles & permissions" below for the guards the service adds on top |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
 `validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
@@ -191,6 +199,87 @@ portal — `ADMIN_PORTAL_ROLES` includes `order_manager`, and
 Manager only ever sees Dashboard, Orders, Refunds, and Audit Logs (their own
 actions) — the real boundary is still backend `authorize()`, not nav
 visibility.
+
+#### Roles & permissions
+
+Authorization is **role + permission** based. Routes ask what a caller may
+*do*, not who they *are*, so a new kind of staff member can be onboarded from
+the admin panel with no code change — which is the whole point.
+
+**This replaced the previous "hand-list roles on every route" arrangement
+without changing any role's actual access.** The seven built-in roles are
+seeded as `Role` documents whose permission lists
+(`ROLE_DEFAULT_PERMISSIONS` in `constants/permissions.ts`) were transcribed
+field-by-field from the `authorize(...)` calls they replaced. Every
+pre-existing integration test passes untouched, which is the evidence that
+the transcription is faithful — including the deliberate asymmetries, e.g.
+Co-Admin holds `products.delete` and Admin does not.
+
+- **`constants/permissions.ts`** — `PERMISSIONS` (the flat catalogue),
+  `PERMISSION_GROUPS` (labels + grouping for the panel's checkbox list),
+  `SENSITIVE_PERMISSIONS` (the four that confer authority over staff or the
+  permission system itself), and `ROLE_DEFAULT_PERMISSIONS`. `super_admin` is
+  deliberately absent from that map: it is special-cased to hold every
+  permission and its role document cannot be edited, so a bad edit can never
+  lock every human out of the panel.
+- **`models/Role.model.ts`** — `{key, name, description, permissions[],
+  isSystem, isActive}`. System roles (`isSystem: true`) have a `key` matching
+  `User.role` exactly, which is what makes every existing account work
+  unchanged; they can be re-permissioned but never renamed or deleted. Custom
+  roles (VIDEO_EDITOR, DIGITAL_MARKETER, …) are freely creatable.
+- **`User.customRole`** — an optional ref to a custom role. It **adds**
+  permissions on top of the user's built-in `role` and never removes them, so
+  assigning one can't silently demote an account, and `role` stays the single
+  source of role identity for every legacy check.
+- **`services/role.service.ts#resolvePermissions`** — base role's set ∪ custom
+  role's set, with an in-process `Map` cache so resolving on every
+  authenticated request doesn't cost a query. The cache is invalidated on
+  every role write, so an edit takes effect on the caller's **next request**
+  with no re-login. `ensureSystemRoles()` seeds the built-ins lazily (same
+  pattern as `SiteSettings`) and only ever creates, so an admin's edits
+  survive a restart.
+- **`middlewares/rbac.middleware.ts#requirePermission(...)`** — the gate.
+  Passes when the caller holds ANY of the listed permissions;
+  `requireAllPermissions(...)` demands all. `authenticate` resolves
+  `req.user.permissions` before it runs.
+
+**Escalation guards live in the service, not the route** — a permission check
+alone can't express them:
+
+- You may only grant permissions you hold yourself. Without this, an Admin
+  with `roles.manage` could mint a role carrying `approvals.manage` (Super
+  Admin only) and assign it to themselves. Applies to creating a role,
+  editing one, and assigning one to a user.
+- Only a Super Admin may re-permission a **built-in** role — otherwise an
+  Admin would simply widen their own role instead.
+- The `SUPER_ADMIN` role can't be edited by anyone, built-in roles can't be
+  deleted, and a custom role still assigned to users can't be deleted until
+  they're reassigned.
+- Every create/update/delete/assignment is written to `AuditLog`.
+
+`authorize(...)` and `authorizeSelfOrRoles(...)` still exist and are still
+used where the check genuinely is about role identity (self-scoped
+ownership). Everything with a capability behind it uses `requirePermission`.
+
+Frontend: `lib/permissions.ts` mirrors the catalogue (manually kept in sync,
+same arrangement as `lib/roles.ts`); `AuthContext` exposes `permissions` and
+`hasPermission(...)` from `GET /auth/me`; `AdminNav` filters every item by
+permission rather than role, so a custom role gets a correct menu with no
+code change; `RoleGuard` admits a user by built-in role **or** by holding any
+admin-panel permission, which is how a DIGITAL_MARKETER reaches `/admin`
+without being added to `ADMIN_PORTAL_ROLES`; and the page-level "Access
+restricted" guards on `/admin/salary`, `/admin/finance`, `/admin/settings`
+and friends now key off the permission the backing API requires instead of
+`user.role === "co_admin"`. `/admin/roles` is the management UI (custom and
+built-in roles listed separately, grouped permission checkboxes, permissions
+the actor can't grant rendered disabled rather than hidden), and
+`/admin/employees` gains an **Access** action per staff member showing their
+effective permission list and letting an authorised user assign or clear a
+custom role.
+
+**None of the frontend work is a security boundary.** It hides menu items and
+pages the user can't use; the API re-checks every permission on every
+request, so a tampered client gains a visible link and a 403.
 
 #### Approval-gate system & audit logging (Grant-Based Approval Workflow)
 
@@ -349,7 +438,7 @@ list view (reachable by every admin-portal role plus `order_manager`).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -424,11 +513,66 @@ admins/super-admins edit the **homepage only** — this is intentionally scoped,
 not a page builder:
 
 - **Hero slides** (`HeroSlide`): freely creatable/orderable/deletable —
-  image, title, subtitle, CTA label/href, sort order, active flag. All
-  active slides render on the homepage as an auto-rotating carousel
-  (`HeroCarousel.tsx`, dots + arrows, pause-on-hover); a single slide (or
-  none — falling back to the `hero` section's text/default photo) renders
-  as a static banner with no controls.
+  image, title, subtitle, CTA label/href, an optional **secondary** CTA
+  label/href, sort order, active flag. All active slides render on the
+  homepage as an auto-rotating carousel (`HeroCarousel.tsx`); a single slide
+  (or none — falling back to the `hero` homepage section's own
+  admin-uploaded image and text) renders as a static banner with no
+  controls. Managed at `/admin/homepage`: add/edit, up-down reorder arrows,
+  a click-to-toggle Active badge in the table (no need to open the form),
+  and delete. **Deletion is `admin`/`super_admin` only** — a `co_admin`
+  creates, edits, reorders and disables slides but cannot delete one, per
+  the project-wide convention that Co-Admin never deletes; disabling takes a
+  slide off the storefront just as effectively.
+
+  Carousel behaviour: autoplay every 6s, previous/next arrows (visible at
+  **every** breakpoint, including mobile), pagination dots with
+  `aria-current`, horizontal swipe on touch/pen pointers (mouse drags are
+  left alone so text selection still works), and pause on hover *and* on
+  focus. Manual navigation **restarts** the autoplay timer via a
+  `restartKey` state bumped by `goTo()` — without it a click landing late in
+  the cycle was followed almost immediately by an automatic advance, which
+  read as the carousel jumping away from the slide the visitor just picked.
+  Autoplay is skipped entirely when the viewer has `prefers-reduced-motion:
+  reduce`, read through `useSyncExternalStore` (not a `useEffect`, which
+  this project's lint config rejects for setState). Off-screen slides are
+  `aria-hidden` and their CTAs carry `tabIndex={-1}` so they can't be
+  focused.
+
+  **There is no hardcoded slide content in the component.** A fixed
+  "Explore Dates" button used to render beside the main CTA on every slide
+  regardless of configuration; it is now the optional
+  `secondaryCtaLabel`/`secondaryCtaHref` pair, rendered only when a label is
+  set. Do not reintroduce a hardcoded button, headline or link here.
+
+  The banner is a **contained, compact promo card**, not a full-bleed hero:
+  `HeroCarousel` wraps itself in a padded container and renders a rounded
+  `max-w-[1200px]` block at `min-h-[240px]` / `sm:280px` / `lg:340px`.
+
+  **Its image is 100% database-driven — there is deliberately no image
+  fallback in the component.** `HeroBanner.tsx` keeps text fallbacks
+  (`FALLBACK_TITLE`/`FALLBACK_SUBTITLE`) for blank fields, but `image` is
+  `slide.image?.url ?? section?.image?.url ?? null`, and `HeroCarousel` only
+  renders the `<Image>` when that is non-null. A bundled default
+  (`/images/editorial/…`) used to be hardcoded here and silently overrode
+  whatever the admin uploaded, which made the banner look un-editable — do
+  not reintroduce one. With no image set the banner simply shows the brand's
+  deep-green ground, which is a valid intentional look.
+
+  **`updateHeroSlideSchema` is written out in full rather than derived with
+  `createHeroSlideSchema.partial()`** — and any future update schema should
+  be too. Zod 4's `.partial()` only makes keys optional; it does **not**
+  strip `.default()`, so a derived schema silently fills in a default for
+  every field the request omitted. The admin table PATCHes one field at a
+  time (reorder sends only `sortOrder`, the Active toggle only `isActive`),
+  so the derived schema reset the other: reordering a disabled slide
+  published it again, and toggling a slide sent it to position 0.
+  `updateHomepageSectionSchema` and `updateFooterColumnSchema` already avoid
+  this by being spelled out; `updateNavLinkSchema`,
+  `updateCategorySchema`, `updateProductSchema` and `updateTaskSchema` are
+  still `.partial()`-derived over defaulted fields and carry the same latent
+  behaviour (their admin forms happen to submit every field, so it does not
+  currently bite).
 - **Homepage sections** (`HomepageSection`): a **fixed enum** of eight
   types — `hero`, `trustStrip`, `featuredCategories`, `bestSellers`,
   `productStory`, `customerReviews`, `promoBanner`, `productShowcase`. The
@@ -459,9 +603,28 @@ editor — see "Static page content management" below for `/about`,
 `/contact`, and `/shipping-policy`'s own (separate, fixed-type) content
 system, and "Navigation & footer content management" below for what else is
 admin-editable outside the homepage. `SiteSettings` (site name, logo,
-announcement bar text, contact email/phone, footer tagline, social links —
-`/admin/settings`) is a separate, unrelated singleton, not part of the
-homepage-section system.
+`announcementEnabled`/`announcementText`, contact email/phone, footer
+tagline, social links — `/admin/settings`) is a separate, unrelated
+singleton, not part of the homepage-section system.
+
+**Announcement strip** (`components/layout/AnnouncementBar.tsx`, rendered by
+`app/(site)/layout.tsx`): the thin green bar above the main navbar, for
+occasions like Eid or a sale. It is **opt-in and off by default** —
+`SiteSettings.announcementEnabled` defaults to `false`, and the component
+renders `null` unless that flag is `true` *and* `announcementText` is
+non-blank (so clearing the text hides the strip too, and an empty green bar
+can never ship). Both the switch and the text are edited together at
+`/admin/settings`, so enabling/disabling it seasonally needs no code change
+or redeploy. A settings document saved before this field existed has no
+value for it, which reads as falsy — existing installs stay hidden until
+someone opts in.
+
+`announcementEnabled` is validated with `booleanish` (from
+`validators/common.validator.ts`), **not** `z.coerce.boolean()`: `PATCH
+/site-settings` takes multipart/form-data for the logo upload, so the toggle
+arrives as the string `"false"`/`"true"`, and plain coercion would read
+`"false"` as truthy and make the strip impossible to switch back off. Follow
+that pattern for any future boolean on a multipart endpoint.
 
 #### Static page content management
 
@@ -530,7 +693,8 @@ below), and both public list endpoints are visible-only/sorted by default
 
 - `authenticate` — JWT from `accessToken` cookie or `Authorization: Bearer`; checks `isActive` + `tokenVersion`, and attaches `isEmailVerified` onto `req.user` alongside `id`/`role`/`tokenVersion`. `attachUserIfPresent` — same but non-failing (optional auth).
 - `requireEmailVerified` — must run after `authenticate`; 403s a `customer` whose `isEmailVerified` is `false`, exempts every staff role. Applied to `POST /orders` and `POST /reviews/product/:productId` — see "Email verification" below.
-- `authorize(...roles)` / `authorizeSelfOrRoles(getOwnerId, ...staffRoles)` — role gating (`rbac.middleware.ts`); most routes use inline `authorize(...)`, ownership checks are otherwise done ad hoc inside controllers/services.
+- `requirePermission(...permissions)` / `requireAllPermissions(...)` — the primary authorization gate (`rbac.middleware.ts`); passes when the caller holds any (respectively all) of the listed permissions, resolved onto `req.user.permissions` by `authenticate`. See "Roles & permissions" above.
+- `authorize(...roles)` / `authorizeSelfOrRoles(getOwnerId, ...staffRoles)` — role gating, still present for checks that really are about role identity rather than capability; ownership checks are otherwise done ad hoc inside controllers/services.
 - `validate({body,query,params})` — zod-parses and **replaces** the field via `Object.defineProperty` (Express 5 `req.query` gotcha, see below).
 - `sanitizeRequest` — `express-mongo-sanitize` on body/params/query, same `Object.defineProperty` fix.
 - `upload` (`upload.middleware.ts`) — multer memory storage, image-only, 5MB/6-file limits.
@@ -546,9 +710,14 @@ Core utilities (reuse, don't reinvent):
 
 **Auth**: httpOnly cookies `accessToken` / `refreshToken` (see `utils/cookies.ts`,
 `utils/jwt.ts`). Roles: `customer | employee | delivery_agent | co_admin |
-order_manager | admin | super_admin` (`constants/roles.ts`). No DB permission
-matrix — every route hand-lists allowed roles via `authorize(...)`, matching
-existing convention. Convention: co_admin can run day-to-day HR (attendance/
+order_manager | admin | super_admin` (`constants/roles.ts`).
+
+**Authorization is permission-based** (see "Roles & permissions" below):
+routes call `requirePermission("orders.manage")` rather than listing roles,
+and a role's permission list lives in the database. The seven built-in roles
+are unchanged and their seeded permission sets reproduce the old role matrix
+exactly, so the conventions below still describe what each role can do — they
+are now data rather than hardcoded route arguments. Convention: co_admin can run day-to-day HR (attendance/
 leave/tasks/performance) but never touches salary, staff role/status, or
 deletes — those are admin/super_admin only. `order_manager` gets Admin Portal
 access scoped to Orders only (verify/dispatch/assign — see "Order status
@@ -753,7 +922,8 @@ locking in the `order_manager`/`delivery_agent` role strings), plus
 `backend/src/tests/integration/*.integration.test.ts` — real
 HTTP-through-Mongoose integration specs (`auth`, `emailVerification`,
 `catalog`, `order`, `orderStatus`, `task`, `coupon`, `approvalGate`,
-`stockApproval`, `finance`, `security`, `notification`) run against an
+`stockApproval`, `finance`, `security`, `notification`, `siteSettings`,
+`heroSlide`, `permissions`) run against an
 actual in-memory MongoDB via `mongodb-memory-server`
 (`tests/integration/setup.ts` starts/stops it and wipes collections between
 tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
@@ -805,7 +975,27 @@ the super-admin-on-super-admin refusal), and
 alert fans out to, deactivated-staff exclusion, and that a mail failure
 never propagates — it `jest.mock`s `email.service` and imports
 `notification.service` *after* the mock, so the stubbed senders are what
-gets wired in). All suites run together via `npm test` (Jest +
+gets wired in), `permissions.integration.test.ts` (the role/permission system — that a Super
+Admin holds everything, that each built-in role's effective permissions equal
+its documented defaults, that a custom role grants real API access and stops
+granting it the moment it is deactivated, that an Admin cannot grant a
+permission they lack or re-permission a built-in role, that the SUPER_ADMIN
+role is uneditable, that a Super Admin's edit to a built-in role applies on
+the very next request with no re-login, and that built-in or still-assigned
+roles cannot be deleted), `heroSlide.integration.test.ts` (the homepage banner
+carousel — active-only public listing vs. the admin's `includeInactive`
+view, co-admin create with both CTAs, RBAC across customer/employee/
+order_manager/anonymous, the image requirement, and the two halves of the
+`.partial()`-default bug: a one-field toggle that leaves the other fields
+alone and a reorder that leaves a disabled slide disabled; it `jest.mock`s
+`config/cloudinary` because uploads are otherwise 503-guarded in the test
+environment), and `siteSettings.integration.test.ts` (the announcement
+strip's on/off switch — that it defaults to `false` on the lazily-seeded
+singleton, that an admin can switch it on and edit its text in one request,
+that the string `"false"` from the multipart form really switches it back
+off, that the text survives being switched off so it can be reused, and that
+`co_admin`/`order_manager`/`employee`/`customer` all get 403 while anonymous
+gets 401). All suites run together via `npm test` (Jest +
 ts-jest, `backend/jest.config.js`, `tsconfig.jest.json` since the main
 `tsconfig.json` excludes `src/tests/**/*` from the build).
 
@@ -836,7 +1026,8 @@ types/product.ts       Storefront view-model types (Product, Category, ProductVa
 #### Storefront routes (`app/(site)`)
 
 `/` (homepage, composed from admin-managed hero slides + homepage sections),
-`/shop` (filterable catalog), `/product/[slug]` (detail, `force-dynamic`),
+`/shop` (filterable catalog — see "Shop filter sidebar" below),
+`/product/[slug]` (detail, `force-dynamic`),
 `/categories`, `/offers` (products with a `compareAtPriceBDT` discount),
 `/cart`, `/wishlist`, `/account` (customer dashboard — a persistent left
 sidebar, `CustomerSidebar.tsx` — user card (avatar/name/email) + Dashboard /
@@ -899,7 +1090,7 @@ review + Admin/Super Admin approval — see "Finance module" above),
 `/admin/coupons` (reachable by `co_admin` now too — large-discount
 create/update requests may come back as a pending-approval notice instead
 of an immediate save), `/admin/customers`, `/admin/reviews`,
-`/admin/employees`, `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
+`/admin/employees` (each staff row has an **Access** action — assign a custom role, review the person's effective permissions), `/admin/roles` (Roles & Permissions management — create/edit/delete custom roles, assign permissions; visible with `roles.view`, editable with `roles.manage`), `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
 `/admin/inventory`, `/admin/reports`, `/admin/finance` (revenue/expense/
 investment/profit-loss summary, nav-hidden from co_admin),
@@ -909,7 +1100,8 @@ investment/profit-loss summary, nav-hidden from co_admin),
 only), `/admin/audit-logs` (reachable by every admin-portal role plus
 `order_manager` — scoped server-side to own actions for everyone except
 admin/super_admin), `/admin/homepage` (hero slides + homepage sections —
-nav-hidden from co_admin), `/admin/navigation` (header nav links —
+**reachable by co_admin**, who can create/update slides and sections but not
+delete them), `/admin/navigation` (header nav links —
 nav-hidden from co_admin), `/admin/footer` (footer link columns — nav-hidden
 from co_admin), `/admin/pages` (About/Contact/Shipping Policy body copy —
 nav-hidden from co_admin), `/admin/settings` (site settings, including
@@ -930,7 +1122,7 @@ backend `authorize()`.
 accepts the whole `["co_admin","order_manager","admin","super_admin"]` union
 — it's a role gate, not a per-page one — so a co_admin who navigates
 directly to `/admin/salary`, `/admin/finance`, `/admin/investments`,
-`/admin/homepage`, `/admin/navigation`, `/admin/footer`, `/admin/pages`, or
+`/admin/navigation`, `/admin/footer`, `/admin/pages`, or
 `/admin/settings` still reaches the page shell (`AdminNav.tsx` only hides
 the link, it doesn't block the route). Each of those pages handles this
 itself with a page-level check — `const isRestricted = user?.role ===
@@ -1038,6 +1230,93 @@ across devices or browsers, and is lost if `localStorage` is cleared. There
 is no server-side cart/wishlist model. Keep this in mind before promising
 cross-device persistence.
 
+**Shop filter sidebar** (`components/shop/FilterSidebar.tsx`, state in
+`components/shop/types.ts#ShopFilters`, applied in `ShopPageClient.tsx`):
+a left panel of bordered facet sections — Price (dual-handle range slider),
+Categories, Origin, Product Flags, Availability — plus a "Clear (n)" reset.
+It collapses into a drawer below `lg`.
+
+**Price** is a `PriceRangeSlider`: two overlaid native `<input type="range">`
+on one track (no new dependency — the project carries no UI/form library).
+It is fully controlled off `filters.minPrice`/`maxPrice`, so dragging filters
+the grid live and there is **no Apply button**; keeping no local drag state
+is also why "Clear" resets the handles for free. A handle on its end stop
+reports `null` rather than the bound, so a full-range slider counts as "no
+price filter" in the Clear tally. Handles clamp against each other and can't
+cross. End stops come from the catalogue (`priceBounds` in `ShopPageClient`,
+rounded outward to 50 BDT) and are derived from *all* products, not the
+filtered subset — otherwise the track would shrink under the cursor
+mid-drag. Thumb styling lives in `globals.css` under `.range-thumb`
+(duplicated per engine: `::-webkit-slider-thumb` and `::-moz-range-thumb`
+can't share a selector list).
+
+There is **no Rating facet** (removed on request) — "Highest Rated" survives
+as a *sort* option in `SortBar`, which is a separate control.
+
+There is **deliberately no search box in the sidebar**: the header's search
+bar already covers it, and a second input was redundant clutter.
+`ShopFilters.query` still exists and is still applied — it's populated from
+`?q=` by `ShopPageClient` — so don't remove the query filtering logic just
+because no sidebar control sets it. The Price inputs are uncontrolled
+(`defaultValue`), so `PriceFilter` is given a `key` derived from the applied
+range; that remounts and clears the boxes when the range is reset from
+outside the form (notably "Clear"), which otherwise left them displaying a
+range that was no longer being applied.
+
+All facets compose as AND — `filtered` in `ShopPageClient` narrows one
+`list` through each active filter in turn. Filtering is client-side over the
+products already fetched (`useProducts({ limit: 100 })`); price compares
+against `variants[0].priceBDT`, which is the price the card actually
+displays.
+
+**Every facet must be backed by a field the `Product` model actually
+stores.** There is deliberately **no "Brands" facet**: the model has no
+brand field, so `origin` (a required string, e.g. "Madinah, Saudi Arabia")
+stands in for it. Origin and Product-Flag options are *derived from the
+loaded products* rather than hardcoded, computed over all products (not the
+filtered subset) so choosing one option doesn't make the others vanish; the
+Origin section hides itself when the catalogue has fewer than two distinct
+origins, since a one-option facet can only be a no-op. Product Flags maps to
+the `badge` enum (`Authentic`/`Best Seller`/`New`/`Limited`) plus "On Sale",
+which is computed from `compareAtPriceBDT` rather than being a badge value.
+Filtering is client-side over the products already fetched — don't add a
+facet without a real field behind it.
+
+**Storefront header** (`components/layout/Header.tsx`): two rows, in the
+shape common to Bangladeshi storefronts (ghorerbazar.com was the reference
+for the structure only — palette, type and components are this project's).
+Row 1 is logo | `HeaderSearchBar` | labelled action icons (Track Order,
+Wishlist, Cart with its count badge, account) + `ThemeToggle`; each action
+carries its own text label rather than standing alone as a glyph. Row 2 is
+the admin-managed `NavLink` list plus the Categories dropdown. Below `lg`
+the nav row collapses into a **left-hand** drawer (hamburger sits on the
+left, drawer uses `animate-slide-in-left`), and the search bar drops to its
+own row. `HeaderSearchBar` submits to `/shop?q=…`, which `ShopPageClient`
+already reads — no new endpoint or search page; the richer live-results
+`SearchOverlay` still opens from the compact search icon on small screens.
+
+A signed-in user is shown as `components/ui/UserAvatar.tsx` — their uploaded
+`avatar.url` if they have one, otherwise a circular monogram of the first
+letter of their name — rather than as a name string. The same component is
+used in the admin, employee and delivery portal shells so every role gets
+identical treatment.
+
+**"Sign In" is the single auth entry point** — there is deliberately no
+separate "Sign Up" button in the header or the mobile drawer. Registration
+is reached from `AuthForms` itself, which offers both a Sign In / Register
+tab bar and a "Don't have an account? Sign up" link below the form (and its
+mirror, "Already have an account? Sign in"). `/account?tab=register` still
+opens straight onto the register step, so existing links to it keep working.
+
+**Product cards** (`components/ui/ProductCard.tsx`, and the offers page's
+own card markup) show image + title + price + rating + add-to-cart + badges
+only. The `tagline` is deliberately **not** rendered on cards — it still
+feeds search matching and the product page's metadata description. Card
+images sit in a fixed `aspect-[4/3]` box and pass `fit="cover"` to
+`ProductMedia`, overriding its per-source default, so every tile in a grid
+is identically shaped regardless of whether the image is an uploaded
+Cloudinary photo or a curated local fallback.
+
 **Images**: real Cloudinary photos render via `next/image` when
 `product.images.length > 0` / `category.image` is set; otherwise components
 fall back to `<ProductVisual>` (a deterministic decorative gradient+icon
@@ -1052,13 +1331,70 @@ server-fetch cache). Pages with server-side data fetching set
 `export const dynamic = "force-dynamic"` for the same reason — this app has
 no meaningfully static pages once wired to a live backend.
 
-**Design tokens** (`app/globals.css`, Tailwind v4 `@theme inline`, no
+**Design tokens** (`app/globals.css`, Tailwind v4 `@theme`, no
 `tailwind.config.js`): cream (`cream-50..400`), green (`green-950/900/800`),
-gold (`gold-500/600/700`), brown (`brown-500/600/700`), ink (`ink-900`).
+gold (`gold-500/600/700`), brown (`brown-500/600/700`), ink (`ink-900`),
+plus `surface`/`surface-muted`, `navbar`/`navbar-inner`, `hairline`, the
+status accents (`danger`/`danger-strong`/`danger-soft`/`danger-border`,
+`gold-soft`, `success-soft`, `warning-soft`), and the theme-constant
+`brand-deep`/`brand-deep-2`/`brand-deep-3`/`on-brand`/`on-gold`/
+`danger-solid`/`visual-*`.
 Fonts: EB Garamond (`font-serif`, headings) + Plus Jakarta Sans (`font-sans`,
 body) — self-hosted via `@fontsource/*` packages imported in `app/layout.tsx`
 (not `next/font`). Reuse `cn()` and `formatBDT()` from `lib/utils.ts` and the
 primitives in `components/ui/` — don't hand-roll new buttons/cards/headings.
+
+**Dark mode** (`context/ThemeContext.tsx`, `components/ui/ThemeToggle.tsx`):
+site-wide — storefront *and* the admin/employee/delivery portals — driven by
+a single `data-theme="dark"` attribute on `<html>`. It works by
+**redefining the palette variables** under `[data-theme="dark"]` in
+`globals.css`, not by adding `dark:` variants across ~140 components. Two
+consequences to respect:
+
+- `@theme` must **not** be `inline`. `inline` bakes literal colors into every
+  utility, which can then never be overridden at runtime; plain `@theme`
+  emits `var(--color-*)` so a scoped redefinition flips the whole app.
+- The tokens are **role**-based, not literal. `cream-*` means "page/surface
+  background" (light in light mode, near-black in dark) and `green-*` means
+  "foreground text/dark accent" (inverts to light in dark). So: use
+  `text-green-950` for dark text, but **`bg-brand-deep` — never
+  `bg-green-950` — for a deliberately dark surface** (primary buttons,
+  footer, panel headers, the hero scrim), with `text-on-brand` for the light
+  text on it. Those four `brand-*` tokens are deliberately *not* overridden
+  in dark mode. Solid card backgrounds use `bg-surface`, never `bg-white`
+  (a literal white can't flip); translucent `bg-white/N` overlays sitting on
+  top of images or dark surfaces are fine as-is.
+
+**Status accents are tokens, not hex literals.** `danger` / `danger-strong`
+/ `danger-soft` / `danger-border`, `gold-soft`, `success-soft`,
+`warning-soft` replaced ~230 raw `[#8a4a3f]`-style values. A `*-soft`
+background always carries its matching foreground (`danger-soft` + `danger`,
+`gold-soft` + `gold-700`, `success-soft` + `green-900`) so both halves invert
+together and the contrast ratio is preserved by construction rather than by
+luck. Three families are deliberately **constant** across themes:
+`brand-deep-*`/`on-brand`, `danger-solid` (a filled badge that always carries
+white text), `on-gold` (text on a gold fill — gold stays light in both
+themes, so `text-green-950` there inverted to near-white and dropped the CTA
+to 1.6:1), and `visual-*` (ProductVisual's five decorative gradients, which
+stand in for photography and shouldn't recolour). There should be **no
+arbitrary hex left in any `.tsx`** — add a token instead.
+
+Preference is persisted in `localStorage` under `sap:theme`, defaulting to
+the OS `prefers-color-scheme`. An inline pre-hydration script in
+`app/layout.tsx` applies the attribute before first paint so a returning
+dark-mode visitor gets no white flash — its storage key must stay in sync
+with `THEME_STORAGE_KEY`. `ThemeToggle` renders both its icons and lets CSS
+(`.icon-when-light` / `.icon-when-dark`) pick one, so nothing renders from
+theme state and there is no hydration mismatch.
+
+**Product grid columns** — two shared scales in `lib/utils.ts`, so
+breakpoints can't drift page to page. `PRODUCT_GRID_CLASS` (homepage rails,
+offers, wishlist, related products): 2 → 3 → 4 → 5 columns at
+base/`sm`/`lg`/`xl`. `SHOP_GRID_CLASS` (shop page and its skeleton): one
+column narrower at every step above the floor — 2 → 2 → 3 → 4 — because the
+shop gives up width to its filter sidebar. **Both never drop below 2
+columns**, including on small phones. Shop `PAGE_SIZE` is 20, which divides
+evenly by 2/3/4/5 so a full page never ends in an orphaned part-row.
 
 **No form or state-management library**: forms and data fetching are
 hand-rolled with `useState`/`useEffect` + the custom `lib/api` client — no
@@ -1071,7 +1407,12 @@ new forms/pages rather than introducing a new library.
 `npm run test:watch` for the interactive watcher. Coverage is intentionally
 basic, not exhaustive: pure-logic unit tests (`lib/utils.test.ts`,
 `lib/passwordStrength.test.ts`, `lib/mappers.test.ts`), a component test
-(`components/ui/PasswordStrengthMeter.test.tsx`), and a context/hook test
+(`components/ui/PasswordStrengthMeter.test.tsx`), a permission-filtering test
+for the admin sidebar (`components/admin/AdminNav.test.tsx` — mocks
+`AuthContext` to assert that an Order Manager's menu is byte-identical to what
+the old hardcoded role lists produced, that a custom marketing role gets its
+own menu with no role name involved, and that a permission-less account sees
+only Dashboard and Profile), and a context/hook test
 (`context/CartContext.test.tsx`, mocking `lib/api/products` to verify
 add/remove/quantity/localStorage-persistence logic without a real network
 call). No Playwright/e2e browser testing exists — UI/visual changes still
@@ -1138,12 +1479,38 @@ be simplified back to a plain `node dist/server.js` — but don't make that
 change speculatively; only when someone confirms the target host doesn't
 need it.
 
+### Deployment routing (`client/vercel.json`)
+
+The client deploys to Vercel as a **Next.js** app, so Vercel's own Next.js
+builder owns routing — `client/vercel.json` therefore declares only
+`"framework": "nextjs"` and must **not** contain SPA-style catch-all
+rewrites.
+
+It previously held `{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}`
+— a single-page-app config (CRA/Vite style) that does not apply to Next.js:
+`/index.html` is not part of a Next.js build output at all. A rewrite like
+that is harmless for routes that resolve in Vercel's filesystem phase (the
+homepage, `/shop`, `/offers`, every `/admin/*` page — all fixed paths), but
+it swallows **parameterized dynamic routes**, which are matched later in the
+routing pipeline. `/product/[slug]` is the only parameterized route in this
+app, which is exactly why "clicking a product card errors" was the sole
+visible symptom while the rest of the site worked. Don't reintroduce a
+catch-all rewrite here.
+
 ## Coding rules
 
 - Match the existing layered pattern exactly (see Architecture above) —
   don't introduce a different style for new resources.
-- Don't add a DB-backed permission system; role-gate routes with
-  `authorize(...)` like every existing route does.
+- **Gate routes with `requirePermission("some.permission")`, not with a
+  hardcoded role list.** This supersedes the previous "don't add a DB-backed
+  permission system" rule, which described the codebase before the
+  role-and-permission system existed. Add the new key to
+  `constants/permissions.ts` (and to a `PERMISSION_GROUPS` entry so it shows
+  up in the admin panel), mirror it in `client/src/lib/permissions.ts`, then
+  reference it from the route. Roles are database rows and must never need a
+  code change; permissions are code, because a permission no route consults
+  grants nothing. `authorize(...)` still exists and still works — keep it
+  only where the check really is about role identity rather than capability.
 - Don't reintroduce `data/products.ts`-style mock data — the storefront is
   fully wired to the live API; everything comes from MongoDB now.
 - Keep `lib/api/*.ts` functions thin (just the fetch call + types) — business
@@ -1156,10 +1523,11 @@ need it.
   "CMS" or imply arbitrary pages/blocks are admin-editable — see "Homepage
   content management" above for exactly what it covers.
 - `PendingAction`/`ApprovalSettings` are a workflow layered **on top of**
-  `authorize()` role gating for a specific, spec-defined list of high-risk
-  actions — they are not a replacement DB-backed permission system, and the
-  "don't add a DB-backed permission system" rule above still applies to
-  everything else. To gate a new action type: add it to
+  permission gating for a specific, spec-defined list of high-risk actions.
+  They answer "may this change take effect yet?", which is a different
+  question from "may this person make it at all" — the permission check runs
+  first and the approval gate second, and neither replaces the other. To gate
+  a new action type: add it to
   `PENDING_ACTION_TYPES` (`models/PendingAction.model.ts`), register an
   apply-handler via `registerPendingActionHandler()` at the bottom of the
   owning service (never have `pendingAction.service.ts` import that service
@@ -1190,6 +1558,27 @@ need it.
   rather than adding a parallel upload path.
 
 ## Known limitations (verified, not exhaustive)
+
+- **The permission catalogue is code, not data.** Roles are database rows and
+  need no code change, but a brand-new *permission* does: add it to
+  `constants/permissions.ts`, mirror it in `client/src/lib/permissions.ts`,
+  and reference it from a route. This is deliberate — a permission no route
+  consults would grant nothing while appearing to grant something. It does
+  mean the spec's illustrative `marketing.video.*` / `marketing.campaign.*` /
+  `marketing.analytics.view` keys are **not** present: this codebase has no
+  video, campaign or marketing-analytics feature to gate. A VIDEO_EDITOR role
+  can still be created today from the panel; it would carry the marketing and
+  content permissions that do exist.
+- **The role cache is per-process.** `role.service.ts` caches role documents
+  in memory and invalidates on write, so a permission edit applies on the very
+  next request — on the instance that served the edit. A multi-instance
+  deployment would see other instances keep the old permissions until their
+  next restart. Single-instance deployments (the current Render setup) are
+  unaffected.
+- **A custom role adds permissions and cannot subtract them.** There is no
+  per-user deny list and no way to give an Employee *fewer* permissions than
+  their built-in role carries — narrowing means re-permissioning the built-in
+  role itself, which affects everyone holding it.
 
 - **Test coverage is basic, not comprehensive** — the backend has unit specs
   plus a small set of integration tests (auth, catalog, order, orderStatus,

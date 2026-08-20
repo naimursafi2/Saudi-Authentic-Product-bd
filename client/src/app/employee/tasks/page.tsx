@@ -21,7 +21,7 @@ const TASK_TYPE_OPTIONS: TaskType[] = [
 ];
 
 const PRIORITY_ACCENT: Record<string, string> = {
-  high: "border-l-[#8a4a3f]",
+  high: "border-l-danger",
   medium: "border-l-gold-500",
   low: "border-l-brown-500/30",
 };
@@ -67,7 +67,7 @@ export default function EmployeeTasksPage() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as TaskType | "")}
-          className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+          className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
         >
           <option value="">All task types</option>
           {TASK_TYPE_OPTIONS.map((t) => (
@@ -90,7 +90,7 @@ export default function EmployeeTasksPage() {
             <div
               key={task._id}
               className={cn(
-                "flex flex-col gap-3 rounded-xl border border-l-4 border-brown-600/10 bg-white p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow duration-150 hover:shadow-md sm:flex-row sm:items-center sm:justify-between",
+                "flex flex-col gap-3 rounded-xl border border-l-4 border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow duration-150 hover:shadow-md sm:flex-row sm:items-center sm:justify-between",
                 PRIORITY_ACCENT[task.priority] ?? "border-l-brown-500/30"
               )}
             >
@@ -105,9 +105,9 @@ export default function EmployeeTasksPage() {
                     className={cn(
                       "rounded-full px-2.5 py-0.5 font-bold uppercase",
                       task.priority === "high"
-                        ? "bg-[#fbeceb] text-[#8a4a3f]"
+                        ? "bg-danger-soft text-danger"
                         : task.priority === "medium"
-                          ? "bg-[#fcf8ee] text-[#735c00]"
+                          ? "bg-gold-soft text-gold-700"
                           : "bg-cream-300 text-brown-600"
                     )}
                   >

@@ -110,7 +110,7 @@ export default function AdminInventoryPage() {
       />
 
       {pendingNotice && (
-        <div className="mb-6 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+        <div className="mb-6 rounded-lg border border-gold-500/40 bg-gold-soft p-4 text-sm text-gold-700">
           {pendingNotice}
         </div>
       )}
@@ -124,9 +124,9 @@ export default function AdminInventoryPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {lowStock.map((entry) => (
-              <div key={entry.product._id} className="rounded-lg border border-[#8a4a3f]/20 bg-[#fbeceb] px-4 py-3">
+              <div key={entry.product._id} className="rounded-lg border border-danger/20 bg-danger-soft px-4 py-3">
                 <p className="font-medium text-green-950">{entry.product.name}</p>
-                <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#8a4a3f]">
+                <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-danger">
                   {entry.lowStockVariants.map((v) => (
                     <li key={v._id}>
                       {v.label}: {v.stock} left (threshold {v.lowStockThreshold})
@@ -151,7 +151,7 @@ export default function AdminInventoryPage() {
           description="Stock adjustments and order-driven changes will show up here."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -170,7 +170,7 @@ export default function AdminInventoryPage() {
                 <tr key={log._id} className="border-b border-brown-600/10 last:border-none">
                   <td className="px-4 py-3 font-medium text-green-950">{refName(log.product)}</td>
                   <td className="px-4 py-3 text-brown-600">{log.variantLabel}</td>
-                  <td className={`px-4 py-3 font-semibold ${log.delta >= 0 ? "text-green-900" : "text-[#8a4a3f]"}`}>
+                  <td className={`px-4 py-3 font-semibold ${log.delta >= 0 ? "text-green-900" : "text-danger"}`}>
                     {log.delta >= 0 ? `+${log.delta}` : log.delta}
                   </td>
                   <td className="px-4 py-3 text-brown-600">{log.balanceAfter}</td>

@@ -49,7 +49,7 @@ export default function EmployeeStockPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search products..."
-          className="h-9 w-full rounded border border-brown-600/20 bg-white pl-8 pr-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+          className="h-9 w-full rounded border border-brown-600/20 bg-surface pl-8 pr-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
         />
       </div>
 
@@ -64,7 +64,7 @@ export default function EmployeeStockPage() {
           description={debouncedSearch ? "Try a different search term." : "The catalogue is empty."}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -93,7 +93,7 @@ export default function EmployeeStockPage() {
                         <span
                           className={
                             variant.stock <= variant.lowStockThreshold
-                              ? "font-semibold text-[#8a4a3f]"
+                              ? "font-semibold text-danger"
                               : "text-brown-600"
                           }
                         >

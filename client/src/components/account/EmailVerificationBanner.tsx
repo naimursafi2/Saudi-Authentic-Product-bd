@@ -34,7 +34,7 @@ export function EmailVerificationBanner({ email }: { email: string }) {
             Check <span className="font-medium">{email}</span> for a verification link. You&apos;ll need to
             verify before placing orders or posting reviews.
           </p>
-          {error && <p className="mt-1 text-xs text-[#8a4a3f]">{error}</p>}
+          {error && <p className="mt-1 text-xs text-danger">{error}</p>}
         </div>
       </div>
       <Button

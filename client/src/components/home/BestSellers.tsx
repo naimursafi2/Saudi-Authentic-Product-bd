@@ -1,3 +1,4 @@
+import { PRODUCT_GRID_CLASS } from "@/lib/utils";
 import Link from "next/link";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
@@ -6,7 +7,7 @@ import { SectionHeading } from "@/components/ui/SectionHeading";
 import type { ApiHomepageSection } from "@/types/api";
 
 export async function BestSellers({ section }: { section?: ApiHomepageSection }) {
-  const { data } = await listProducts({ isBestSeller: true, limit: 3, sort: "featured" });
+  const { data } = await listProducts({ isBestSeller: true, limit: 5, sort: "featured" });
   const bestSellers = data.products.map(toProduct);
 
   if (bestSellers.length === 0) return null;
@@ -23,7 +24,7 @@ export async function BestSellers({ section }: { section?: ApiHomepageSection })
             View All <span aria-hidden>&rarr;</span>
           </Link>
         </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={PRODUCT_GRID_CLASS}>
           {bestSellers.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

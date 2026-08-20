@@ -133,7 +133,7 @@ export function StaticPageForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-lg border border-brown-600/10 bg-white p-6">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-lg border border-brown-600/10 bg-surface p-6">
       <div>
         <label className={labelClasses}>Page Title</label>
         <input
@@ -251,7 +251,7 @@ export function StaticPageForm({
                     type="button"
                     aria-label="Remove"
                     onClick={() => removeBlock(i)}
-                    className="shrink-0 cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                    className="shrink-0 cursor-pointer text-brown-500 hover:text-danger"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -314,7 +314,7 @@ export function StaticPageForm({
         </div>
       )}
 
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="flex justify-end border-t border-brown-600/10 pt-4">
         <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as categoryController from "../controllers/category.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
 import {
@@ -21,7 +21,7 @@ router.get("/:slug", validate({ params: slugParamSchema }), categoryController.g
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("categories.create"),
   upload.single("image"),
   validate({ body: createCategorySchema }),
   categoryController.createCategory
@@ -29,7 +29,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("categories.edit"),
   upload.single("image"),
   validate({ params: mongoIdParamSchema, body: updateCategorySchema }),
   categoryController.updateCategory
@@ -37,7 +37,7 @@ router.patch(
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("categories.delete"),
   validate({ params: mongoIdParamSchema }),
   categoryController.deleteCategory
 );

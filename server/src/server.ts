@@ -1,10 +1,16 @@
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { connectDatabase } from "./config/db";
+import { ensureSystemRoles } from "./services/role.service";
 
 
 async function main() {
   await connectDatabase();
+  // Seeds the seven built-in roles if they aren't in the database yet, the
+  // same lazily-seeded-singleton pattern SiteSettings and StaticPage use.
+  // resolvePermissions() falls back to the compiled-in defaults if this
+  // hasn't run, so a cold start is never unauthorized by accident.
+  await ensureSystemRoles();
 
   const app = createApp();
 

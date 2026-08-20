@@ -40,7 +40,7 @@ export function ProductStory({ section }: { section?: ApiHomepageSection }) {
           <p className="text-balance text-base leading-[29px] text-brown-500 sm:text-lg">
             {description}
           </p>
-          <div className="h-px w-32 bg-green-950 opacity-20" />
+          <div className="h-px w-32 bg-brand-deep opacity-20" />
         </div>
       </div>
     </section>

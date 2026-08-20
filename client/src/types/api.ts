@@ -51,6 +51,9 @@ export interface ApiUser {
   name: string;
   email: string;
   role: Role;
+  /** Populated custom role (key + name only) when one is assigned. It ADDS
+   * permissions on top of `role` and never replaces it. */
+  customRole?: { _id: string; key: string; name: string } | null;
   phone?: string;
   avatar?: { url: string; publicId: string };
   isActive: boolean;
@@ -119,6 +122,33 @@ export interface ApiProduct {
   updatedAt: string;
 }
 
+/** A role document from `GET /roles` — built-in (isSystem) or custom. */
+export interface ApiRole {
+  _id: string;
+  key: string;
+  name: string;
+  description?: string;
+  permissions: string[];
+  isSystem: boolean;
+  isActive: boolean;
+  /** How many users currently have this role — the panel warns before a
+   * delete that would strand them. */
+  assignedUserCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiPermissionGroup {
+  group: string;
+  permissions: { key: string; label: string }[];
+}
+
+export interface ApiUserPermissions {
+  user: { id: string; name: string; email: string; role: Role };
+  customRole: { id: string; key: string; name: string } | null;
+  permissions: string[];
+}
+
 export interface ApiHeroSlide {
   _id: string;
   title: string;
@@ -126,6 +156,9 @@ export interface ApiHeroSlide {
   image?: { url: string; publicId: string };
   ctaLabel?: string;
   ctaHref?: string;
+  /** Optional second button beside the main CTA — see HeroSlide.model.ts. */
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -189,6 +222,8 @@ export interface ApiSiteSettings {
   _id: string;
   siteName: string;
   logo?: { url: string; publicId: string };
+  /** Storefront renders the announcement strip only when this is true. */
+  announcementEnabled?: boolean;
   announcementText?: string;
   contactEmail?: string;
   contactPhone?: string;

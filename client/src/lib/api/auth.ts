@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiUser } from "@/types/api";
+import type { Permission } from "@/lib/permissions";
 
 export interface RegisterAddressPayload {
   fullAddress: string;
@@ -55,7 +56,7 @@ export async function logout() {
 }
 
 export async function getMe() {
-  return api.get<{ user: ApiUser; impersonatedBy?: string }>("/auth/me");
+  return api.get<{ user: ApiUser; permissions: Permission[]; impersonatedBy?: string }>("/auth/me");
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {

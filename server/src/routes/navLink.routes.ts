@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as navLinkController from "../controllers/navLink.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createNavLinkSchema,
@@ -19,21 +19,21 @@ router.get("/", validate({ query: listNavLinksQuerySchema }), navLinkController.
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.navigation.manage"),
   validate({ body: createNavLinkSchema }),
   navLinkController.createNavLink
 );
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.navigation.manage"),
   validate({ params: mongoIdParamSchema, body: updateNavLinkSchema }),
   navLinkController.updateNavLink
 );
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.navigation.manage"),
   validate({ params: mongoIdParamSchema }),
   navLinkController.deleteNavLink
 );

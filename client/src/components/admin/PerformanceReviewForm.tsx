@@ -95,7 +95,7 @@ export function PerformanceReviewForm({
         <textarea rows={3} value={values.notes} onChange={(e) => update("notes", e.target.value)} className={fieldClasses} />
       </div>
 
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>

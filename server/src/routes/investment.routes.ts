@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as investmentController from "../controllers/investment.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { createInvestmentSchema, listInvestmentsQuerySchema } from "../validators/investment.validator";
 
@@ -12,13 +12,13 @@ router.use(authenticate);
 // -- Investment records: Super Admin full (add+view), Admin view only. --
 router.get(
   "/",
-  authorize("admin", "super_admin"),
+  requirePermission("investments.view"),
   validate({ query: listInvestmentsQuerySchema }),
   investmentController.listInvestments
 );
 router.post(
   "/",
-  authorize("super_admin"),
+  requirePermission("investments.create"),
   validate({ body: createInvestmentSchema }),
   investmentController.createInvestment
 );

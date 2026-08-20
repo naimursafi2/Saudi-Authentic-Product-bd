@@ -83,7 +83,7 @@ export function CartDrawer() {
                       <button
                         aria-label="Remove item"
                         onClick={() => removeItem(item.product.id, item.variant.id)}
-                        className="shrink-0 cursor-pointer text-brown-500/70 hover:text-[#8a4a3f]"
+                        className="shrink-0 cursor-pointer text-brown-500/70 hover:text-danger"
                       >
                         <Trash2 size={15} />
                       </button>

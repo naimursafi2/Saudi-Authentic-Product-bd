@@ -112,7 +112,7 @@ export default function AdminTasksPage() {
       ) : tasks.length === 0 ? (
         <EmptyState icon={ListChecks} title="No tasks yet" description="Assign your first task to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -150,7 +150,7 @@ export default function AdminTasksPage() {
                       <button
                         aria-label="Delete"
                         onClick={() => handleDelete(task)}
-                        className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-brown-500 hover:text-danger"
                       >
                         <Trash2 size={15} />
                       </button>

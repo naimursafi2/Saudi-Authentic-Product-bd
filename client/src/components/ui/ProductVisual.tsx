@@ -20,12 +20,22 @@ const ICONS: Record<VisualIconName, typeof Package> = {
   Nut,
 };
 
+/**
+ * The five decorative tones, as `visual-*` tokens rather than raw hex.
+ *
+ * These tokens are deliberately CONSTANT across light and dark (defined once
+ * in globals.css, never overridden under `[data-theme="dark"]`): this
+ * gradient stands in for a product photograph, and a photograph doesn't
+ * recolour with the theme. Tokenising them is about getting hex literals out
+ * of components, not about making the artwork themeable — so don't "fix"
+ * this by pointing them at the inverting `gold-*` / `brown-*` ramps.
+ */
 const GRADIENTS: Record<ProductVisualSpec["tone"], string> = {
-  green: "from-[#1b4332] via-[#0f2a20] to-[#012d1d]",
-  cream: "from-[#f5efe1] via-[#eadfc4] to-[#d9c68f]",
-  gold: "from-[#e9cd7a] via-[#d4af37] to-[#a9822a]",
-  brown: "from-[#c9a789] via-[#a5826a] to-[#705a4c]",
-  plum: "from-[#e7c9c9] via-[#c99a94] to-[#8a5a52]",
+  green: "from-visual-green-1 via-visual-green-2 to-visual-green-3",
+  cream: "from-visual-cream-1 via-visual-cream-2 to-visual-cream-3",
+  gold: "from-visual-gold-1 via-visual-gold-2 to-visual-gold-3",
+  brown: "from-visual-brown-1 via-visual-brown-2 to-visual-brown-3",
+  plum: "from-visual-plum-1 via-visual-plum-2 to-visual-plum-3",
 };
 
 interface ProductVisualProps extends ProductVisualSpec {
@@ -65,7 +75,7 @@ export function ProductVisual({
       <Icon
         className={cn(
           "relative drop-shadow-sm",
-          tone === "green" ? "text-cream-100/90" : "text-black/25",
+          tone === "green" ? "text-on-brand/90" : "text-black/25",
           iconClassName
         )}
         strokeWidth={1.1}

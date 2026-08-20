@@ -11,8 +11,8 @@ import { SiteSettingsForm, type SiteSettingsFormValues } from "@/components/admi
 import type { ApiSiteSettings } from "@/types/api";
 
 export default function AdminSettingsPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("settings.manage");
 
   const [settings, setSettings] = useState<ApiSiteSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +40,7 @@ export default function AdminSettingsPage() {
     try {
       const form = new FormData();
       form.set("siteName", values.siteName);
+      form.set("announcementEnabled", String(values.announcementEnabled));
       form.set("announcementText", values.announcementText);
       form.set("contactEmail", values.contactEmail);
       form.set("contactPhone", values.contactPhone);

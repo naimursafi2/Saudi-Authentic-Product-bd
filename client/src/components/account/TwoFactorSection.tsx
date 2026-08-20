@@ -71,7 +71,7 @@ export function TwoFactorSection({ user }: { user: ApiUser }) {
   }
 
   return (
-    <div className="rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+    <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
       <h2 className="mb-1 flex items-center gap-2 font-serif text-lg text-green-950">
         {user.twoFactorEnabled ? (
           <ShieldCheck size={18} className="text-green-900" />
@@ -87,9 +87,9 @@ export function TwoFactorSection({ user }: { user: ApiUser }) {
       </p>
 
       {recoveryCodes && (
-        <div className="mb-4 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4">
-          <p className="text-sm font-semibold text-[#735c00]">Save your recovery codes</p>
-          <p className="mt-1 text-xs text-[#735c00]">
+        <div className="mb-4 rounded-lg border border-gold-500/40 bg-gold-soft p-4">
+          <p className="text-sm font-semibold text-gold-700">Save your recovery codes</p>
+          <p className="mt-1 text-xs text-gold-700">
             Each code works once if you lose access to your authenticator. They are shown only now.
           </p>
           <ul className="mt-3 grid grid-cols-2 gap-1.5 font-mono text-sm text-green-950">
@@ -100,7 +100,7 @@ export function TwoFactorSection({ user }: { user: ApiUser }) {
         </div>
       )}
 
-      {error && <p className="mb-4 text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       {user.twoFactorEnabled ? (
         <form onSubmit={handleDisable} className="flex flex-col gap-3">

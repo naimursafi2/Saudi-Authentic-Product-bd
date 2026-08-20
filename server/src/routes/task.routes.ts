@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as taskController from "../controllers/task.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createTaskSchema,
@@ -28,25 +28,25 @@ router.patch(
 // -- Admin / Co-Admin / Super Admin --
 router.post(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("tasks.create"),
   validate({ body: createTaskSchema }),
   taskController.create
 );
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("tasks.view"),
   validate({ query: listTasksQuerySchema }),
   taskController.list
 );
 router.patch(
   "/:id",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("tasks.edit"),
   validate({ params: mongoIdParamSchema, body: updateTaskSchema }),
   taskController.update
 );
 router.delete(
   "/:id",
-  authorize("admin", "super_admin"),
+  requirePermission("tasks.delete"),
   validate({ params: mongoIdParamSchema }),
   taskController.remove
 );

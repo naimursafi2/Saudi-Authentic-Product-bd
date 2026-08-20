@@ -74,7 +74,7 @@ export default function AdminDashboardPage() {
                 <Link
                   key={card.key}
                   href={card.href}
-                  className="flex items-center gap-4 rounded-lg border border-brown-600/10 bg-white p-5 transition-shadow hover:shadow-md"
+                  className="flex items-center gap-4 rounded-lg border border-brown-600/10 bg-surface p-5 transition-shadow hover:shadow-md"
                 >
                   <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
                     <card.icon size={18} />
@@ -89,7 +89,7 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border border-brown-600/10 bg-white p-6">
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
               <h2 className="mb-4 font-serif text-lg text-green-950">Today&apos;s Attendance</h2>
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
                 <Stat label="Checked In" value={dashboard.attendanceToday.totalCheckedIn} />
@@ -101,7 +101,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-brown-600/10 bg-white p-6">
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
               <h2 className="mb-4 font-serif text-lg text-green-950">Top Products (30d)</h2>
               {dashboard.sales.topProducts.length === 0 ? (
                 <p className="text-sm text-brown-500">No sales in this period yet.</p>

@@ -23,7 +23,7 @@ export function ProductGallery({ product }: { product: Product }) {
     <div className="flex flex-col gap-4">
       <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-gold-500/20 shadow-[0_4px_20px_rgba(61,43,31,0.08)]">
         {product.badge && (
-          <span className="absolute left-4 top-4 z-10 rounded-full bg-[#fcf8ee] px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#735c00]">
+          <span className="absolute left-4 top-4 z-10 rounded-full bg-gold-soft px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-gold-700">
             {product.badge}
           </span>
         )}

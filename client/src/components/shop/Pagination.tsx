@@ -32,7 +32,7 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
           className={cn(
             "flex size-9 cursor-pointer items-center justify-center rounded text-sm font-semibold transition-colors",
             p === page
-              ? "bg-green-900 text-white"
+              ? "bg-brand-deep-2 text-white"
               : "text-green-950 hover:bg-green-950/5"
           )}
         >

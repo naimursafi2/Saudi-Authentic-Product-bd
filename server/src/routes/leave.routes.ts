@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as leaveController from "../controllers/leave.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { createLeaveSchema, listLeavesQuerySchema, reviewLeaveSchema } from "../validators/leave.validator";
 import { mongoIdParamSchema } from "../validators/common.validator";
@@ -22,13 +22,13 @@ router.post(
 // -- Admin / Co-Admin / Super Admin --
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("leave.view"),
   validate({ query: listLeavesQuerySchema }),
   leaveController.list
 );
 router.patch(
   "/:id/review",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("leave.manage"),
   validate({ params: mongoIdParamSchema, body: reviewLeaveSchema }),
   leaveController.review
 );

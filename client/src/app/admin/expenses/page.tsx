@@ -133,7 +133,7 @@ export default function AdminExpensesPage() {
         }
       />
 
-      {actionError && <p className="mb-4 text-sm text-[#8a4a3f]">{actionError}</p>}
+      {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
 
       {isLoading ? (
         <TableSkeleton />
@@ -142,7 +142,7 @@ export default function AdminExpensesPage() {
       ) : expenses.length === 0 ? (
         <EmptyState icon={Receipt} title="No expenses yet" description="Record your first expense to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -181,7 +181,7 @@ export default function AdminExpensesPage() {
                           aria-label="Reject"
                           disabled={actingId === expense._id}
                           onClick={() => handleReject(expense)}
-                          className="cursor-pointer text-[#8a4a3f] hover:text-[#6f3b32] disabled:opacity-50"
+                          className="cursor-pointer text-danger hover:text-danger-strong disabled:opacity-50"
                         >
                           <X size={16} />
                         </button>
@@ -243,7 +243,7 @@ export default function AdminExpensesPage() {
               <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} className={fieldClasses} />
             </div>
 
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
 
             <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(false)}>

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { ApiError } from "../utils/ApiError";
 import { verifyAccessToken } from "../utils/jwt";
 import { UserModel, type IUser } from "../models/User.model";
+import { resolvePermissions } from "../services/role.service";
 import {
   ACTIVITY_WRITE_GRANULARITY_MS,
   INACTIVITY_ENFORCED_ROLES,
@@ -47,7 +48,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     const payload = verifyAccessToken(token);
 
     const user = await UserModel.findById(payload.sub).select(
-      "role isActive isEmailVerified tokenVersion lastSeenAt"
+      "role customRole isActive isEmailVerified tokenVersion lastSeenAt"
     );
     if (!user || !user.isActive) {
       throw ApiError.unauthorized("Your account is no longer active");
@@ -66,6 +67,10 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     req.user = {
       id: user._id.toString(),
       role: user.role,
+      // Resolved from the role documents (cached in role.service), so a
+      // permission change takes effect on the caller's very next request
+      // rather than waiting for them to log in again.
+      permissions: await resolvePermissions(user.role, user.customRole),
       tokenVersion: user.tokenVersion,
       isEmailVerified: user.isEmailVerified,
       impersonatedBy: payload.impersonatedBy,
@@ -87,11 +92,14 @@ export async function attachUserIfPresent(req: Request, _res: Response, next: Ne
 
   try {
     const payload = verifyAccessToken(token);
-    const user = await UserModel.findById(payload.sub).select("role isActive isEmailVerified tokenVersion");
+    const user = await UserModel.findById(payload.sub).select(
+      "role customRole isActive isEmailVerified tokenVersion"
+    );
     if (user && user.isActive && user.tokenVersion === payload.tokenVersion) {
       req.user = {
         id: user._id.toString(),
         role: user.role,
+        permissions: await resolvePermissions(user.role, user.customRole),
         tokenVersion: user.tokenVersion,
         isEmailVerified: user.isEmailVerified,
       };

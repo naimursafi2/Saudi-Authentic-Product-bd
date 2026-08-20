@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as productController from "../controllers/product.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
 import { parseMultipartJsonFields } from "../middlewares/parseMultipartJson.middleware";
@@ -24,14 +24,14 @@ router.get("/:slug", validate({ params: slugParamSchema }), productController.ge
 router.get(
   "/admin/:id",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("products.view"),
   validate({ params: mongoIdParamSchema }),
   productController.getProductForAdmin
 );
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("products.create"),
   upload.array("images", 6),
   parseProductJsonFields,
   validate({ body: createProductSchema }),
@@ -40,7 +40,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("products.edit"),
   upload.array("images", 6),
   parseProductJsonFields,
   validate({ params: mongoIdParamSchema, body: updateProductSchema }),
@@ -53,7 +53,7 @@ router.patch(
 router.delete(
   "/:id",
   authenticate,
-  authorize("co_admin", "super_admin"),
+  requirePermission("products.delete"),
   validate({ params: mongoIdParamSchema }),
   productController.deleteProduct
 );

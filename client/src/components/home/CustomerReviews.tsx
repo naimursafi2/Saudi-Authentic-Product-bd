@@ -25,7 +25,7 @@ export async function CustomerReviews({ section }: { section?: ApiHomepageSectio
                 &ldquo;{review.quote}&rdquo;
               </p>
               <div className="mt-auto flex items-center gap-3 pt-2">
-                <span className="flex size-10 items-center justify-center rounded-full bg-[#f8dac8] text-lg font-semibold text-[#755e50]">
+                <span className="flex size-10 items-center justify-center rounded-full bg-warning-soft text-lg font-semibold text-brown-600">
                   {review.initial}
                 </span>
                 <span className="text-base font-semibold text-green-950">

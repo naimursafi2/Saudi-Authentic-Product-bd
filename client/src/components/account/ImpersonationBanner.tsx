@@ -21,7 +21,7 @@ export function ImpersonationBanner() {
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 bg-[#8a4a3f] px-4 py-2 text-center text-xs font-semibold text-white">
+    <div className="flex flex-wrap items-center justify-center gap-3 bg-danger-solid px-4 py-2 text-center text-xs font-semibold text-white">
       <span className="flex items-center gap-1.5">
         <UserCheck size={14} /> Support login — you are viewing the site as {user.name} ({user.email}).
       </span>

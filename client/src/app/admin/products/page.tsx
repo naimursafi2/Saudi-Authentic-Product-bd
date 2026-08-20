@@ -111,7 +111,7 @@ export default function AdminProductsPage() {
       />
 
       {pendingNotice && (
-        <div className="mb-4 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+        <div className="mb-4 rounded-lg border border-gold-500/40 bg-gold-soft p-4 text-sm text-gold-700">
           {pendingNotice}
         </div>
       )}
@@ -123,7 +123,7 @@ export default function AdminProductsPage() {
       ) : products.length === 0 ? (
         <EmptyState icon={Package} title="No products yet" description="Add your first product to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -160,7 +160,7 @@ export default function AdminProductsPage() {
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
-                          product.isActive ? "bg-[#e9f3ee] text-green-900" : "bg-cream-300 text-brown-500"
+                          product.isActive ? "bg-success-soft text-green-900" : "bg-cream-300 text-brown-500"
                         }`}
                       >
                         {product.isActive ? "Active" : "Inactive"}
@@ -178,7 +178,7 @@ export default function AdminProductsPage() {
                         <button
                           aria-label={canDeleteDirectly ? "Delete" : "Request deletion"}
                           onClick={() => handleDelete(product)}
-                          className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                          className="cursor-pointer text-brown-500 hover:text-danger"
                         >
                           <Trash2 size={15} />
                         </button>

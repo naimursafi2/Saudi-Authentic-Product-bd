@@ -1,3 +1,4 @@
+import { cn, SHOP_GRID_CLASS } from "@/lib/utils";
 /** Product-grid-shaped skeleton — matches ShopPageClient's layout so the
  * swap-in feels seamless instead of a generic block replacing a grid. */
 export default function ShopLoading() {
@@ -13,7 +14,7 @@ export default function ShopLoading() {
             <div key={i} className="h-6 w-full animate-pulse rounded bg-cream-300" />
           ))}
         </div>
-        <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className={cn("flex-1", SHOP_GRID_CLASS)}>
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-2">
               <div className="aspect-square w-full animate-pulse rounded-xl bg-cream-300" />

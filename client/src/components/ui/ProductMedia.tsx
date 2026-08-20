@@ -32,6 +32,14 @@ interface ProductMediaProps {
   /** Forwarded to <ProductVisual> only. */
   variant?: number;
   priority?: boolean;
+  /**
+   * Force how the photo fills its box, overriding the per-source default
+   * below. Product-listing cards pass `"cover"` so every card's image is
+   * exactly the same shape regardless of which source it came from —
+   * mixing cropped and letterboxed images across a grid made the cards look
+   * misaligned even though their boxes were identical.
+   */
+  fit?: "cover" | "contain";
 }
 
 export function ProductMedia({
@@ -44,14 +52,17 @@ export function ProductMedia({
   pattern,
   variant,
   priority,
+  fit,
 }: ProductMediaProps) {
   const photo = src ?? fallbackPhoto;
 
   if (photo) {
-    // Uploaded photography is shot to fill its slot, so it crops (`cover`) as before.
-    // Our curated local shots are square with a white studio background, so they're
-    // fitted (`contain`) on a cream ground — never cropped, never stretched.
+    // Default per source: uploaded photography is shot to fill its slot, so
+    // it crops (`cover`); our curated local shots are square with a white
+    // studio background, so they're fitted (`contain`) on a cream ground.
+    // An explicit `fit` overrides that — see the prop's comment.
     const isCuratedPhoto = !src;
+    const useContain = fit ? fit === "contain" : isCuratedPhoto;
     return (
       <Image
         src={photo}
@@ -59,7 +70,7 @@ export function ProductMedia({
         fill
         sizes={sizes}
         priority={priority}
-        className={cn(isCuratedPhoto ? "bg-cream-50 object-contain p-2" : "object-cover", className)}
+        className={cn(useContain ? "bg-cream-50 object-contain p-2" : "object-cover", className)}
       />
     );
   }

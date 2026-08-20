@@ -78,9 +78,16 @@ export const logoutAll = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const me = catchAsync(async (req: Request, res: Response) => {
-  const user = await UserModel.findById(req.user!.id);
+  const user = await UserModel.findById(req.user!.id).populate("customRole", "key name");
   if (!user) throw ApiError.notFound("User not found");
-  sendSuccess(res, 200, "Current user", { user, impersonatedBy: req.user!.impersonatedBy });
+  // `permissions` is what the frontend hides nav and pages with. It is a
+  // convenience for the UI only — the backend re-checks on every request, so
+  // a tampered client gains nothing.
+  sendSuccess(res, 200, "Current user", {
+    user,
+    permissions: req.user!.permissions,
+    impersonatedBy: req.user!.impersonatedBy,
+  });
 });
 
 export const changePassword = catchAsync(async (req: Request, res: Response) => {

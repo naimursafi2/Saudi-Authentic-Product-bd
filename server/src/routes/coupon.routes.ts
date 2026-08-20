@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as couponController from "../controllers/coupon.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createCouponSchema,
@@ -29,28 +29,28 @@ router.post(
 router.get(
   "/",
   authenticate,
-  authorize("co_admin", "admin", "super_admin"),
+  requirePermission("marketing.view"),
   validate({ query: listCouponsQuerySchema }),
   couponController.listCoupons
 );
 router.post(
   "/",
   authenticate,
-  authorize("co_admin", "admin", "super_admin"),
+  requirePermission("marketing.manage"),
   validate({ body: createCouponSchema }),
   couponController.createCoupon
 );
 router.patch(
   "/:id",
   authenticate,
-  authorize("co_admin", "admin", "super_admin"),
+  requirePermission("marketing.manage"),
   validate({ params: mongoIdParamSchema, body: updateCouponSchema }),
   couponController.updateCoupon
 );
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("coupons.delete"),
   validate({ params: mongoIdParamSchema }),
   couponController.deleteCoupon
 );

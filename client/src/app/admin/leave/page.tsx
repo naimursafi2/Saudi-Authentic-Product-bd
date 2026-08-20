@@ -104,7 +104,7 @@ export default function AdminLeavePage() {
       ) : leaves.length === 0 ? (
         <EmptyState icon={CalendarClock} title="No leave requests" description="Leave requests will appear here." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -145,7 +145,7 @@ export default function AdminLeavePage() {
                           aria-label="Reject"
                           disabled={actioningId === leave._id}
                           onClick={() => handleReject(leave)}
-                          className="cursor-pointer text-[#8a4a3f] hover:text-[#6c3a30] disabled:opacity-40"
+                          className="cursor-pointer text-danger hover:text-danger-strong disabled:opacity-40"
                         >
                           <X size={16} />
                         </button>

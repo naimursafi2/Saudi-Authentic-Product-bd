@@ -29,6 +29,14 @@ export interface ISiteSettings extends Document {
   _id: Types.ObjectId;
   siteName: string;
   logo?: { url: string; publicId: string };
+  /**
+   * Whether the storefront renders the announcement strip above the header.
+   * Defaults to `false` so the strip stays hidden until an Admin/Super Admin
+   * deliberately switches it on (e.g. for Eid or a sale) — an existing
+   * settings document saved before this field was added has no value here,
+   * which reads as falsy and therefore also stays hidden.
+   */
+  announcementEnabled: boolean;
   announcementText?: string;
   contactEmail?: string;
   contactPhone?: string;
@@ -45,6 +53,7 @@ const siteSettingsSchema = new Schema<ISiteSettings>(
       url: { type: String },
       publicId: { type: String },
     },
+    announcementEnabled: { type: Boolean, default: false },
     announcementText: { type: String, trim: true, maxlength: 200 },
     contactEmail: { type: String, trim: true, maxlength: 120 },
     contactPhone: { type: String, trim: true, maxlength: 30 },
@@ -61,9 +70,12 @@ export const SiteSettingsModel: Model<ISiteSettings> = model<ISiteSettings>(
 
 export const SITE_SETTINGS_DEFAULTS: Pick<
   ISiteSettings,
-  "siteName" | "announcementText" | "contactEmail" | "footerTagline"
+  "siteName" | "announcementEnabled" | "announcementText" | "contactEmail" | "footerTagline"
 > = {
   siteName: "Saudi Authentic Product",
+  // Off by default — the text below is only a starting point for whoever
+  // switches the strip on, it does not make the strip appear on its own.
+  announcementEnabled: false,
   announcementText: "Premium Authentic Saudi Products Delivered Across Bangladesh",
   contactEmail: "hello@saudiauthenticproduct.com",
   footerTagline: "Bringing Saudi heritage to Bangladesh.",

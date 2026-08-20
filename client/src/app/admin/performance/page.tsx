@@ -89,7 +89,7 @@ export default function AdminPerformancePage() {
       ) : reviews.length === 0 ? (
         <EmptyState icon={TrendingUp} title="No reviews yet" description="Submit your first performance review to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">

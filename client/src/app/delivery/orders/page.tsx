@@ -61,7 +61,7 @@ export default function DeliveryOrdersPage() {
           description="Orders assigned to you for delivery will show up here."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -258,7 +258,7 @@ function DeliveryOrderModal({
 
           <section>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-brown-500">Delivery Actions</h3>
-            {actionError && <p className="mb-2 text-sm text-[#8a4a3f]">{actionError}</p>}
+            {actionError && <p className="mb-2 text-sm text-danger">{actionError}</p>}
 
             {order.status === "assigned_to_agent" && (
               <div className="flex flex-col gap-2">
@@ -266,7 +266,7 @@ function DeliveryOrderModal({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Note (optional)"
-                  className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                  className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                 />
                 <Button variant="primary" size="sm" disabled={isActing} onClick={handlePickedUp}>
                   {isActing ? "Updating..." : "Mark as Picked Up"}
@@ -280,7 +280,7 @@ function DeliveryOrderModal({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Note (optional)"
-                  className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                  className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                 />
                 <Button variant="primary" size="sm" disabled={isActing} onClick={handleOutForDelivery}>
                   {isActing ? "Updating..." : "Mark as Out for Delivery"}
@@ -290,8 +290,8 @@ function DeliveryOrderModal({
 
             {order.status === "out_for_delivery" && (
               <div className="flex flex-col gap-4">
-                <div className="rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4">
-                  <p className="mb-2 text-sm text-[#735c00]">
+                <div className="rounded-lg border border-gold-500/40 bg-gold-soft p-4">
+                  <p className="mb-2 text-sm text-gold-700">
                     Ask the customer for their delivery verification code and enter it below to confirm receipt.
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -300,7 +300,7 @@ function DeliveryOrderModal({
                       onChange={(e) => setOtp(e.target.value)}
                       placeholder="6-digit code"
                       maxLength={6}
-                      className="h-9 w-32 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                      className="h-9 w-32 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                     />
                     <Button variant="primary" size="sm" disabled={isActing || otp.trim().length !== 6} onClick={handleVerifyOtp}>
                       {isActing ? "Verifying..." : "Verify & Complete Delivery"}
@@ -320,24 +320,24 @@ function DeliveryOrderModal({
                   <button
                     type="button"
                     onClick={() => setShowFailureForm(true)}
-                    className="cursor-pointer self-start text-xs font-bold uppercase tracking-[0.06em] text-[#8a4a3f] hover:underline"
+                    className="cursor-pointer self-start text-xs font-bold uppercase tracking-[0.06em] text-danger hover:underline"
                   >
                     Delivery failed instead?
                   </button>
                 ) : (
-                  <div className="flex flex-col gap-2 rounded-lg border border-[#f0c9c3] bg-[#fbeceb] p-4">
+                  <div className="flex flex-col gap-2 rounded-lg border border-danger-border bg-danger-soft p-4">
                     <input
                       required
                       value={failureReason}
                       onChange={(e) => setFailureReason(e.target.value)}
                       placeholder="Reason for failure (required)"
-                      className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                      className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                     />
                     <input
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
                       placeholder="Delivery note (optional)"
-                      className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                      className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                     />
                     <Button
                       variant="outline"

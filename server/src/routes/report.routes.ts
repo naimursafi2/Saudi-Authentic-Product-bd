@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as reportController from "../controllers/report.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { salesSummaryQuerySchema } from "../validators/report.validator";
 
@@ -15,12 +15,12 @@ router.get("/employee-dashboard", reportController.employeeDashboard);
 // -- Admin / Co-Admin / Super Admin --
 router.get(
   "/dashboard",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("reports.view"),
   reportController.adminDashboard
 );
 router.get(
   "/sales",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("reports.view"),
   validate({ query: salesSummaryQuerySchema }),
   reportController.salesSummary
 );

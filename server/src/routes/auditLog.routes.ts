@@ -1,10 +1,9 @@
 import { Router } from "express";
 import * as auditLogController from "../controllers/auditLog.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { listAuditLogsQuerySchema } from "../validators/auditLog.validator";
-import { AUDIT_LOG_VIEWER_ROLES } from "../services/auditLog.service";
 
 const router = Router();
 
@@ -13,7 +12,7 @@ const router = Router();
 router.get(
   "/",
   authenticate,
-  authorize(...AUDIT_LOG_VIEWER_ROLES),
+  requirePermission("auditLogs.view"),
   validate({ query: listAuditLogsQuerySchema }),
   auditLogController.listAuditLogs
 );

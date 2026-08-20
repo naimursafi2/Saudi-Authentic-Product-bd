@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as refundController from "../controllers/refund.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createRefundSchema,
@@ -20,31 +20,31 @@ router.use(authenticate);
 // refund.service.ts). --
 router.post(
   "/",
-  authorize("customer", "order_manager", "co_admin", "admin", "super_admin"),
+  requirePermission("refunds.request"),
   validate({ body: createRefundSchema }),
   refundController.createRefund
 );
 router.get(
   "/",
-  authorize("customer", "order_manager", "co_admin", "admin", "super_admin"),
+  requirePermission("refunds.view"),
   validate({ query: listRefundsQuerySchema }),
   refundController.listRefunds
 );
 router.patch(
   "/:id/review",
-  authorize("order_manager", "admin", "super_admin"),
+  requirePermission("refunds.review"),
   validate({ params: mongoIdParamSchema, body: reviewRefundSchema }),
   refundController.reviewRefund
 );
 router.patch(
   "/:id/reject",
-  authorize("order_manager", "admin", "super_admin"),
+  requirePermission("refunds.review"),
   validate({ params: mongoIdParamSchema, body: reviewNoteSchema }),
   refundController.rejectRefund
 );
 router.patch(
   "/:id/approve",
-  authorize("admin", "super_admin"),
+  requirePermission("refunds.approve"),
   validate({ params: mongoIdParamSchema, body: reviewNoteSchema }),
   refundController.approveRefund
 );

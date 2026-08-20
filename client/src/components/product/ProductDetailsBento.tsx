@@ -34,7 +34,7 @@ export function ProductDetailsBento({ product }: { product: Product }) {
         </div>
 
         <div className="flex flex-col gap-6 lg:col-span-5">
-          <div className="relative flex flex-col gap-3 overflow-hidden rounded-lg bg-green-900 p-6 text-cream-100">
+          <div className="relative flex flex-col gap-3 overflow-hidden rounded-lg bg-brand-deep-2 p-6 text-on-brand">
             <SealBadge
               size={72}
               showRoute={false}
@@ -44,7 +44,7 @@ export function ProductDetailsBento({ product }: { product: Product }) {
               <MapPin size={18} className="text-gold-500" />
               <h3 className="font-serif text-lg font-semibold">Product of Saudi Arabia</h3>
             </div>
-            <p className="text-sm leading-relaxed text-cream-100/80">
+            <p className="text-sm leading-relaxed text-on-brand/80">
               Exclusively imported from certified farms in {product.origin}. Each batch
               passes rigorous quality control to ensure you receive only authentic{" "}
               {product.name.split(" ")[0]}.

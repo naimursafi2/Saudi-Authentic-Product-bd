@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as staticPageController from "../controllers/staticPage.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
 import { parseMultipartJsonFields } from "../middlewares/parseMultipartJson.middleware";
@@ -17,7 +17,7 @@ router.get("/:type", validate({ params: staticPageTypeParamSchema }), staticPage
 router.patch(
   "/:type",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.pages.manage"),
   upload.single("heroImage"),
   parseMultipartJsonFields(["blocks"]),
   validate({ params: staticPageTypeParamSchema, body: updateStaticPageSchema }),

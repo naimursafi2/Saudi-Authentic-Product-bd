@@ -100,7 +100,7 @@ function TrackOrderForm() {
 
       <form
         onSubmit={handleSubmit}
-        className="mb-10 grid grid-cols-1 gap-4 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:grid-cols-2"
+        className="mb-10 grid grid-cols-1 gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:grid-cols-2"
       >
         <div>
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600">
@@ -135,7 +135,7 @@ function TrackOrderForm() {
       </form>
 
       {error && (
-        <div className="mb-10 flex items-start gap-3 rounded-lg border border-[#f0c9c3] bg-[#fbeceb] p-4 text-sm text-[#8a4a3f]">
+        <div className="mb-10 flex items-start gap-3 rounded-lg border border-danger-border bg-danger-soft p-4 text-sm text-danger">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <p>{error}</p>
         </div>
@@ -152,7 +152,7 @@ function TrackOrderForm() {
 
       {order && (
         <div className="flex flex-col gap-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-brown-500">Order ID</p>
               <p className="font-serif text-xl text-green-950">#{order.orderNumber}</p>
@@ -161,7 +161,7 @@ function TrackOrderForm() {
             <span
               className={cn(
                 "rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.08em]",
-                isBranchStatus ? "bg-[#fbeceb] text-[#8a4a3f]" : "bg-green-900 text-white"
+                isBranchStatus ? "bg-danger-soft text-danger" : "bg-brand-deep-2 text-white"
               )}
             >
               {order.status.replace(/_/g, " ")}
@@ -169,7 +169,7 @@ function TrackOrderForm() {
           </div>
 
           {otp && (
-            <div className="flex items-center gap-3 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-5 text-sm text-[#735c00]">
+            <div className="flex items-center gap-3 rounded-lg border border-gold-500/40 bg-gold-soft p-5 text-sm text-gold-700">
               <KeyRound size={20} className="shrink-0" />
               <p>
                 Your order is out for delivery. Share this code with the delivery agent to confirm receipt:{" "}
@@ -181,7 +181,7 @@ function TrackOrderForm() {
           <OrderStatusTimeline status={order.status} statusHistory={order.statusHistory} />
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div className="rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
               <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-brown-600">
                 <CreditCard size={14} /> Payment
               </p>
@@ -195,7 +195,7 @@ function TrackOrderForm() {
                 </p>
               </div>
             </div>
-            <div className="rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
               <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-brown-600">
                 <MapPin size={14} /> Delivery
               </p>
@@ -210,7 +210,7 @@ function TrackOrderForm() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+          <div className="rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
             <p className="mb-4 text-xs font-bold uppercase tracking-[0.08em] text-brown-600">
               Items ({order.items.length})
             </p>
@@ -244,7 +244,7 @@ function TrackOrderForm() {
           </div>
 
           {order.statusHistory.length > 0 && (
-            <div className="rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
               <p className="mb-4 text-xs font-bold uppercase tracking-[0.08em] text-brown-600">Order Timeline</p>
               <ul className="flex flex-col gap-3">
                 {[...order.statusHistory].reverse().map((entry, i) => (

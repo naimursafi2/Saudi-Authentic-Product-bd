@@ -22,8 +22,8 @@ function personName(person: string | { name: string }): string {
 }
 
 export default function AdminSalaryPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("salary.view");
 
   const [payments, setPayments] = useState<ApiSalaryPayment[]>([]);
   const [employees, setEmployees] = useState<ApiUser[]>([]);
@@ -120,7 +120,7 @@ export default function AdminSalaryPage() {
       ) : payments.length === 0 ? (
         <EmptyState icon={Wallet} title="No payments recorded" description="Record your first salary payment to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">

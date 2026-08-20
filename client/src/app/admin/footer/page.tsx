@@ -20,8 +20,8 @@ import { FooterColumnForm, type FooterColumnFormValues } from "@/components/admi
 import type { ApiFooterColumn } from "@/types/api";
 
 export default function AdminFooterPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("content.navigation.manage");
 
   const [columns, setColumns] = useState<ApiFooterColumn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -134,7 +134,7 @@ export default function AdminFooterPage() {
       {sorted.length === 0 ? (
         <EmptyState icon={PanelBottom} title="No footer columns yet" description="Add a column to populate the footer." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -188,7 +188,7 @@ export default function AdminFooterPage() {
                     <button
                       aria-label="Delete"
                       onClick={() => handleDelete(column)}
-                      className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                      className="cursor-pointer text-brown-500 hover:text-danger"
                     >
                       <Trash2 size={15} />
                     </button>

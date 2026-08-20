@@ -47,7 +47,7 @@ export default function DeliveryDashboardPage() {
   if (isLoading) {
     return (
       <div>
-        <div className="mb-6 h-28 w-full animate-pulse rounded-xl bg-white" />
+        <div className="mb-6 h-28 w-full animate-pulse rounded-xl bg-surface" />
         <TableSkeleton rows={4} />
       </div>
     );
@@ -74,7 +74,7 @@ export default function DeliveryDashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-brown-500">{today}</p>
           <h1 className="mt-1 font-serif text-2xl text-green-950 sm:text-[28px]">
@@ -86,7 +86,7 @@ export default function DeliveryDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {statCards.map((card) => (
-          <div key={card.label} className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-white p-4">
+          <div key={card.label} className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-surface p-4">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
               <card.icon size={16} />
             </span>
@@ -98,7 +98,7 @@ export default function DeliveryDashboardPage() {
         ))}
       </div>
 
-      <div className="flex flex-col rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <div className="flex flex-col rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-serif text-lg text-green-950">
             <PackageSearch size={18} className="text-green-900" /> Active Orders

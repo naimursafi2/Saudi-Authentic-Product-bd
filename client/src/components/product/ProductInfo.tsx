@@ -89,7 +89,7 @@ export function ProductInfo({ product }: { product: Product }) {
                 className={cn(
                   "cursor-pointer rounded border px-5 py-2 text-sm font-semibold transition-colors",
                   v.id === variantId
-                    ? "border-gold-500 bg-gold-500 text-green-950"
+                    ? "border-gold-500 bg-gold-500 text-on-gold"
                     : "border-green-900/20 text-green-950 hover:border-green-900/40"
                 )}
               >
@@ -106,7 +106,7 @@ export function ProductInfo({ product }: { product: Product }) {
         </p>
         <QuantityInput value={quantity} onChange={setQuantity} max={Math.max(1, variant.stock)} />
         {variant.stock === 0 ? (
-          <p className="mt-2 text-xs font-semibold text-[#8a4a3f]">
+          <p className="mt-2 text-xs font-semibold text-danger">
             This size is out of stock and can&apos;t be ordered right now.
           </p>
         ) : (
@@ -140,11 +140,11 @@ export function ProductInfo({ product }: { product: Product }) {
           aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
           onClick={() => toggleWishlist(product.id)}
           className={cn(
-            "flex size-12 shrink-0 cursor-pointer items-center justify-center self-center rounded border border-green-900/20 text-brown-500 transition-colors hover:border-[#8a4a3f]/40 hover:text-[#8a4a3f] sm:self-auto",
-            wishlisted && "border-[#8a4a3f]/40 text-[#8a4a3f]"
+            "flex size-12 shrink-0 cursor-pointer items-center justify-center self-center rounded border border-green-900/20 text-brown-500 transition-colors hover:border-danger/40 hover:text-danger sm:self-auto",
+            wishlisted && "border-danger/40 text-danger"
           )}
         >
-          <Heart size={18} className={wishlisted ? "fill-[#8a4a3f]" : ""} />
+          <Heart size={18} className={wishlisted ? "fill-danger" : ""} />
         </button>
       </div>
 

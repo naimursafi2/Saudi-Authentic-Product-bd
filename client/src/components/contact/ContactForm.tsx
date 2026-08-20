@@ -6,7 +6,7 @@ export function ContactForm() {
   return (
     <form
       onSubmit={(e) => e.preventDefault()}
-      className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+      className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
     >
       <div>
         <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600">

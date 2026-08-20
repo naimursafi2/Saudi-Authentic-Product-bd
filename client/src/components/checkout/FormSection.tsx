@@ -12,7 +12,7 @@ export function FormSection({
   return (
     <section
       className={cn(
-        "flex flex-col gap-5 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:p-7",
+        "flex flex-col gap-5 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:p-7",
         className
       )}
     >

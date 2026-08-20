@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as footerColumnController from "../controllers/footerColumn.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createFooterColumnSchema,
@@ -19,21 +19,21 @@ router.get("/", validate({ query: listFooterColumnsQuerySchema }), footerColumnC
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.navigation.manage"),
   validate({ body: createFooterColumnSchema }),
   footerColumnController.createFooterColumn
 );
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.navigation.manage"),
   validate({ params: mongoIdParamSchema, body: updateFooterColumnSchema }),
   footerColumnController.updateFooterColumn
 );
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.navigation.manage"),
   validate({ params: mongoIdParamSchema }),
   footerColumnController.deleteFooterColumn
 );

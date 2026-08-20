@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as userController from "../controllers/user.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
 import {
@@ -35,43 +35,43 @@ router.delete("/me/addresses/:addressId", userController.removeAddress);
 // -- Staff management (Super Admin / Admin only) --
 router.post(
   "/",
-  authorize("admin", "super_admin"),
+  requirePermission("employees.manage"),
   validate({ body: createStaffSchema }),
   userController.createStaff
 );
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("employees.view"),
   validate({ query: listUsersQuerySchema }),
   userController.listUsers
 );
 router.get(
   "/:id",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("employees.view"),
   validate({ params: mongoIdParamSchema }),
   userController.getUser
 );
 router.patch(
   "/:id/role",
-  authorize("admin", "super_admin"),
+  requirePermission("employees.manage"),
   validate({ params: mongoIdParamSchema, body: updateUserRoleSchema }),
   userController.updateRole
 );
 router.patch(
   "/:id/status",
-  authorize("admin", "super_admin"),
+  requirePermission("employees.manage"),
   validate({ params: mongoIdParamSchema, body: updateUserStatusSchema }),
   userController.updateStatus
 );
 router.patch(
   "/:id/staff-meta",
-  authorize("admin", "super_admin"),
+  requirePermission("employees.manage"),
   validate({ params: mongoIdParamSchema, body: updateStaffMetaSchema }),
   userController.updateStaffMeta
 );
 router.patch(
   "/:id/unlock",
-  authorize("admin", "super_admin"),
+  requirePermission("employees.manage"),
   validate({ params: mongoIdParamSchema }),
   userController.unlockAccount
 );
@@ -79,7 +79,7 @@ router.patch(
 // see user.service.ts#impersonateUser.
 router.post(
   "/:id/impersonate",
-  authorize("super_admin"),
+  requirePermission("employees.impersonate"),
   validate({ params: mongoIdParamSchema }),
   userController.impersonate
 );

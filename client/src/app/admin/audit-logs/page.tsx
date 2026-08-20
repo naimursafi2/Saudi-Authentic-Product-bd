@@ -56,7 +56,7 @@ export default function AdminAuditLogsPage() {
       ) : logs.length === 0 ? (
         <EmptyState icon={ScrollText} title="No activity yet" description="Sensitive actions will appear here." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">

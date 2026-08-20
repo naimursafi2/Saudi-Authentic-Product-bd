@@ -26,6 +26,13 @@ export interface IUser extends Document {
   email: string;
   password: string;
   role: Role;
+  /**
+   * Optional custom role (VIDEO_EDITOR, DIGITAL_MARKETER, …) layered on top
+   * of `role`. It ADDS permissions and never removes the base role's, so
+   * assigning one can't quietly demote an account. `role` stays the single
+   * source of role identity for every legacy check.
+   */
+  customRole?: Types.ObjectId;
   phone?: string;
   avatar?: { url: string; publicId: string };
   isActive: boolean;
@@ -81,6 +88,7 @@ const userSchema = new Schema<IUser>(
     },
     password: { type: String, required: true, minlength: 8, select: false },
     role: { type: String, enum: ROLES, default: "customer", index: true },
+    customRole: { type: Schema.Types.ObjectId, ref: "Role", index: true },
     phone: { type: String, trim: true },
     avatar: {
       url: { type: String },

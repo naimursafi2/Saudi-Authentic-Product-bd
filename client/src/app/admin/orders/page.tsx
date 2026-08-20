@@ -57,7 +57,7 @@ export default function AdminOrdersPage() {
             setStatusFilter(e.target.value as OrderStatus | "");
             setPage(1);
           }}
-          className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+          className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
@@ -79,7 +79,7 @@ export default function AdminOrdersPage() {
           description="Orders placed by customers will show up here."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -302,7 +302,7 @@ function OrderDetailModal({
                 Assign Delivery Agent
               </h3>
               <div className="flex flex-col gap-2">
-                {assignError && <p className="text-sm text-[#8a4a3f]">{assignError}</p>}
+                {assignError && <p className="text-sm text-danger">{assignError}</p>}
                 {agents.length === 0 ? (
                   <p className="text-sm text-brown-500">No delivery agent accounts exist yet.</p>
                 ) : (
@@ -310,7 +310,7 @@ function OrderDetailModal({
                     <select
                       value={selectedAgentId}
                       onChange={(e) => setSelectedAgentId(e.target.value)}
-                      className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                      className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                     >
                       <option value="">Select an agent</option>
                       {agents.map((agent) => (
@@ -343,12 +343,12 @@ function OrderDetailModal({
               </p>
             ) : (
               <div className="flex flex-col gap-2">
-                {updateError && <p className="text-sm text-[#8a4a3f]">{updateError}</p>}
+                {updateError && <p className="text-sm text-danger">{updateError}</p>}
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={nextStatus}
                     onChange={(e) => setNextStatus(e.target.value as OrderStatus | "")}
-                    className="h-9 rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                    className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                   >
                     <option value="">Select new status</option>
                     {nextGenericStatuses(order.status).map((s) => (
@@ -361,7 +361,7 @@ function OrderDetailModal({
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="Note (optional)"
-                    className="h-9 flex-1 min-w-[160px] rounded border border-brown-600/20 bg-white px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                    className="h-9 flex-1 min-w-[160px] rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                   />
                   <Button
                     variant="primary"

@@ -46,6 +46,8 @@ function heroSlideFormData(values: HeroSlideFormValues, image: File | null): For
   form.set("subtitle", values.subtitle);
   form.set("ctaLabel", values.ctaLabel);
   form.set("ctaHref", values.ctaHref);
+  form.set("secondaryCtaLabel", values.secondaryCtaLabel);
+  form.set("secondaryCtaHref", values.secondaryCtaHref);
   form.set("sortOrder", String(values.sortOrder));
   form.set("isActive", String(values.isActive));
   if (image) form.set("image", image);
@@ -123,9 +125,27 @@ export default function AdminHomepagePage() {
   }
 
   async function handleDeleteSlide(slide: ApiHeroSlide) {
-    if (!confirm(`Delete this hero slide? This cannot be undone.`)) return;
-    await deleteHeroSlide(slide._id);
-    load();
+    if (!confirm("Delete this hero slide? This cannot be undone.")) return;
+    try {
+      await deleteHeroSlide(slide._id);
+      load();
+    } catch (err) {
+      // Deleting a slide is Admin/Super Admin only, so a Co-Admin reaches
+      // here with a 403. Surface the server's message instead of failing
+      // silently, matching how section deletion already behaves.
+      alert(err instanceof ApiClientError ? err.message : "Could not delete hero slide.");
+    }
+  }
+
+  /** Enable/disable straight from the table, without opening the edit form
+   * — the same one-click toggle the sections table below already offers. */
+  async function toggleSlideActive(slide: ApiHeroSlide) {
+    try {
+      await updateHeroSlide(slide._id, formDataFor({ isActive: !slide.isActive }));
+      load();
+    } catch (err) {
+      alert(err instanceof ApiClientError ? err.message : "Could not update hero slide.");
+    }
   }
 
   async function moveSlide(slide: ApiHeroSlide, direction: "up" | "down") {
@@ -213,7 +233,7 @@ export default function AdminHomepagePage() {
       <div>
         <PageHeader
           title="Hero Slides"
-          description="The top banner's image, headline, subtitle and CTA. The first active slide (by order) is featured."
+          description="The homepage banner. Every active slide rotates automatically in the order below; visitors can also step through them with the arrows and dots."
           action={
             <Button variant="primary" size="sm" onClick={() => setEditingSlide("new")}>
               <Plus size={14} /> Add Slide
@@ -225,10 +245,10 @@ export default function AdminHomepagePage() {
           <EmptyState
             icon={ImagePlus}
             title="No hero slides yet"
-            description="Add a slide to replace the default hero banner content."
+            description="Add a slide to take over the homepage banner. Add two or more to turn it into a rotating carousel."
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -272,7 +292,13 @@ export default function AdminHomepagePage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={slide.isActive ? "active" : "inactive"} />
+                      <button
+                        aria-label={slide.isActive ? "Disable slide" : "Enable slide"}
+                        onClick={() => toggleSlideActive(slide)}
+                        className="cursor-pointer"
+                      >
+                        <StatusBadge status={slide.isActive ? "active" : "inactive"} />
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -285,7 +311,7 @@ export default function AdminHomepagePage() {
                       <button
                         aria-label="Delete"
                         onClick={() => handleDeleteSlide(slide)}
-                        className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-brown-500 hover:text-danger"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -317,7 +343,7 @@ export default function AdminHomepagePage() {
         {sortedSections.length === 0 ? (
           <EmptyState icon={LayoutPanelTop} title="No sections found" />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -370,7 +396,7 @@ export default function AdminHomepagePage() {
                         <button
                           aria-label="Delete"
                           onClick={() => handleDeleteSection(section)}
-                          className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                          className="cursor-pointer text-brown-500 hover:text-danger"
                         >
                           <Trash2 size={15} />
                         </button>

@@ -323,7 +323,7 @@ export function CheckoutClient() {
           </FormSection>
 
           <div className="flex flex-col items-center gap-2 pt-2">
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
             <Button type="submit" variant="gold" size="lg" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Placing Order..." : "Complete Order"}
             </Button>
@@ -349,7 +349,7 @@ export function CheckoutClient() {
                     sizes="56px"
                     pattern={false}
                   />
-                  <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-green-900 text-[10px] font-bold text-white">
+                  <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-brand-deep-2 text-[10px] font-bold text-white">
                     {item.quantity}
                   </span>
                 </span>
@@ -404,7 +404,7 @@ export function CheckoutClient() {
                 </Button>
               </div>
             )}
-            {couponError && <p className="mt-1.5 text-xs text-[#8a4a3f]">{couponError}</p>}
+            {couponError && <p className="mt-1.5 text-xs text-danger">{couponError}</p>}
           </div>
 
           <div className="mt-4 flex flex-col gap-2 border-t border-brown-600/15 pt-4 text-sm">

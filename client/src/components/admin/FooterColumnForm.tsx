@@ -133,7 +133,7 @@ export function FooterColumnForm({
                 type="button"
                 aria-label="Remove link"
                 onClick={() => removeLink(i)}
-                className="shrink-0 cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                className="shrink-0 cursor-pointer text-brown-500 hover:text-danger"
               >
                 <Trash2 size={15} />
               </button>
@@ -145,7 +145,7 @@ export function FooterColumnForm({
         </div>
       </div>
 
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>

@@ -37,7 +37,7 @@ export default function EmployeeSalaryPage() {
       ) : payments.length === 0 ? (
         <EmptyState icon={Wallet} title="No salary records yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-brown-600/10 bg-white shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="overflow-x-auto rounded-xl border border-brown-600/10 bg-surface shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 bg-cream-200/40 text-xs uppercase tracking-wide text-brown-500">

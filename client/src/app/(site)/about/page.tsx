@@ -69,11 +69,11 @@ export default async function AboutPage() {
       )}
 
       {page.ctaTitle && (
-        <section className="bg-green-900 px-6 py-16 text-center sm:px-10 lg:py-20">
+        <section className="bg-brand-deep-2 px-6 py-16 text-center sm:px-10 lg:py-20">
           <div className="mx-auto flex max-w-xl flex-col items-center gap-5">
             <h2 className="font-serif text-3xl font-semibold text-white sm:text-4xl">{page.ctaTitle}</h2>
             {page.ctaDescription && (
-              <p className="text-sm text-cream-100/80 sm:text-base">{page.ctaDescription}</p>
+              <p className="text-sm text-on-brand/80 sm:text-base">{page.ctaDescription}</p>
             )}
             {page.ctaButtonLabel && page.ctaButtonHref && (
               <ButtonLink href={page.ctaButtonHref} variant="gold" size="lg">

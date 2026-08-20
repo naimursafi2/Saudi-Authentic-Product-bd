@@ -54,7 +54,7 @@ function AvatarUploader({ user }: { user: ApiUser }) {
   return (
     <div className="flex items-center gap-5">
       <div className="relative">
-        <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-green-950 text-2xl font-bold text-gold-500">
+        <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-deep text-2xl font-bold text-gold-500">
           {user.avatar?.url ? (
             <Image src={user.avatar.url} alt={user.name} width={80} height={80} className="size-full object-cover" />
           ) : (
@@ -66,7 +66,7 @@ function AvatarUploader({ user }: { user: ApiUser }) {
           aria-label="Change profile picture"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
-          className="absolute -bottom-1 -right-1 flex size-8 cursor-pointer items-center justify-center rounded-full border-2 border-cream-50 bg-gold-500 text-green-950 shadow-sm transition-colors hover:bg-gold-600 disabled:opacity-60"
+          className="absolute -bottom-1 -right-1 flex size-8 cursor-pointer items-center justify-center rounded-full border-2 border-cream-50 bg-gold-500 text-on-gold shadow-sm transition-colors hover:bg-gold-600 disabled:opacity-60"
         >
           <Camera size={14} />
         </button>
@@ -86,12 +86,12 @@ function AvatarUploader({ user }: { user: ApiUser }) {
             type="button"
             onClick={handleRemove}
             disabled={isUploading}
-            className="mt-1.5 flex cursor-pointer items-center gap-1 text-xs font-bold uppercase tracking-[0.06em] text-brown-500 hover:text-[#8a4a3f] disabled:opacity-60"
+            className="mt-1.5 flex cursor-pointer items-center gap-1 text-xs font-bold uppercase tracking-[0.06em] text-brown-500 hover:text-danger disabled:opacity-60"
           >
             <Trash2 size={12} /> Remove Photo
           </button>
         )}
-        {error && <p className="mt-1.5 text-xs text-[#8a4a3f]">{error}</p>}
+        {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
       </div>
     </div>
   );
@@ -160,7 +160,7 @@ function ProfileDetailsForm({ user }: { user: ApiUser }) {
           />
         </div>
       </div>
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       {success && <p className="text-sm text-green-900">Profile updated.</p>}
       <Button type="submit" variant="primary" size="sm" className="self-start" disabled={isSubmitting}>
         {isSubmitting ? "Saving..." : "Save Changes"}
@@ -216,7 +216,7 @@ function ChangePasswordForm() {
           />
         </div>
       </div>
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       {success && <p className="text-sm text-green-900">Password updated.</p>}
       <Button type="submit" variant="outline" size="sm" className="self-start" disabled={isSubmitting}>
         {isSubmitting ? "Updating..." : "Update Password"}
@@ -228,19 +228,19 @@ function ChangePasswordForm() {
 export function ProfileSection({ user }: { user: ApiUser }) {
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
         <h2 className="mb-4 flex items-center gap-2 font-serif text-lg text-green-950">
           <UserIcon size={18} className="text-green-900" /> Profile Photo
         </h2>
         <AvatarUploader user={user} />
       </div>
 
-      <div className="rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
         <h2 className="mb-4 font-serif text-lg text-green-950">Personal Details</h2>
         <ProfileDetailsForm user={user} />
       </div>
 
-      <div className="rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
         <h2 className="mb-4 font-serif text-lg text-green-950">Change Password</h2>
         <ChangePasswordForm />
       </div>

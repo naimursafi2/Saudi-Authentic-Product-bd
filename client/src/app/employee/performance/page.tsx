@@ -42,7 +42,7 @@ export default function EmployeePerformancePage() {
             return (
               <div
                 key={review._id}
-                className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow duration-150 hover:shadow-md sm:flex-row sm:items-start sm:gap-5"
+                className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow duration-150 hover:shadow-md sm:flex-row sm:items-start sm:gap-5"
               >
                 <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-sm font-bold text-green-900">
                   {reviewer.charAt(0).toUpperCase()}

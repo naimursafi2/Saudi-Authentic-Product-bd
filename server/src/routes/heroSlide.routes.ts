@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as heroSlideController from "../controllers/heroSlide.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
 import {
@@ -20,7 +20,7 @@ router.get("/", validate({ query: listHeroSlidesQuerySchema }), heroSlideControl
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("content.homepage.manage"),
   upload.single("image"),
   validate({ body: createHeroSlideSchema }),
   heroSlideController.createHeroSlide
@@ -28,7 +28,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("content.homepage.manage"),
   upload.single("image"),
   validate({ params: mongoIdParamSchema, body: updateHeroSlideSchema }),
   heroSlideController.updateHeroSlide
@@ -36,7 +36,7 @@ router.patch(
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("content.homepage.delete"),
   validate({ params: mongoIdParamSchema }),
   heroSlideController.deleteHeroSlide
 );

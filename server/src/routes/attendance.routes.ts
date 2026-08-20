@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as attendanceController from "../controllers/attendance.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   checkOutSchema,
@@ -22,18 +22,18 @@ router.get("/mine", attendanceController.listMine);
 // -- Admin / Co-Admin / Super Admin --
 router.get(
   "/summary/today",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("attendance.view"),
   attendanceController.todaySummary
 );
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("attendance.view"),
   validate({ query: listAttendanceQuerySchema }),
   attendanceController.list
 );
 router.patch(
   "/:id",
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("attendance.manage"),
   validate({ params: mongoIdParamSchema, body: updateAttendanceSchema }),
   attendanceController.update
 );

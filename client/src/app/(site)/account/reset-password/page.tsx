@@ -83,7 +83,7 @@ function ResetPasswordForm() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
       <div className="text-center">
-        <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-green-950 text-gold-500">
+        <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-brand-deep text-gold-500">
           <KeyRound size={24} />
         </span>
         <h1 className="font-serif text-3xl text-green-950">Set a New Password</h1>
@@ -91,7 +91,7 @@ function ResetPasswordForm() {
       </div>
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+        className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
       >
         <div>
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600">
@@ -117,11 +117,11 @@ function ResetPasswordForm() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="••••••••"
-            inputClassName={cn(fieldClasses, passwordsMismatch && "border-[#8a4a3f]/50")}
+            inputClassName={cn(fieldClasses, passwordsMismatch && "border-danger/50")}
           />
-          {passwordsMismatch && <p className="mt-1 text-xs text-[#8a4a3f]">Passwords do not match.</p>}
+          {passwordsMismatch && <p className="mt-1 text-xs text-danger">Passwords do not match.</p>}
         </div>
-        {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" disabled={isSubmitting}>
           {isSubmitting ? "Resetting..." : "Reset Password"}
         </Button>

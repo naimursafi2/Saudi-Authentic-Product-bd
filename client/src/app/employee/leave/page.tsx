@@ -93,7 +93,7 @@ export default function EmployeeLeavePage() {
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-brown-600/10 bg-white shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="overflow-x-auto rounded-xl border border-brown-600/10 bg-surface shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 bg-cream-200/40 text-xs uppercase tracking-wide text-brown-500">
@@ -120,7 +120,7 @@ export default function EmployeeLeavePage() {
                     {leave.status === "pending" && (
                       <button
                         onClick={() => handleCancel(leave._id)}
-                        className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-500 transition-colors hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-500 transition-colors hover:text-danger"
                       >
                         Cancel
                       </button>
@@ -160,7 +160,7 @@ export default function EmployeeLeavePage() {
               <label className={labelClasses}>Reason *</label>
               <textarea required name="reason" rows={3} className={fieldClasses} />
             </div>
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
             <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
               <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>
                 Cancel

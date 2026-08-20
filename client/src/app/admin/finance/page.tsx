@@ -10,8 +10,8 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import type { FinanceSummary } from "@/types/api";
 
 export default function AdminFinancePage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("finance.view");
 
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,7 +81,7 @@ export default function AdminFinancePage() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {statCards.map((card) => (
-          <div key={card.label} className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-white p-4">
+          <div key={card.label} className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-surface p-4">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
               <card.icon size={16} />
             </span>
@@ -93,7 +93,7 @@ export default function AdminFinancePage() {
         ))}
       </div>
 
-      <div className="rounded-xl border border-brown-600/10 bg-white p-6">
+      <div className="rounded-xl border border-brown-600/10 bg-surface p-6">
         <h2 className="mb-4 flex items-center gap-2 font-serif text-lg text-green-950">
           <Landmark size={18} className="text-green-900" /> Expenses by Category
         </h2>

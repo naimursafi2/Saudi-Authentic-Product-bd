@@ -63,8 +63,9 @@ form or state-management library — forms/data fetching are hand-rolled with
 - Secure authentication (JWT via httpOnly access/refresh cookies — the
   frontend API client silently refreshes and retries once on a 401 rather
   than signing the user out mid-session, only dropping the session if the
-  refresh itself fails — logout-all via token versioning), role-based access
-  control across seven roles: `customer`, `employee`, `delivery_agent`,
+  refresh itself fails — logout-all via token versioning), and role +
+  permission based access control (see the next bullet) across seven built-in
+  roles: `customer`, `employee`, `delivery_agent`,
   `co_admin`, `order_manager`, `admin`, `super_admin`. Registration enforces
   a strong-password policy (8+
   characters, upper + lower case, a digit) with a live strength meter and a
@@ -104,14 +105,34 @@ form or state-management library — forms/data fetching are hand-rolled with
   navigation (header nav links, admin/super_admin only), footer (footer
   link columns, admin/super_admin only), pages (About/Contact/Shipping
   Policy body copy, admin/super_admin only), site settings (admin/super_admin
-  only). Route access is guarded client-side (`RoleGuard`) and enforced for
-  real by the backend's `authorize(...)` on every route; every page whose
-  API a co_admin (or, for the super_admin-only pages, an admin too) cannot
-  reach shows a friendly "Access restricted" state when navigated to
-  directly instead of a broken page shell. `order_manager` reaches the same
-  `/admin` shell but its nav is restricted to Dashboard, Orders, Refunds,
-  and Audit Logs — a real least-privilege role, not the full admin-tier
-  surface.
+  only), and roles & permissions. Route access is guarded client-side
+  (`RoleGuard`, which admits a user by built-in role *or* by any admin-panel
+  permission, so a custom role gets in) and enforced for real by the
+  backend's `requirePermission(...)` on every route; every page whose API the
+  current user cannot reach shows a friendly "Access restricted" state when
+  navigated to directly instead of a broken page shell. The sidebar filters
+  itself by permission, so `order_manager` reaches the same `/admin` shell
+  but sees only Dashboard, Orders, Refunds, and Audit Logs — a real
+  least-privilege role, not the full admin-tier surface — and a custom role
+  automatically gets exactly the menu its permissions justify.
+- **Roles & permissions** — every API route is gated by a granular
+  permission (`products.edit`, `orders.manage`, `salary.view`, …) rather than
+  a hardcoded list of role names, and each role's permission list lives in the
+  database. The seven built-in roles are seeded with permission sets
+  transcribed from the role matrix they replaced, so nothing about their
+  access changed. Beyond them, an authorised user can create **custom roles**
+  from `/admin/roles` — VIDEO_EDITOR, DIGITAL_MARKETER, CONTENT_MANAGER,
+  anything — pick their permissions from a grouped checkbox list, and assign
+  one to a staff member from the Employees page's **Access** panel, all with
+  no code change and no redeploy. A custom role *adds* permissions on top of
+  a user's built-in role and never removes them. Guards worth knowing: nobody
+  can grant a permission they don't hold themselves, only a Super Admin can
+  re-permission a built-in role, the Super Admin role always holds everything
+  and can't be edited, and a role still assigned to somebody can't be deleted.
+  Every role change is audit-logged, and a permission edit takes effect on the
+  affected user's next request — no re-login. The admin panel hides menu items
+  and pages a user can't use, but that is presentation only: the backend
+  re-checks every permission on every request.
 - **Approval-gate system (Grant-Based Approval Workflow)** — a single
   reusable `PendingAction` queue gates eight sensitive action types (coupon
   create/update above a configurable discount size, product deletion by
@@ -193,10 +214,19 @@ form or state-management library — forms/data fetching are hand-rolled with
   investment, total confirmed expenses (by category), and net profit/loss —
   all admin/super_admin only.
 - **Homepage content management** — admin-editable hero slides (image,
-  title, subtitle, CTA, order; all active slides render as an auto-rotating
-  carousel) and a fixed set of eight homepage section types (hero, trust
+  title, subtitle, a primary and an optional secondary CTA, sort order,
+  active flag) and a fixed set of eight homepage section types (hero, trust
   strip, featured categories, best sellers, product story, customer
-  reviews, promo banners, product showcases). The six singleton sections are
+  reviews, promo banners, product showcases). All active slides render on
+  the homepage as a carousel: autoplay every 6 seconds, previous/next arrows
+  at every breakpoint, pagination dots, swipe on touch devices, pause on
+  hover or focus, and a restarted timer after any manual navigation so the
+  carousel never jumps straight off the slide the visitor just chose. It is
+  skipped for viewers who prefer reduced motion. Slides are added, edited,
+  reordered and enabled/disabled from `/admin/homepage` by Admin, Super
+  Admin and Co-Admin; deleting one is Admin/Super Admin only. Nothing about
+  a slide — image, headline, or either button — is hardcoded in the
+  frontend. The six singleton sections are
   visibility/order-editable only (the trust strip's benefit items —
   icon + label — are individually editable/reorderable/toggleable); promo
   banners and product showcases can be freely created/deleted. A product
@@ -209,6 +239,27 @@ form or state-management library — forms/data fetching are hand-rolled with
   footer's social icons come from a `socialLinks` list on the same
   `SiteSettings` singleton as the logo/announcement/contact fields
   (`/admin/settings`).
+- **Dark / light mode** — a toggle in the storefront header and in each
+  portal shell, applied site-wide (storefront, admin, employee, delivery).
+  The choice persists in `localStorage` (`sap:theme`) and defaults to the
+  OS preference; an inline pre-hydration script applies it before first
+  paint so there is no white flash. Implemented by redefining the palette
+  variables under `[data-theme="dark"]` in `app/globals.css` rather than
+  per-component `dark:` classes.
+- **Two-row storefront header** — logo + search bar + labelled action icons
+  (Track Order / Wishlist / Cart / account) on the top row, the
+  admin-managed nav links and Categories dropdown on the second. Collapses
+  below `lg` into a left-hand drawer with the search bar on its own row. A
+  signed-in user is shown as their uploaded avatar, or a monogram fallback.
+  "Sign In" is the single auth entry point — registration is reached from
+  the sign-in form's own tabs and its "Don't have an account? Sign up" link.
+- **Announcement strip** — the thin green bar above the main navbar (for
+  occasions like Eid or a sale) is opt-in and **off by default**. Admin and
+  Super Admin switch it on/off and edit its text together at
+  `/admin/settings` (`announcementEnabled` + `announcementText` on
+  `SiteSettings`), so running a seasonal message needs no code change or
+  redeploy. It stays hidden while the text is blank, even when switched on.
+  Co-Admin cannot reach site settings, so cannot toggle it.
 - **Static page content management** — `/admin/pages` edits the body copy of
   the three static informational pages (`/about`, `/contact`,
   `/shipping-policy`) via a `StaticPage` model: one fixed, lazily-seeded
@@ -312,8 +363,9 @@ machine.
 - **Backend**: `npm test` runs Jest (`server/jest.config.js`, ts-jest) over
   `server/src/tests/*.test.ts` — 10 unit-style specs covering `ApiError`,
   app bootstrap, the `booleanish` zod helper, `notFoundHandler`, JWT utils,
-  `paramStr`, the `authorize` RBAC middleware (including the
-  `order_manager`/`delivery_agent` roles), shipping-fee calculation,
+  `paramStr`, the RBAC middleware — both `authorize` (including the
+  `order_manager`/`delivery_agent` roles) and `requirePermission`, plus the
+  built-in roles' default permission sets — shipping-fee calculation,
   `slugify`, and the `validate` middleware — plus `server/src/tests/
   integration/*.integration.test.ts`, real end-to-end HTTP specs (auth,
   catalog RBAC/creation, order creation/stock/tracking, the full order status
@@ -337,14 +389,25 @@ machine.
   unrelated edits while foreign ids are ignored, that overlapping pending
   requests are flagged symmetrically and clear once resolved, and that
   title/description edits apply immediately with field-level old/new audit
-  entries) run with `supertest` against an actual
-  in-memory MongoDB via `mongodb-memory-server`. 139 tests passing as of the
-  stock-approval build. Coverage is still partial, not exhaustive.
+  entries; the homepage banner carousel — active-only public listing, RBAC,
+  and the one-field-PATCH cases behind slide reorder and enable/disable; and
+  the role/permission system — that each built-in role's effective
+  permissions equal its documented defaults, that a custom role grants real
+  API access and stops the moment it is deactivated, that an Admin cannot
+  grant a permission they lack or re-permission a built-in role, that a Super
+  Admin's edit applies on the very next request, and that built-in or
+  still-assigned roles cannot be deleted) run with `supertest` against an
+  actual in-memory MongoDB via `mongodb-memory-server`. 177 tests across 26
+  suites passing as of the roles-and-permissions build. Coverage is still
+  partial, not exhaustive.
 - **Frontend**: `npm test` runs Vitest (`vitest.config.mts`, jsdom
   environment) with React Testing Library. Covers pure-logic modules
   (`lib/utils`, `lib/passwordStrength`, `lib/mappers`, `lib/stock`), one
-  component (`PasswordStrengthMeter`), and `CartContext` (add/remove/quantity/
-  localStorage persistence, with `lib/api/products` mocked). No
+  component (`PasswordStrengthMeter`), the admin sidebar's permission
+  filtering (`AdminNav` — that each built-in role's menu is unchanged and a
+  custom role gets exactly the items its permissions justify), and
+  `CartContext` (add/remove/quantity/localStorage persistence, with
+  `lib/api/products` mocked). No
   Playwright/e2e browser testing exists — verify visual/UI changes manually
   in a browser.
 
@@ -416,21 +479,27 @@ missing/malformed):
   one email per order to every order-owning staff account.
 - Cart and wishlist are `localStorage`-only; they don't persist server-side
   or follow a customer across devices/browsers.
-- Co-admin's `/admin/salary`, `/admin/finance`, `/admin/investments`,
-  `/admin/homepage`, `/admin/navigation`, `/admin/footer`, `/admin/pages`,
-  and `/admin/settings` nav links are hidden in the UI, and the layout's
-  role guard still admits all admin-tier roles at the route level — but
-  each of those pages now checks the role itself and shows a friendly
-  "Access restricted" state instead of attempting to load data, so a
-  co_admin navigating there directly no longer sees a broken page shell
-  with failed API calls. `/admin/approvals` uses the same pattern but is
-  restricted to super_admin only (an admin navigating there directly also
-  sees the restricted state). `/admin/coupons` and `/admin/expenses` are
-  **not** on this restricted list — co_admin has real, working access to
-  both now.
+- The admin sidebar hides items the current user has no permission for, and
+  the layout's guard still admits every admin-tier role at the route level —
+  so `/admin/salary`, `/admin/finance`, `/admin/investments`,
+  `/admin/navigation`, `/admin/footer`, `/admin/pages`, `/admin/settings` and
+  `/admin/approvals` each check the relevant permission themselves and show a
+  friendly "Access restricted" state instead of attempting to load data.
+  Navigating there directly no longer produces a broken page shell with
+  failed API calls.
+- Adding a brand-new *permission* still needs a code change (the key must be
+  added to the catalogue and referenced by a route); adding a **role** never
+  does. This is deliberate — a permission no route consults would grant
+  nothing while looking like it granted something.
+- A custom role can only add permissions, never subtract them: there is no
+  per-user deny list, so narrowing what an Employee can do means
+  re-permissioning the built-in Employee role, which affects everyone.
+- The role/permission cache is per-process, so on a multi-instance deployment
+  a permission edit applies immediately only on the instance that served it.
+  The current single-instance Render setup is unaffected.
 - No `client/src/middleware.ts` — admin/employee route protection is
-  client-side only (`RoleGuard`); the backend is the real authorization
-  boundary.
+  client-side only (`RoleGuard`); the backend's `requirePermission(...)` is
+  the real authorization boundary.
 - Storefront registration requires email verification for placing orders
   and posting reviews (`isEmailVerified`); staff and Google Sign-In accounts
   are exempt.

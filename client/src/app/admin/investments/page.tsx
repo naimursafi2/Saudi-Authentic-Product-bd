@@ -22,8 +22,8 @@ const fieldClasses =
 const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
 
 export default function AdminInvestmentsPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { user, hasPermission } = useAuth();
+  const isRestricted = !hasPermission("investments.view");
   const canCreate = user?.role === "super_admin";
 
   const [investments, setInvestments] = useState<ApiInvestment[]>([]);
@@ -108,7 +108,7 @@ export default function AdminInvestmentsPage() {
       />
 
       {!isLoading && !error && investments.length > 0 && (
-        <div className="mb-4 rounded-lg border border-brown-600/10 bg-white p-4">
+        <div className="mb-4 rounded-lg border border-brown-600/10 bg-surface p-4">
           <span className="text-xs font-bold uppercase tracking-wide text-brown-500">Total Recorded</span>
           <p className="text-2xl font-semibold text-green-950">{formatBDT(total)}</p>
         </div>
@@ -125,7 +125,7 @@ export default function AdminInvestmentsPage() {
           description={canCreate ? "Record the first investment to start the ledger." : "Nothing recorded yet."}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -194,7 +194,7 @@ export default function AdminInvestmentsPage() {
               <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} className={fieldClasses} />
             </div>
 
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
 
             <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(false)}>

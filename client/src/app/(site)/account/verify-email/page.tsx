@@ -119,7 +119,7 @@ function VerifyEmailContent() {
 
   return (
     <div className={wrapperClasses}>
-      <MailWarning size={44} className="text-[#8a4a3f]" />
+      <MailWarning size={44} className="text-danger" />
       <h1 className="font-serif text-3xl text-green-950">
         {state === "expired" ? "Link Expired" : "Invalid Link"}
       </h1>

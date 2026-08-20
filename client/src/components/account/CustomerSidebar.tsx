@@ -28,7 +28,7 @@ export function CustomerSidebar({
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-64">
-      <div className="flex items-center gap-3 rounded-xl bg-green-950 p-4">
+      <div className="flex items-center gap-3 rounded-xl bg-brand-deep p-4">
         <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 text-base font-bold text-gold-500">
           {user.avatar?.url ? (
             <Image
@@ -44,11 +44,11 @@ export function CustomerSidebar({
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">{user.name}</p>
-          <p className="truncate text-xs text-cream-100/60">{user.email}</p>
+          <p className="truncate text-xs text-on-brand/60">{user.email}</p>
         </div>
       </div>
 
-      <nav className="flex flex-row gap-1 overflow-x-auto rounded-xl bg-green-950 p-2 lg:flex-col lg:overflow-visible">
+      <nav className="flex flex-row gap-1 overflow-x-auto rounded-xl bg-brand-deep p-2 lg:flex-col lg:overflow-visible">
         {NAV_ITEMS.map((item) => {
           const active = tab === item.id;
           return (
@@ -58,7 +58,7 @@ export function CustomerSidebar({
               onClick={() => onTabChange(item.id)}
               className={cn(
                 "group relative flex shrink-0 cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all duration-150",
-                active ? "bg-white/10 text-white" : "text-cream-100/65 hover:bg-white/5 hover:text-white"
+                active ? "bg-white/10 text-white" : "text-on-brand/65 hover:bg-white/5 hover:text-white"
               )}
             >
               <span
@@ -70,7 +70,7 @@ export function CustomerSidebar({
               <span
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
-                  active ? "bg-gold-500/15 text-gold-500" : "text-cream-100/50 group-hover:text-gold-500/80"
+                  active ? "bg-gold-500/15 text-gold-500" : "text-on-brand/50 group-hover:text-gold-500/80"
                 )}
               >
                 <item.icon size={16} />
@@ -84,7 +84,7 @@ export function CustomerSidebar({
       <button
         type="button"
         onClick={onLogout}
-        className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-green-950 px-3 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition-colors hover:bg-green-900"
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-deep px-3 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition-colors hover:bg-brand-deep-2"
       >
         <LogOut size={16} /> Logout
       </button>

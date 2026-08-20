@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as orderController from "../controllers/order.controller";
 import { authenticate, requireEmailVerified } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   assignAgentSchema,
@@ -35,25 +35,25 @@ router.get("/mine", orderController.listMyOrders);
 // -- Delivery Agent (self-scoped to their own assigned orders) --
 router.get(
   "/assigned-to-me",
-  authorize("delivery_agent"),
+  requirePermission("orders.deliver"),
   validate({ query: listAssignedOrdersQuerySchema }),
   orderController.listAssignedOrders
 );
 router.patch(
   "/:id/delivery-status",
-  authorize("delivery_agent"),
+  requirePermission("orders.deliver"),
   validate({ params: mongoIdParamSchema, body: deliveryStatusSchema }),
   orderController.updateDeliveryStatus
 );
 router.post(
   "/:id/verify-otp",
-  authorize("delivery_agent"),
+  requirePermission("orders.deliver"),
   validate({ params: mongoIdParamSchema, body: verifyOtpSchema }),
   orderController.verifyDeliveryOtp
 );
 router.patch(
   "/:id/delivery-failed",
-  authorize("delivery_agent"),
+  requirePermission("orders.deliver"),
   validate({ params: mongoIdParamSchema, body: deliveryFailedSchema }),
   orderController.markDeliveryFailed
 );
@@ -61,19 +61,19 @@ router.patch(
 // -- Staff (Admin / Co-Admin / Super Admin / Order Manager / Employee) --
 router.get(
   "/",
-  authorize("admin", "super_admin", "co_admin", "order_manager", "employee"),
+  requirePermission("orders.view"),
   validate({ query: listOrdersQuerySchema }),
   orderController.listOrders
 );
 router.patch(
   "/:id/status",
-  authorize("admin", "super_admin", "co_admin", "order_manager"),
+  requirePermission("orders.manage"),
   validate({ params: mongoIdParamSchema, body: updateOrderStatusSchema }),
   orderController.updateOrderStatus
 );
 router.patch(
   "/:id/assign-agent",
-  authorize("admin", "super_admin", "co_admin", "order_manager"),
+  requirePermission("orders.manage"),
   validate({ params: mongoIdParamSchema, body: assignAgentSchema }),
   orderController.assignDeliveryAgent
 );

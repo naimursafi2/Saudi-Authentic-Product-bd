@@ -5,6 +5,8 @@ import { useState } from "react";
 import { LogOut, Briefcase, Menu, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { RoleGuard } from "@/components/admin/RoleGuard";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { EmployeeNav } from "@/components/employee/EmployeeNav";
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
@@ -22,26 +24,25 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <EmployeeNav onNavigate={onNavigate} />
       <div className="mt-auto flex flex-col gap-3 border-t border-white/10 pt-4">
         <div className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gold-500/20 text-sm font-bold text-gold-500">
-            {user.name.charAt(0).toUpperCase()}
-          </span>
+          <UserAvatar name={user.name} src={user.avatar?.url} size={36} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-white">{user.name}</span>
-            <span className="block truncate text-xs text-cream-100/55">
+            <span className="block truncate text-xs text-on-brand/55">
               {user.staffMeta?.employeeId ?? "Employee"}
             </span>
           </span>
+          <ThemeToggle className="ml-auto text-on-brand/70 hover:bg-white/10 hover:text-on-brand" />
         </div>
         <button
           onClick={logout}
-          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-cream-100/75 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-on-brand/75 transition-colors hover:bg-white/10 hover:text-white"
         >
           <LogOut size={16} /> Sign Out
         </button>
         <Link
           href="/"
           onClick={onNavigate}
-          className="px-3 text-xs text-cream-100/50 underline-offset-2 hover:text-cream-100 hover:underline"
+          className="px-3 text-xs text-on-brand/50 underline-offset-2 hover:text-on-brand hover:underline"
         >
           Back to Storefront
         </Link>
@@ -58,18 +59,18 @@ function EmployeeShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-cream-200">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r border-black/10 bg-green-950 lg:block">
+      <aside className="hidden w-64 shrink-0 border-r border-black/10 bg-brand-deep lg:block">
         <div className="sticky top-0 h-screen overflow-y-auto">
           <SidebarContent />
         </div>
       </aside>
 
       {/* Mobile topbar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-black/10 bg-green-950 px-4 lg:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-black/10 bg-brand-deep px-4 lg:hidden">
         <button
           aria-label="Open menu"
           onClick={() => setMobileOpen(true)}
-          className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-cream-100 hover:bg-white/10"
+          className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-on-brand hover:bg-white/10"
         >
           <Menu size={20} />
         </button>
@@ -90,12 +91,12 @@ function EmployeeShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 cursor-pointer bg-black/40"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="absolute left-0 top-0 flex h-full w-72 flex-col bg-green-950 shadow-2xl animate-slide-in-left">
+          <div className="absolute left-0 top-0 flex h-full w-72 flex-col bg-brand-deep shadow-2xl animate-slide-in-left">
             <div className="flex items-center justify-end p-3">
               <button
                 aria-label="Close menu"
                 onClick={() => setMobileOpen(false)}
-                className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-cream-100 hover:bg-white/10"
+                className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-on-brand hover:bg-white/10"
               >
                 <X size={18} />
               </button>

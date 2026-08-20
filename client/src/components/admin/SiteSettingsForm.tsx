@@ -7,6 +7,7 @@ import type { ApiSiteSettings, ApiSocialLink, SocialPlatform } from "@/types/api
 
 export interface SiteSettingsFormValues {
   siteName: string;
+  announcementEnabled: boolean;
   announcementText: string;
   contactEmail: string;
   contactPhone: string;
@@ -31,6 +32,7 @@ const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] t
 function fromSettings(settings: ApiSiteSettings): SiteSettingsFormValues {
   return {
     siteName: settings.siteName,
+    announcementEnabled: settings.announcementEnabled ?? false,
     announcementText: settings.announcementText ?? "",
     contactEmail: settings.contactEmail ?? "",
     contactPhone: settings.contactPhone ?? "",
@@ -89,7 +91,7 @@ export function SiteSettingsForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-lg border border-brown-600/10 bg-white p-6">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-lg border border-brown-600/10 bg-surface p-6">
       <div>
         <label className={labelClasses}>Logo</label>
         <div className="flex items-center gap-4">
@@ -131,14 +133,35 @@ export function SiteSettingsForm({
             className={fieldClasses}
           />
         </div>
-        <div className="sm:col-span-2">
-          <label className={labelClasses}>Announcement Bar Text</label>
-          <input
-            value={values.announcementText}
-            onChange={(e) => update("announcementText", e.target.value)}
-            placeholder="Leave blank to hide the announcement bar"
-            className={fieldClasses}
-          />
+        <div className="sm:col-span-2 rounded border border-green-900/15 bg-cream-50/50 p-4">
+          <label className="flex items-center gap-2 text-sm font-semibold text-green-950">
+            <input
+              type="checkbox"
+              checked={values.announcementEnabled}
+              onChange={(e) => update("announcementEnabled", e.target.checked)}
+              className="accent-green-900"
+            />
+            Show announcement strip
+          </label>
+          <p className="mt-1 text-xs text-brown-500">
+            Turn this on for occasions like Eid or a sale to show a strip above the main navbar
+            across the storefront, then turn it off again afterwards. The text below is kept either
+            way, so a seasonal message can be reused without retyping it.
+          </p>
+          <div className="mt-3">
+            <label className={labelClasses}>Announcement Bar Text</label>
+            <input
+              value={values.announcementText}
+              onChange={(e) => update("announcementText", e.target.value)}
+              placeholder="e.g. Eid Mubarak — free delivery on all orders this week"
+              className={fieldClasses}
+            />
+            {values.announcementEnabled && !values.announcementText.trim() && (
+              <p className="mt-1 text-xs text-danger">
+                Add some text — the strip stays hidden while this is blank, even when switched on.
+              </p>
+            )}
+          </div>
         </div>
         <div>
           <label className={labelClasses}>Contact Email</label>
@@ -190,7 +213,7 @@ export function SiteSettingsForm({
                 type="button"
                 aria-label="Remove social link"
                 onClick={() => removeSocialLink(i)}
-                className="shrink-0 cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                className="shrink-0 cursor-pointer text-brown-500 hover:text-danger"
               >
                 <Trash2 size={15} />
               </button>
@@ -202,7 +225,7 @@ export function SiteSettingsForm({
         </div>
       </div>
 
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="flex justify-end border-t border-brown-600/10 pt-4">
         <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>

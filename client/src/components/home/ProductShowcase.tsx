@@ -4,11 +4,11 @@ import { toProduct } from "@/lib/mappers";
 import { getProductDeals } from "@/lib/productOffers";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { cn } from "@/lib/utils";
+import { cn, PRODUCT_GRID_CLASS } from "@/lib/utils";
 import type { ApiHomepageSection } from "@/types/api";
 import type { Product } from "@/types/product";
 
-const DEFAULT_LIMIT = 8;
+const DEFAULT_LIMIT = 10;
 
 const DEFAULT_CTA: Record<string, { label: string; href: string }> = {
   bestSellers: { label: "View All", href: "/shop" },
@@ -75,7 +75,7 @@ export async function ProductShowcase({ section }: { section: ApiHomepageSection
             </Link>
           )}
         </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={PRODUCT_GRID_CLASS}>
           {products.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

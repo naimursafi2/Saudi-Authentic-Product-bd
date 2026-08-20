@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Percent, ShoppingCart } from "lucide-react";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
-import { formatBDT } from "@/lib/utils";
+import { formatBDT, PRODUCT_GRID_CLASS } from "@/lib/utils";
 import { getProductDeals } from "@/lib/productOffers";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
@@ -24,13 +24,13 @@ export default async function OffersPage() {
 
   return (
     <>
-      <section className="bg-green-900 px-6 py-16 text-center sm:px-10 lg:py-20">
+      <section className="bg-brand-deep-2 px-6 py-16 text-center sm:px-10 lg:py-20">
         <div className="mx-auto flex max-w-xl flex-col items-center gap-4">
           <Percent size={32} className="text-gold-500" />
           <h1 className="font-serif text-4xl font-semibold text-white sm:text-5xl">
             Special Offers
           </h1>
-          <p className="text-sm text-cream-100/80 sm:text-base">
+          <p className="text-sm text-on-brand/80 sm:text-base">
             Limited-time savings on a selection of our premium Saudi products. New
             offers are added regularly, so check back often.
           </p>
@@ -39,7 +39,7 @@ export default async function OffersPage() {
 
       <section className="mx-auto max-w-[1200px] px-6 py-16 sm:px-10 lg:px-16 lg:py-20">
         {deals.length > 0 ? (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className={PRODUCT_GRID_CLASS}>
             {deals.map(({ product, variant, discount }) => (
               <div
                 key={product.id}
@@ -54,9 +54,10 @@ export default async function OffersPage() {
                     fallbackPhoto={product.fallbackPhoto}
                     visual={product.visual}
                     alt={product.name}
-                    sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
+                    fit="cover"
+                    sizes="(min-width: 1280px) 300px, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
                   />
-                  <span className="absolute left-3 top-3 rounded-full bg-[#8a4a3f] px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
+                  <span className="absolute left-3 top-3 rounded-full bg-danger-solid px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
                     {discount}% Off
                   </span>
                 </Link>
@@ -66,7 +67,6 @@ export default async function OffersPage() {
                       {product.name}
                     </h3>
                   </Link>
-                  <p className="line-clamp-2 text-sm leading-snug text-brown-500">{product.tagline}</p>
                   <div className="mt-auto flex flex-col gap-2 pt-2">
                     <span className="flex items-baseline gap-2">
                       <span className="text-lg font-semibold leading-none text-green-950">

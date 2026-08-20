@@ -7,9 +7,9 @@ export type ButtonSize = "xs" | "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-green-900 text-white hover:bg-green-950 shadow-[0_1px_1px_rgba(0,0,0,0.05)]",
+    "bg-brand-deep-2 text-white hover:bg-brand-deep shadow-[0_1px_1px_rgba(0,0,0,0.05)]",
   gold:
-    "bg-gold-500 text-green-950 hover:bg-gold-600 shadow-[0_4px_7px_rgba(61,43,31,0.15)]",
+    "bg-gold-500 text-on-gold hover:bg-gold-600 shadow-[0_4px_7px_rgba(61,43,31,0.15)]",
   outline:
     "border border-green-900/30 text-green-950 hover:bg-green-950/5 bg-transparent",
   ghost: "text-green-950 hover:bg-black/5 bg-transparent",
@@ -55,6 +55,9 @@ interface ButtonLinkProps extends LinkProps {
   className?: string;
   children?: React.ReactNode;
   onClick?: () => void;
+  /** Next's LinkProps doesn't carry plain anchor attributes; this one is
+   * needed to pull an off-screen carousel slide's CTA out of the tab order. */
+  tabIndex?: number;
 }
 
 export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(

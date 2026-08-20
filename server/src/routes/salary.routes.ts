@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as salaryController from "../controllers/salary.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createSalaryPaymentSchema,
@@ -20,25 +20,25 @@ router.get("/mine", salaryController.listMine);
 // -- Admin / Super Admin only (never Co-Admin) --
 router.post(
   "/",
-  authorize("admin", "super_admin"),
+  requirePermission("salary.manage"),
   validate({ body: createSalaryPaymentSchema }),
   salaryController.create
 );
 router.get(
   "/",
-  authorize("admin", "super_admin"),
+  requirePermission("salary.view"),
   validate({ query: listSalaryPaymentsQuerySchema }),
   salaryController.list
 );
 router.patch(
   "/:id/status",
-  authorize("admin", "super_admin"),
+  requirePermission("salary.manage"),
   validate({ params: mongoIdParamSchema, body: updateSalaryStatusSchema }),
   salaryController.updateStatus
 );
 router.post(
   "/:id/notify",
-  authorize("admin", "super_admin"),
+  requirePermission("salary.manage"),
   validate({ params: mongoIdParamSchema }),
   salaryController.notify
 );

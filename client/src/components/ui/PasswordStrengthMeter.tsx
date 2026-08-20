@@ -3,14 +3,14 @@ import { cn } from "@/lib/utils";
 
 const BAR_COLOR: Record<string, string> = {
   "Too short": "bg-brown-500/20",
-  Weak: "bg-[#8a4a3f]",
+  Weak: "bg-danger-solid",
   Fair: "bg-gold-500",
-  Strong: "bg-green-900",
+  Strong: "bg-brand-deep-2",
 };
 
 const LABEL_COLOR: Record<string, string> = {
   "Too short": "text-brown-500",
-  Weak: "text-[#8a4a3f]",
+  Weak: "text-danger",
   Fair: "text-gold-700",
   Strong: "text-green-900",
 };

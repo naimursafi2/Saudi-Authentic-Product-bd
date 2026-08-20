@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
+import { AccessModal } from "@/components/admin/AccessModal";
 import { Button } from "@/components/ui/Button";
 import { EmployeeForm, type EmployeeFormValues } from "@/components/admin/EmployeeForm";
 import type { ApiUser } from "@/types/api";
@@ -40,6 +41,8 @@ export default function AdminEmployeesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+  /** The staff member whose role assignment + effective permissions are open. */
+  const [managingAccess, setManagingAccess] = useState<ApiUser | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleUnlock(person: ApiUser) {
@@ -138,7 +141,7 @@ export default function AdminEmployeesPage() {
         }
       />
 
-      {actionError && <p className="mb-4 text-sm text-[#8a4a3f]">{actionError}</p>}
+      {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
 
       {isLoading ? (
         <TableSkeleton />
@@ -147,7 +150,7 @@ export default function AdminEmployeesPage() {
       ) : staff.length === 0 ? (
         <EmptyState icon={UserCog} title="No staff yet" description="Add your first employee to get started." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -166,7 +169,16 @@ export default function AdminEmployeesPage() {
                 <tr key={person._id} className="border-b border-brown-600/10 last:border-none">
                   <td className="px-4 py-3 font-medium text-green-950">{person.name}</td>
                   <td className="px-4 py-3 text-brown-600">{person.email}</td>
-                  <td className="px-4 py-3 capitalize text-brown-600">{person.role.replace("_", " ")}</td>
+                  <td className="px-4 py-3 text-brown-600">
+                    <span className="capitalize">{person.role.replace("_", " ")}</span>
+                    {/* A custom role sits on top of the built-in one rather
+                        than replacing it, so show both. */}
+                    {person.customRole && (
+                      <span className="mt-0.5 block text-xs font-semibold text-gold-700">
+                        + {person.customRole.name}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-brown-600">{person.staffMeta?.employeeId ?? "—"}</td>
                   <td className="px-4 py-3 text-brown-600">
                     {[person.staffMeta?.department, person.staffMeta?.designation].filter(Boolean).join(" / ") || "—"}
@@ -175,13 +187,13 @@ export default function AdminEmployeesPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
-                          person.isActive ? "bg-[#e9f3ee] text-green-900" : "bg-cream-300 text-brown-500"
+                          person.isActive ? "bg-success-soft text-green-900" : "bg-cream-300 text-brown-500"
                         }`}
                       >
                         {person.isActive ? "Active" : "Inactive"}
                       </span>
                       {isLocked(person) && (
-                        <span className="rounded-full bg-[#fbeceb] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#8a4a3f]">
+                        <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-danger">
                           Locked
                         </span>
                       )}
@@ -200,7 +212,7 @@ export default function AdminEmployeesPage() {
                             <button
                               onClick={() => handleUnlock(person)}
                               disabled={actingId === person._id}
-                              className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[#8a4a3f] hover:underline disabled:opacity-50"
+                              className="cursor-pointer text-xs font-bold uppercase tracking-wide text-danger hover:underline disabled:opacity-50"
                             >
                               Unlock
                             </button>
@@ -214,6 +226,12 @@ export default function AdminEmployeesPage() {
                               Sign in as
                             </button>
                           )}
+                          <button
+                            onClick={() => setManagingAccess(person)}
+                            className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-600 hover:underline"
+                          >
+                            Access
+                          </button>
                           <button
                             onClick={() => setEditing(person)}
                             className="cursor-pointer text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
@@ -229,6 +247,17 @@ export default function AdminEmployeesPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {managingAccess && (
+        <AccessModal
+          user={managingAccess}
+          onClose={() => setManagingAccess(null)}
+          onSaved={() => {
+            setManagingAccess(null);
+            load();
+          }}
+        />
       )}
 
       {editing && (

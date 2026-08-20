@@ -99,7 +99,7 @@ export async function getProductById(id: string) {
   return product;
 }
 
-export async function getRelatedProducts(product: IProduct, limit = 3) {
+export async function getRelatedProducts(product: IProduct, limit = 5) {
   return ProductModel.find({
     _id: { $ne: product._id },
     categories: { $in: product.categories },

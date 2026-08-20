@@ -9,6 +9,8 @@ export interface HeroSlideFormValues {
   subtitle: string;
   ctaLabel: string;
   ctaHref: string;
+  secondaryCtaLabel: string;
+  secondaryCtaHref: string;
   sortOrder: number;
   isActive: boolean;
 }
@@ -19,13 +21,24 @@ const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] t
 
 export function fromHeroSlide(slide?: ApiHeroSlide): HeroSlideFormValues {
   if (!slide) {
-    return { title: "", subtitle: "", ctaLabel: "Shop Now", ctaHref: "/shop", sortOrder: 0, isActive: true };
+    return {
+      title: "",
+      subtitle: "",
+      ctaLabel: "Shop Now",
+      ctaHref: "/shop",
+      secondaryCtaLabel: "",
+      secondaryCtaHref: "",
+      sortOrder: 0,
+      isActive: true,
+    };
   }
   return {
     title: slide.title,
     subtitle: slide.subtitle ?? "",
     ctaLabel: slide.ctaLabel ?? "",
     ctaHref: slide.ctaHref ?? "",
+    secondaryCtaLabel: slide.secondaryCtaLabel ?? "",
+    secondaryCtaHref: slide.secondaryCtaHref ?? "",
     sortOrder: slide.sortOrder,
     isActive: slide.isActive,
   };
@@ -99,6 +112,25 @@ export function HeroSlideForm({
           />
         </div>
         <div>
+          <label className={labelClasses}>Secondary Button Label</label>
+          <input
+            value={values.secondaryCtaLabel}
+            onChange={(e) => update("secondaryCtaLabel", e.target.value)}
+            placeholder="Explore Dates"
+            className={fieldClasses}
+          />
+          <p className="mt-1 text-xs text-brown-500">Leave blank to show a single button.</p>
+        </div>
+        <div>
+          <label className={labelClasses}>Secondary Button Link</label>
+          <input
+            value={values.secondaryCtaHref}
+            onChange={(e) => update("secondaryCtaHref", e.target.value)}
+            placeholder="/shop?category=dates"
+            className={fieldClasses}
+          />
+        </div>
+        <div>
           <label className={labelClasses}>Sort Order</label>
           <input
             type="number"
@@ -133,7 +165,7 @@ export function HeroSlideForm({
         />
       </div>
 
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>

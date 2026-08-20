@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as financeController from "../controllers/finance.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { financeSummaryQuerySchema } from "../validators/finance.validator";
 
@@ -12,7 +12,7 @@ const router = Router();
 router.get(
   "/summary",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("finance.view"),
   validate({ query: financeSummaryQuerySchema }),
   financeController.getFinanceSummary
 );

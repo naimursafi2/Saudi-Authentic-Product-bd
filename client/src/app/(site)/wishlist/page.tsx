@@ -1,5 +1,7 @@
 "use client";
 
+import { PRODUCT_GRID_CLASS } from "@/lib/utils";
+
 import { Heart } from "lucide-react";
 import { useWishlist } from "@/context/WishlistContext";
 import { ProductCard } from "@/components/ui/ProductCard";
@@ -29,7 +31,7 @@ export default function WishlistPage() {
       <div className="mb-10">
         <SectionHeading title="Your Wishlist" align="left" dividerWidth={64} />
       </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={PRODUCT_GRID_CLASS}>
         {items.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}

@@ -25,7 +25,7 @@ export function DeliveryNav({ onNavigate }: { onNavigate?: () => void }) {
             onClick={onNavigate}
             className={cn(
               "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-              active ? "bg-white/10 text-white" : "text-cream-100/65 hover:bg-white/5 hover:text-white"
+              active ? "bg-white/10 text-white" : "text-on-brand/65 hover:bg-white/5 hover:text-white"
             )}
           >
             <span
@@ -37,7 +37,7 @@ export function DeliveryNav({ onNavigate }: { onNavigate?: () => void }) {
             <span
               className={cn(
                 "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
-                active ? "bg-gold-500/15 text-gold-500" : "text-cream-100/50 group-hover:text-gold-500/80"
+                active ? "bg-gold-500/15 text-gold-500" : "text-on-brand/50 group-hover:text-gold-500/80"
               )}
             >
               <item.icon size={16} />

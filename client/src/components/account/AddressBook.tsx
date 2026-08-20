@@ -28,7 +28,7 @@ function AddressForm({
   submitLabel: string;
 }) {
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-white p-6">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-surface p-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <input
           name="label"
@@ -60,7 +60,7 @@ function AddressForm({
           className={fieldClasses}
         />
       </div>
-      {error && <p className="text-sm text-[#8a4a3f]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-3">
         <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>
           {isSubmitting ? "Saving..." : submitLabel}
@@ -145,7 +145,7 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
   return (
     <div className="flex flex-col gap-5">
       {addresses.length === 0 && !showAddForm && (
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-brown-500/30 bg-white py-16 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-brown-500/30 bg-surface py-16 text-center">
           <MapPin size={28} className="text-brown-500/40" />
           <p className="text-sm text-brown-500">You haven&apos;t saved any addresses yet.</p>
         </div>
@@ -168,7 +168,7 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
             <div
               key={address._id}
               className={cn(
-                "flex flex-col gap-3 rounded-xl border bg-white p-5 transition-shadow hover:shadow-md",
+                "flex flex-col gap-3 rounded-xl border bg-surface p-5 transition-shadow hover:shadow-md",
                 address.isDefault ? "border-gold-500/50" : "border-brown-600/10"
               )}
             >
@@ -200,7 +200,7 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
                     aria-label="Remove address"
                     onClick={() => handleRemove(address._id)}
                     disabled={busyId === address._id}
-                    className="cursor-pointer rounded p-1.5 text-brown-500/70 hover:bg-[#fbeceb] hover:text-[#8a4a3f] disabled:opacity-50"
+                    className="cursor-pointer rounded p-1.5 text-brown-500/70 hover:bg-danger-soft hover:text-danger disabled:opacity-50"
                   >
                     <Trash2 size={14} />
                   </button>

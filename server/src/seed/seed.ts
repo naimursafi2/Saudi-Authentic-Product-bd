@@ -1,4 +1,5 @@
 import { connectDatabase, disconnectDatabase } from "../config/db";
+import { ensureSystemRoles } from "../services/role.service";
 import { env } from "../config/env";
 import { UserModel } from "../models/User.model";
 import { CategoryModel } from "../models/Category.model";
@@ -343,6 +344,9 @@ const PRODUCT_SHOWCASE_SECTIONS = [
 
 async function seed() {
   await connectDatabase();
+  // The seven built-in roles carry every account's permissions, so a seeded
+  // database should have them even before the server first boots.
+  await ensureSystemRoles();
   console.log("Seeding database...");
 
   // -- Super admin --

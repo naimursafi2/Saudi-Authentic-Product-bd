@@ -7,6 +7,14 @@ export interface IHeroSlide extends Document {
   image?: { url: string; publicId: string };
   ctaLabel?: string;
   ctaHref?: string;
+  /**
+   * Optional second button. The storefront banner used to hard-code an
+   * "Explore Dates" button beside the main CTA; these fields replace it so
+   * every part of a slide, both buttons included, comes from the database.
+   * Rendered only when a label is set.
+   */
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
   sortOrder: number;
   isActive: boolean;
   createdAt: Date;
@@ -23,6 +31,8 @@ const heroSlideSchema = new Schema<IHeroSlide>(
     },
     ctaLabel: { type: String, trim: true, maxlength: 40 },
     ctaHref: { type: String, trim: true, maxlength: 200 },
+    secondaryCtaLabel: { type: String, trim: true, maxlength: 40 },
+    secondaryCtaHref: { type: String, trim: true, maxlength: 200 },
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true, index: true },
   },

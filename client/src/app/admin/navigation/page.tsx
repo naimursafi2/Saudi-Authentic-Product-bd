@@ -20,8 +20,8 @@ import { NavLinkForm, type NavLinkFormValues } from "@/components/admin/NavLinkF
 import type { ApiNavLink } from "@/types/api";
 
 export default function AdminNavigationPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("content.navigation.manage");
 
   const [links, setLinks] = useState<ApiNavLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -134,7 +134,7 @@ export default function AdminNavigationPage() {
       {sorted.length === 0 ? (
         <EmptyState icon={Compass} title="No nav links yet" description="Add a link to populate the header." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -186,7 +186,7 @@ export default function AdminNavigationPage() {
                     <button
                       aria-label="Delete"
                       onClick={() => handleDelete(link)}
-                      className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
+                      className="cursor-pointer text-brown-500 hover:text-danger"
                     >
                       <Trash2 size={15} />
                     </button>

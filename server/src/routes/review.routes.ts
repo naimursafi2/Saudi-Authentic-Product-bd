@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as reviewController from "../controllers/review.controller";
 import { authenticate, requireEmailVerified } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   createReviewSchema,
@@ -16,7 +16,7 @@ const router = Router();
 router.get(
   "/",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("reviews.view"),
   validate({ query: listReviewsQuerySchema }),
   reviewController.listAllReviews
 );
@@ -46,7 +46,7 @@ router.post(
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin", "co_admin"),
+  requirePermission("reviews.delete"),
   validate({ params: mongoIdParamSchema }),
   reviewController.deleteReview
 );

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as inventoryController from "../controllers/inventory.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   adjustStockSchema,
@@ -18,22 +18,29 @@ router.use(authenticate);
 // change it. Everything below stays admin-tier.
 router.get(
   "/stock",
-  authorize("employee", "order_manager", "co_admin", "admin", "super_admin"),
+  requirePermission("inventory.view"),
   validate({ query: stockLevelsQuerySchema }),
   inventoryController.stockLevels
 );
 
-const ADMIN_TIER = authorize("admin", "super_admin", "co_admin");
+// Reading the stock history is a separate capability from changing stock, so
+// the two are separate permissions rather than one shared "admin tier".
+const CAN_READ_LOGS = requirePermission("inventory.logs.view");
 
-router.get("/low-stock", ADMIN_TIER, inventoryController.lowStock);
+router.get("/low-stock", CAN_READ_LOGS, inventoryController.lowStock);
 router.get(
   "/logs",
-  ADMIN_TIER,
+  CAN_READ_LOGS,
   validate({ query: listInventoryLogsQuerySchema }),
   inventoryController.listLogs
 );
 // Applies immediately only for `super_admin`; every other role's adjustment is
 // queued for approval (see inventory.service.ts#adjustStock).
-router.post("/adjust", ADMIN_TIER, validate({ body: adjustStockSchema }), inventoryController.adjustStock);
+router.post(
+  "/adjust",
+  requirePermission("inventory.manage"),
+  validate({ body: adjustStockSchema }),
+  inventoryController.adjustStock
+);
 
 export default router;

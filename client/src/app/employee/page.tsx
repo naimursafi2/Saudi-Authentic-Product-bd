@@ -97,7 +97,7 @@ export default function EmployeeDashboardPage() {
   if (isLoading) {
     return (
       <div>
-        <div className="mb-6 h-28 w-full animate-pulse rounded-xl bg-white" />
+        <div className="mb-6 h-28 w-full animate-pulse rounded-xl bg-surface" />
         <TableSkeleton rows={4} />
       </div>
     );
@@ -154,7 +154,7 @@ export default function EmployeeDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Welcome header */}
-      <div className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)] sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-brown-500">{today}</p>
           <h1 className="mt-1 font-serif text-2xl text-green-950 sm:text-[28px]">
@@ -163,7 +163,7 @@ export default function EmployeeDashboardPage() {
           <p className="mt-1 text-sm text-brown-600">Here&apos;s what&apos;s happening with your work today.</p>
         </div>
         <div className="flex items-center gap-3 rounded-lg bg-cream-200 px-4 py-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-green-950 text-base font-bold text-gold-500">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand-deep text-base font-bold text-gold-500">
             {(user?.name ?? "E").charAt(0).toUpperCase()}
           </span>
           <span>
@@ -184,7 +184,7 @@ export default function EmployeeDashboardPage() {
           <Link
             key={card.label}
             href={card.href}
-            className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-white p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+            className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-surface p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
               <card.icon size={16} />
@@ -202,7 +202,7 @@ export default function EmployeeDashboardPage() {
       {/* Detail cards */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Attendance */}
-        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 font-serif text-lg text-green-950">
               <CalendarCheck size={18} className="text-green-900" /> Today&apos;s Attendance
@@ -235,7 +235,7 @@ export default function EmployeeDashboardPage() {
             </div>
           </div>
 
-          {actionError && <p className="mb-3 text-sm text-[#8a4a3f]">{actionError}</p>}
+          {actionError && <p className="mb-3 text-sm text-danger">{actionError}</p>}
 
           <div className="mt-auto flex gap-3">
             <Button
@@ -260,7 +260,7 @@ export default function EmployeeDashboardPage() {
         </div>
 
         {/* Open Tasks */}
-        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 font-serif text-lg text-green-950">
               <ListChecks size={18} className="text-green-900" /> Open Tasks
@@ -285,9 +285,9 @@ export default function EmployeeDashboardPage() {
                       className={cn(
                         "rounded-full px-2 py-0.5 font-bold uppercase",
                         task.priority === "high"
-                          ? "bg-[#fbeceb] text-[#8a4a3f]"
+                          ? "bg-danger-soft text-danger"
                           : task.priority === "medium"
-                            ? "bg-[#fcf8ee] text-[#735c00]"
+                            ? "bg-gold-soft text-gold-700"
                             : "bg-cream-300 text-brown-600"
                       )}
                     >
@@ -311,7 +311,7 @@ export default function EmployeeDashboardPage() {
         </div>
 
         {/* Latest Salary */}
-        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-white p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 font-serif text-lg text-green-950">
               <Wallet size={18} className="text-green-900" /> Latest Salary

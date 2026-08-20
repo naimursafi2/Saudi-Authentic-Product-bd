@@ -19,8 +19,8 @@ const PAGE_LABELS: Record<StaticPageType, string> = {
 const PAGE_TYPES: StaticPageType[] = ["about", "contact", "shippingPolicy"];
 
 export default function AdminStaticPagesPage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
+  const { hasPermission } = useAuth();
+  const isRestricted = !hasPermission("content.pages.manage");
 
   const [pages, setPages] = useState<ApiStaticPage[]>([]);
   const [activeType, setActiveType] = useState<StaticPageType>("about");

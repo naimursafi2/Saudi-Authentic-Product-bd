@@ -45,7 +45,7 @@ export default function AdminReportsPage() {
 
       <form
         onSubmit={handleApply}
-        className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-brown-600/10 bg-white p-4"
+        className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-brown-600/10 bg-surface p-4"
       >
         <div>
           <label className={labelClasses}>From</label>
@@ -64,7 +64,7 @@ export default function AdminReportsPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg bg-white" />
+            <div key={i} className="h-24 animate-pulse rounded-lg bg-surface" />
           ))}
         </div>
       ) : error ? (
@@ -81,7 +81,7 @@ export default function AdminReportsPage() {
             />
           </div>
 
-          <div className="mb-8 rounded-lg border border-brown-600/10 bg-white p-5">
+          <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
             <h2 className="mb-3 font-serif text-lg text-green-950">Orders by Status</h2>
             {Object.keys(summary.ordersByStatus).length === 0 ? (
               <p className="text-sm text-brown-500">No orders in this range.</p>
@@ -100,7 +100,7 @@ export default function AdminReportsPage() {
             )}
           </div>
 
-          <div className="rounded-lg border border-brown-600/10 bg-white p-5">
+          <div className="rounded-lg border border-brown-600/10 bg-surface p-5">
             <h2 className="mb-3 font-serif text-lg text-green-950">Top Products</h2>
             {summary.topProducts.length === 0 ? (
               <p className="text-sm text-brown-500">No product sales in this range.</p>
@@ -141,7 +141,7 @@ function StatTile({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-brown-600/10 bg-white p-5">
+    <div className="flex items-center gap-4 rounded-lg border border-brown-600/10 bg-surface p-5">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
         <Icon size={18} />
       </span>

@@ -94,7 +94,7 @@ export function ProductReviews({ productId }: { productId: string }) {
               rows={3}
               className="rounded border border-green-900/15 bg-cream-100 p-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:border-green-900/40 focus:outline-none"
             />
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
             <Button type="submit" variant="primary" size="sm" className="self-start" disabled={submitting}>
               {submitting ? "Submitting..." : "Submit Review"}
             </Button>
@@ -130,7 +130,7 @@ export function ProductReviews({ productId }: { productId: string }) {
                 className="flex flex-col gap-3 rounded-lg border border-black/10 bg-cream-100 p-6"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-[#f8dac8] text-sm font-semibold text-[#755e50]">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-warning-soft text-sm font-semibold text-brown-600">
                     {review.initial}
                   </span>
                   <span className="text-sm font-semibold text-green-950">{review.author}</span>

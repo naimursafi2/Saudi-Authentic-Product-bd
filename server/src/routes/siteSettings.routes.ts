@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as siteSettingsController from "../controllers/siteSettings.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { authorize } from "../middlewares/rbac.middleware";
+import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { upload } from "../middlewares/upload.middleware";
 import { parseMultipartJsonFields } from "../middlewares/parseMultipartJson.middleware";
@@ -16,7 +16,7 @@ router.get("/", siteSettingsController.getSiteSettings);
 router.patch(
   "/",
   authenticate,
-  authorize("admin", "super_admin"),
+  requirePermission("settings.manage"),
   upload.single("logo"),
   parseMultipartJsonFields(["socialLinks"]),
   validate({ body: updateSiteSettingsSchema }),

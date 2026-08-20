@@ -167,11 +167,11 @@ export default function AdminRefundsPage() {
       />
 
       {pendingNotice && (
-        <div className="mb-4 rounded-lg border border-gold-500/40 bg-[#fcf8ee] p-4 text-sm text-[#735c00]">
+        <div className="mb-4 rounded-lg border border-gold-500/40 bg-gold-soft p-4 text-sm text-gold-700">
           {pendingNotice}
         </div>
       )}
-      {actionError && <p className="mb-4 text-sm text-[#8a4a3f]">{actionError}</p>}
+      {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
 
       {isLoading ? (
         <TableSkeleton />
@@ -180,7 +180,7 @@ export default function AdminRefundsPage() {
       ) : refunds.length === 0 ? (
         <EmptyState icon={Undo2} title="No refund requests" description="Refund requests will show up here." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
@@ -305,7 +305,7 @@ export default function AdminRefundsPage() {
               <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} className={fieldClasses} />
             </div>
 
-            {formError && <p className="text-sm text-[#8a4a3f]">{formError}</p>}
+            {formError && <p className="text-sm text-danger">{formError}</p>}
 
             <div className="flex justify-end gap-3 border-t border-brown-600/10 pt-4">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(false)}>

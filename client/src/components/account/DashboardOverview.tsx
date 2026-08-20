@@ -13,18 +13,18 @@ import type { ApiOrder, ApiUser, OrderStatus } from "@/types/api";
 const STATUS_CLASSES: Record<OrderStatus, string> = {
   pending: "bg-cream-300 text-brown-600",
   confirmed: "bg-cream-300 text-brown-600",
-  processing: "bg-[#fcf8ee] text-[#735c00]",
-  packed: "bg-[#fcf8ee] text-[#735c00]",
-  ready_for_dispatch: "bg-[#fcf8ee] text-[#735c00]",
-  assigned_to_agent: "bg-[#e9f3ee] text-green-900",
-  picked_up: "bg-[#e9f3ee] text-green-900",
-  out_for_delivery: "bg-[#e9f3ee] text-green-900",
-  otp_verified: "bg-[#e9f3ee] text-green-900",
-  delivered: "bg-green-900 text-white",
-  delivery_failed: "bg-[#fbeceb] text-[#8a4a3f]",
-  cancelled: "bg-[#fbeceb] text-[#8a4a3f]",
-  returned: "bg-[#fbeceb] text-[#8a4a3f]",
-  refunded: "bg-[#fbeceb] text-[#8a4a3f]",
+  processing: "bg-gold-soft text-gold-700",
+  packed: "bg-gold-soft text-gold-700",
+  ready_for_dispatch: "bg-gold-soft text-gold-700",
+  assigned_to_agent: "bg-success-soft text-green-900",
+  picked_up: "bg-success-soft text-green-900",
+  out_for_delivery: "bg-success-soft text-green-900",
+  otp_verified: "bg-success-soft text-green-900",
+  delivered: "bg-brand-deep-2 text-white",
+  delivery_failed: "bg-danger-soft text-danger",
+  cancelled: "bg-danger-soft text-danger",
+  returned: "bg-danger-soft text-danger",
+  refunded: "bg-danger-soft text-danger",
 };
 
 export function DashboardOverview({
@@ -82,7 +82,7 @@ export function DashboardOverview({
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="flex items-center justify-between gap-3 rounded-xl border border-brown-600/10 bg-white p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+            className="flex items-center justify-between gap-3 rounded-xl border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
           >
             <div>
               <p className="text-2xl font-semibold text-green-950">{stat.loading ? "—" : stat.value}</p>
@@ -101,8 +101,8 @@ export function DashboardOverview({
       </div>
 
       {/* Recent Orders */}
-      <div className="overflow-hidden rounded-xl border border-brown-600/10 bg-white shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
-        <div className="flex items-center justify-between bg-green-950 px-5 py-3.5">
+      <div className="overflow-hidden rounded-xl border border-brown-600/10 bg-surface shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex items-center justify-between bg-brand-deep px-5 py-3.5">
           <h2 className="font-serif text-base text-white">Recent Orders</h2>
           <Button
             variant="outline"
@@ -155,8 +155,8 @@ export function DashboardOverview({
       </div>
 
       {/* Wishlist preview */}
-      <div className="overflow-hidden rounded-xl border border-brown-600/10 bg-white shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
-        <div className="flex items-center justify-between bg-green-950 px-5 py-3.5">
+      <div className="overflow-hidden rounded-xl border border-brown-600/10 bg-surface shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex items-center justify-between bg-brand-deep px-5 py-3.5">
           <h2 className="font-serif text-base text-white">Wishlist Items</h2>
           <Button
             variant="outline"

@@ -17,10 +17,10 @@ interface ProductCardProps {
 }
 
 const badgeClasses: Record<NonNullable<Product["badge"]>, string> = {
-  Authentic: "bg-[#fcf8ee] text-[#735c00]",
-  "Best Seller": "bg-[#fcf8ee] text-[#735c00]",
-  New: "bg-[#e9f3ee] text-green-900",
-  Limited: "bg-[#fbeceb] text-[#8a4a3f]",
+  Authentic: "bg-gold-soft text-gold-700",
+  "Best Seller": "bg-gold-soft text-gold-700",
+  New: "bg-success-soft text-green-900",
+  Limited: "bg-danger-soft text-danger",
 };
 
 export function ProductCard({ product, className }: ProductCardProps) {
@@ -55,7 +55,8 @@ export function ProductCard({ product, className }: ProductCardProps) {
           fallbackPhoto={product.fallbackPhoto}
           visual={product.visual}
           alt={product.name}
-          sizes="(min-width: 1280px) 380px, (min-width: 640px) 50vw, 100vw"
+          fit="cover"
+          sizes="(min-width: 1280px) 300px, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
           className="transition-transform duration-500 group-hover:scale-105"
         />
         <div className="absolute left-3 top-3 flex flex-col items-start gap-1">
@@ -70,7 +71,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
             </span>
           )}
           {discountPercent != null && !stockOut && (
-            <span className="rounded-full border border-black/5 bg-[#8a4a3f] px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
+            <span className="rounded-full border border-black/5 bg-danger-solid px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white">
               Save {discountPercent}%
             </span>
           )}
@@ -87,9 +88,9 @@ export function ProductCard({ product, className }: ProductCardProps) {
             e.preventDefault();
             toggleWishlist(product.id);
           }}
-          className="absolute right-3 top-3 flex size-7 cursor-pointer items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-[#8a4a3f]"
+          className="absolute right-3 top-3 flex size-7 cursor-pointer items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-danger"
         >
-          <Heart size={14} className={wishlisted ? "fill-[#8a4a3f] text-[#8a4a3f]" : ""} />
+          <Heart size={14} className={wishlisted ? "fill-danger text-danger" : ""} />
         </button>
       </Link>
       <div className="flex flex-1 flex-col gap-1 p-3.5">
@@ -98,7 +99,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
             {product.name}
           </h3>
         </Link>
-        <p className="line-clamp-2 text-sm leading-snug text-brown-500">{product.tagline}</p>
         {product.ratingCount > 0 && <StarRating rating={product.ratingAverage} size={12} />}
         <div className="mt-auto flex flex-col gap-2 pt-2">
           <span className="flex items-baseline gap-2">

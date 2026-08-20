@@ -26,6 +26,7 @@ import investmentRoutes from "./investment.routes";
 import expenseRoutes from "./expense.routes";
 import refundRoutes from "./refund.routes";
 import financeRoutes from "./finance.routes";
+import roleRoutes from "./role.routes";
 
 const router = Router();
 
@@ -56,5 +57,6 @@ router.use("/investments", investmentRoutes);
 router.use("/expenses", expenseRoutes);
 router.use("/refunds", refundRoutes);
 router.use("/finance", financeRoutes);
+router.use("/roles", roleRoutes);
 
 export default router;
