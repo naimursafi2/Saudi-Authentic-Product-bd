@@ -137,7 +137,7 @@ export default function AdminLeavePage() {
                           aria-label="Approve"
                           disabled={actioningId === leave._id}
                           onClick={() => handleApprove(leave)}
-                          className="text-green-900 hover:text-green-950 disabled:opacity-40"
+                          className="cursor-pointer text-green-900 hover:text-green-950 disabled:opacity-40"
                         >
                           <Check size={16} />
                         </button>
@@ -145,7 +145,7 @@ export default function AdminLeavePage() {
                           aria-label="Reject"
                           disabled={actioningId === leave._id}
                           onClick={() => handleReject(leave)}
-                          className="text-[#8a4a3f] hover:text-[#6c3a30] disabled:opacity-40"
+                          className="cursor-pointer text-[#8a4a3f] hover:text-[#6c3a30] disabled:opacity-40"
                         >
                           <X size={16} />
                         </button>

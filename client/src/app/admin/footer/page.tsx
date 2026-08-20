@@ -158,7 +158,7 @@ export default function AdminFooterPage() {
                         aria-label="Move up"
                         disabled={i === 0}
                         onClick={() => moveColumn(column, "up")}
-                        className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                        className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                       >
                         <ArrowUp size={14} />
                       </button>
@@ -166,14 +166,14 @@ export default function AdminFooterPage() {
                         aria-label="Move down"
                         disabled={i === sorted.length - 1}
                         onClick={() => moveColumn(column, "down")}
-                        className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                        className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                       >
                         <ArrowDown size={14} />
                       </button>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => toggleVisibility(column)}>
+                    <button onClick={() => toggleVisibility(column)} className="cursor-pointer">
                       <StatusBadge status={column.isVisible ? "active" : "inactive"} />
                     </button>
                   </td>
@@ -181,14 +181,14 @@ export default function AdminFooterPage() {
                     <button
                       aria-label="Edit"
                       onClick={() => setEditing(column)}
-                      className="mr-3 text-brown-500 hover:text-green-950"
+                      className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                     >
                       <Pencil size={15} />
                     </button>
                     <button
                       aria-label="Delete"
                       onClick={() => handleDelete(column)}
-                      className="text-brown-500 hover:text-[#8a4a3f]"
+                      className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                     >
                       <Trash2 size={15} />
                     </button>

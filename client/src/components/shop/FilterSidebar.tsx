@@ -157,7 +157,7 @@ function PriceFilter({
       </div>
       <button
         type="submit"
-        className="w-full rounded bg-cream-300 py-2.5 text-xs font-bold uppercase tracking-[0.1em] text-green-950 hover:bg-cream-400"
+        className="w-full cursor-pointer rounded bg-cream-300 py-2.5 text-xs font-bold uppercase tracking-[0.1em] text-green-950 hover:bg-cream-400"
       >
         Apply Filter
       </button>

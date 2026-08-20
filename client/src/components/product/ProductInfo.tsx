@@ -87,7 +87,7 @@ export function ProductInfo({ product }: { product: Product }) {
                 key={v.id}
                 onClick={() => setVariantId(v.id)}
                 className={cn(
-                  "rounded border px-5 py-2 text-sm font-semibold transition-colors",
+                  "cursor-pointer rounded border px-5 py-2 text-sm font-semibold transition-colors",
                   v.id === variantId
                     ? "border-gold-500 bg-gold-500 text-green-950"
                     : "border-green-900/20 text-green-950 hover:border-green-900/40"
@@ -140,7 +140,7 @@ export function ProductInfo({ product }: { product: Product }) {
           aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
           onClick={() => toggleWishlist(product.id)}
           className={cn(
-            "flex size-12 shrink-0 items-center justify-center self-center rounded border border-green-900/20 text-brown-500 transition-colors hover:border-[#8a4a3f]/40 hover:text-[#8a4a3f] sm:self-auto",
+            "flex size-12 shrink-0 cursor-pointer items-center justify-center self-center rounded border border-green-900/20 text-brown-500 transition-colors hover:border-[#8a4a3f]/40 hover:text-[#8a4a3f] sm:self-auto",
             wishlisted && "border-[#8a4a3f]/40 text-[#8a4a3f]"
           )}
         >

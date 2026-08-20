@@ -34,7 +34,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
         <button
           onClick={logout}
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-cream-100/75 transition-colors hover:bg-white/10 hover:text-white"
+          className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-cream-100/75 transition-colors hover:bg-white/10 hover:text-white"
         >
           <LogOut size={16} /> Sign Out
         </button>
@@ -69,7 +69,7 @@ function EmployeeShell({ children }: { children: React.ReactNode }) {
         <button
           aria-label="Open menu"
           onClick={() => setMobileOpen(true)}
-          className="flex size-9 items-center justify-center rounded-lg text-cream-100 hover:bg-white/10"
+          className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-cream-100 hover:bg-white/10"
         >
           <Menu size={20} />
         </button>
@@ -87,7 +87,7 @@ function EmployeeShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             aria-label="Close menu"
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 cursor-pointer bg-black/40"
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute left-0 top-0 flex h-full w-72 flex-col bg-green-950 shadow-2xl animate-slide-in-left">
@@ -95,7 +95,7 @@ function EmployeeShell({ children }: { children: React.ReactNode }) {
               <button
                 aria-label="Close menu"
                 onClick={() => setMobileOpen(false)}
-                className="flex size-9 items-center justify-center rounded-lg text-cream-100 hover:bg-white/10"
+                className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-cream-100 hover:bg-white/10"
               >
                 <X size={18} />
               </button>

@@ -83,7 +83,7 @@ export function PerformanceReviewForm({
               type="button"
               aria-label={`${n} star${n > 1 ? "s" : ""}`}
               onClick={() => update("rating", n)}
-              className="p-0.5"
+              className="cursor-pointer p-0.5"
             >
               <Star size={22} className={cn(n <= values.rating ? "fill-gold-500 text-gold-500" : "text-brown-500/30")} />
             </button>

@@ -200,7 +200,7 @@ export default function AdminEmployeesPage() {
                             <button
                               onClick={() => handleUnlock(person)}
                               disabled={actingId === person._id}
-                              className="text-xs font-bold uppercase tracking-wide text-[#8a4a3f] hover:underline disabled:opacity-50"
+                              className="cursor-pointer text-xs font-bold uppercase tracking-wide text-[#8a4a3f] hover:underline disabled:opacity-50"
                             >
                               Unlock
                             </button>
@@ -209,14 +209,14 @@ export default function AdminEmployeesPage() {
                             <button
                               onClick={() => handleImpersonate(person)}
                               disabled={actingId === person._id}
-                              className="text-xs font-bold uppercase tracking-wide text-brown-600 hover:underline disabled:opacity-50"
+                              className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-600 hover:underline disabled:opacity-50"
                             >
                               Sign in as
                             </button>
                           )}
                           <button
                             onClick={() => setEditing(person)}
-                            className="text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
+                            className="cursor-pointer text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
                           >
                             Edit
                           </button>

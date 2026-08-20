@@ -80,7 +80,7 @@ export default function CartPage() {
                   <button
                     aria-label="Remove item"
                     onClick={() => removeItem(item.product.id, item.variant.id)}
-                    className="shrink-0 text-brown-500/70 hover:text-[#8a4a3f]"
+                    className="shrink-0 cursor-pointer text-brown-500/70 hover:text-[#8a4a3f]"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -92,7 +92,7 @@ export default function CartPage() {
                       onClick={() =>
                         updateQuantity(item.product.id, item.variant.id, item.quantity - 1)
                       }
-                      className="flex size-8 items-center justify-center text-green-950 hover:bg-green-950/5"
+                      className="flex size-8 cursor-pointer items-center justify-center text-green-950 hover:bg-green-950/5"
                     >
                       <Minus size={13} />
                     </button>
@@ -104,7 +104,7 @@ export default function CartPage() {
                       onClick={() =>
                         updateQuantity(item.product.id, item.variant.id, item.quantity + 1)
                       }
-                      className="flex size-8 items-center justify-center text-green-950 hover:bg-green-950/5"
+                      className="flex size-8 cursor-pointer items-center justify-center text-green-950 hover:bg-green-950/5"
                     >
                       <Plus size={13} />
                     </button>

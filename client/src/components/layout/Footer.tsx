@@ -1,15 +1,22 @@
 import Link from "next/link";
 import { Mail } from "lucide-react";
-import { getSiteSettings } from "@/lib/api/siteSettings";
 import { listFooterColumns } from "@/lib/api/footerColumns";
 import { SocialIcon } from "@/components/ui/SocialIcon";
+import type { ApiSiteSettings } from "@/types/api";
 
-export async function Footer() {
-  const [{ data: settingsData }, { data: columnsData }] = await Promise.all([
-    getSiteSettings(),
-    listFooterColumns(),
-  ]);
-  const { siteName, footerTagline, contactEmail, socialLinks } = settingsData.settings;
+/**
+ * `settings` is passed down from the (site) layout, which already fetched it
+ * once for the header/announcement bar — avoids a second, duplicate
+ * site-settings round trip on every single page load.
+ */
+export async function Footer({ settings }: { settings: ApiSiteSettings | null }) {
+  // Kept at the default no-store — see the (site) layout's comment on why
+  // this shared chrome intentionally isn't using `revalidate` caching.
+  const { data: columnsData } = await listFooterColumns();
+  const siteName = settings?.siteName || "Saudi Authentic Product";
+  const footerTagline = settings?.footerTagline;
+  const contactEmail = settings?.contactEmail;
+  const socialLinks = settings?.socialLinks ?? [];
   const columns = [...columnsData.footerColumns].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (

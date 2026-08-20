@@ -16,11 +16,11 @@ const router = Router();
 // -- Public --
 router.get("/", validate({ query: listHeroSlidesQuerySchema }), heroSlideController.listHeroSlides);
 
-// -- Admin / Super Admin only --
+// -- Admin / Super Admin / Co-Admin can create + update; delete stays Admin / Super Admin only --
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin"),
+  authorize("admin", "super_admin", "co_admin"),
   upload.single("image"),
   validate({ body: createHeroSlideSchema }),
   heroSlideController.createHeroSlide
@@ -28,7 +28,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  authorize("admin", "super_admin", "co_admin"),
   upload.single("image"),
   validate({ params: mongoIdParamSchema, body: updateHeroSlideSchema }),
   heroSlideController.updateHeroSlide

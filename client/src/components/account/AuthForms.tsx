@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { KeyRound, LogIn, MapPin, Plus, ShieldCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -32,7 +33,10 @@ const HEADER: Record<Tab, { icon: typeof LogIn; title: string; subtitle: string 
 };
 
 export function AuthForms() {
-  const [tab, setTab] = useState<Tab>("login");
+  const searchParams = useSearchParams();
+  // Lets the navbar's "Sign Up" link (/account?tab=register) open straight
+  // into the register step instead of always landing on login.
+  const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "register" ? "register" : "login");
   const { login, register, completeTwoFactorLogin } = useAuth();
 
   // Set once the password step succeeds on a 2FA-enabled account — the form
@@ -162,7 +166,7 @@ export function AuthForms() {
           <button
             type="button"
             onClick={cancelTwoFactor}
-            className="text-center text-xs font-bold uppercase tracking-[0.08em] text-brown-500 hover:text-green-950"
+            className="cursor-pointer text-center text-xs font-bold uppercase tracking-[0.08em] text-brown-500 hover:text-green-950"
           >
             Back to Sign In
           </button>
@@ -193,7 +197,7 @@ export function AuthForms() {
                 setError(null);
               }}
               className={cn(
-                "flex-1 rounded py-2 text-xs font-bold uppercase tracking-[0.08em] transition-colors",
+                "flex-1 cursor-pointer rounded py-2 text-xs font-bold uppercase tracking-[0.08em] transition-colors",
                 tab === t ? "bg-green-900 text-white" : "text-brown-600 hover:bg-green-950/5"
               )}
             >
@@ -214,7 +218,7 @@ export function AuthForms() {
               setTab("login");
               setForgotSent(false);
             }}
-            className="text-xs font-bold uppercase tracking-[0.08em] text-green-900 underline"
+            className="cursor-pointer text-xs font-bold uppercase tracking-[0.08em] text-green-900 underline"
           >
             Back to Sign In
           </button>
@@ -271,7 +275,7 @@ export function AuthForms() {
                       setTab("forgot");
                       setError(null);
                     }}
-                    className="text-xs font-semibold text-brown-500 underline hover:text-green-950"
+                    className="cursor-pointer text-xs font-semibold text-brown-500 underline hover:text-green-950"
                   >
                     Forgot password?
                   </button>
@@ -319,7 +323,7 @@ export function AuthForms() {
                       setCityArea("");
                     }}
                     aria-label="Remove address"
-                    className="text-brown-500 hover:text-[#8a4a3f]"
+                    className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                   >
                     <X size={14} />
                   </button>
@@ -352,7 +356,7 @@ export function AuthForms() {
               <button
                 type="button"
                 onClick={() => setShowAddress(true)}
-                className="flex items-center gap-1.5 self-start text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
+                className="flex cursor-pointer items-center gap-1.5 self-start text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
               >
                 <Plus size={13} /> Add delivery address (optional)
               </button>
@@ -372,7 +376,7 @@ export function AuthForms() {
             <button
               type="button"
               onClick={() => setTab("login")}
-              className="text-center text-xs font-bold uppercase tracking-[0.08em] text-brown-500 hover:text-green-950"
+              className="cursor-pointer text-center text-xs font-bold uppercase tracking-[0.08em] text-brown-500 hover:text-green-950"
             >
               Back to Sign In
             </button>

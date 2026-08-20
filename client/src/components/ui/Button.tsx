@@ -28,7 +28,7 @@ export function buttonClasses(
   className?: string
 ) {
   return cn(
-    "inline-flex items-center justify-center gap-2 rounded font-semibold uppercase tracking-[0.05em] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex cursor-pointer items-center justify-center gap-2 rounded font-semibold uppercase tracking-[0.05em] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
     variantClasses[variant],
     sizeClasses[size],
     className

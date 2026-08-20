@@ -170,7 +170,7 @@ export default function AdminProductsPage() {
                       <button
                         aria-label="Edit"
                         onClick={() => setEditing(product)}
-                        className="mr-3 text-brown-500 hover:text-green-950"
+                        className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                       >
                         <Pencil size={15} />
                       </button>
@@ -178,7 +178,7 @@ export default function AdminProductsPage() {
                         <button
                           aria-label={canDeleteDirectly ? "Delete" : "Request deletion"}
                           onClick={() => handleDelete(product)}
-                          className="text-brown-500 hover:text-[#8a4a3f]"
+                          className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                         >
                           <Trash2 size={15} />
                         </button>

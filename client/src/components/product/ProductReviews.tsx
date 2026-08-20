@@ -75,7 +75,7 @@ export function ProductReviews({ productId }: { productId: string }) {
                   type="button"
                   aria-label={`Rate ${i + 1} stars`}
                   onClick={() => setRating(i + 1)}
-                  className="p-0.5"
+                  className="cursor-pointer p-0.5"
                 >
                   <Star
                     size={22}

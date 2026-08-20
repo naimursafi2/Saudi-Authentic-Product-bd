@@ -19,14 +19,14 @@ export function AdminPagination({
         <button
           onClick={() => onPageChange(pagination.page - 1)}
           disabled={pagination.page <= 1}
-          className="flex size-8 items-center justify-center rounded border border-green-900/15 text-green-950 hover:bg-green-950/5 disabled:opacity-40"
+          className="flex size-8 cursor-pointer items-center justify-center rounded border border-green-900/15 text-green-950 hover:bg-green-950/5 disabled:opacity-40"
         >
           <ChevronLeft size={14} />
         </button>
         <button
           onClick={() => onPageChange(pagination.page + 1)}
           disabled={pagination.page >= pagination.totalPages}
-          className="flex size-8 items-center justify-center rounded border border-green-900/15 text-green-950 hover:bg-green-950/5 disabled:opacity-40"
+          className="flex size-8 cursor-pointer items-center justify-center rounded border border-green-900/15 text-green-950 hover:bg-green-950/5 disabled:opacity-40"
         >
           <ChevronRight size={14} />
         </button>

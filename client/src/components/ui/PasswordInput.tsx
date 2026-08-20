@@ -26,7 +26,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           tabIndex={-1}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
-          className="absolute right-0 top-0 flex h-full w-10 items-center justify-center text-brown-500/60 transition-colors duration-150 hover:text-green-900 focus:outline-none focus-visible:text-green-900"
+          className="absolute right-0 top-0 flex h-full w-10 cursor-pointer items-center justify-center text-brown-500/60 transition-colors duration-150 hover:text-green-900 focus:outline-none focus-visible:text-green-900"
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>

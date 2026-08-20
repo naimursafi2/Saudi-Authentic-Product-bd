@@ -1,9 +1,15 @@
 import { api } from "./client";
 import type { ApiCategory } from "@/types/api";
 
-export async function listCategories(includeInactive = false) {
+/**
+ * `revalidate` (seconds) opts this GET into a short Next.js data-cache
+ * window instead of the default no-store — pass it from server components
+ * rendering site chrome (nav, header) where a brief staleness on category
+ * changes is an acceptable trade for cutting the round trip.
+ */
+export async function listCategories(includeInactive = false, revalidate?: number) {
   const qs = includeInactive ? "?includeInactive=true" : "";
-  return api.get<{ categories: ApiCategory[] }>(`/categories${qs}`);
+  return api.get<{ categories: ApiCategory[] }>(`/categories${qs}`, { revalidate });
 }
 
 export async function getCategoryBySlug(slug: string) {

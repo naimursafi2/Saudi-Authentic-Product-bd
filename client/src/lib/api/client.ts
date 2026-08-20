@@ -25,6 +25,14 @@ interface RequestOptions {
   /** Pass a FormData body as-is (for Cloudinary image uploads) instead of JSON-encoding it. */
   isFormData?: boolean;
   signal?: AbortSignal;
+  /**
+   * Opt a GET into short-TTL Next.js data caching (`next: { revalidate }`)
+   * instead of the default `no-store`. Only use this for read-heavy, rarely
+   * -changing public content (site chrome like nav links/categories/site
+   * settings) — leave it unset for anything order/inventory/price related,
+   * which must always be fresh.
+   */
+  revalidate?: number;
 }
 
 // Auth endpoints where a 401 means "these credentials/this token were
@@ -107,18 +115,22 @@ export function setImpersonationToken(token: string | null) {
  * signed-in state right away.
  */
 async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<ApiResult<T>> {
-  const { method = "GET", body, isFormData = false, signal } = options;
+  const { method = "GET", body, isFormData = false, signal, revalidate } = options;
 
   const headers: Record<string, string> = isFormData ? {} : { "Content-Type": "application/json" };
   if (impersonationToken) headers.Authorization = `Bearer ${impersonationToken}`;
 
+  // Product/order/inventory data changes via the admin portal at any time —
+  // never let the browser or Next.js server-fetch cache serve a stale
+  // response for those. Callers can opt specific read-heavy, rarely-changing
+  // GETs (site chrome) into a short revalidate window instead.
+  const cacheInit =
+    revalidate !== undefined ? { next: { revalidate } } : ({ cache: "no-store" } as const);
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    // Product/order/inventory data changes via the admin portal at any
-    // time — never let the browser or Next.js server-fetch cache serve a
-    // stale response.
-    cache: "no-store",
+    ...cacheInit,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
     signal,
@@ -151,7 +163,8 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
 }
 
 export const api = {
-  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { method: "GET", signal }),
+  get: <T>(path: string, options?: { signal?: AbortSignal; revalidate?: number }) =>
+    request<T>(path, { method: "GET", signal: options?.signal, revalidate: options?.revalidate }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, { method: "POST", body, signal }),
   patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>

@@ -284,7 +284,7 @@ export function HomepageSectionForm({
                     type="button"
                     aria-label="Remove"
                     onClick={() => removeBlock(i)}
-                    className="shrink-0 text-brown-500 hover:text-[#8a4a3f]"
+                    className="shrink-0 cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                   >
                     <Trash2 size={15} />
                   </button>

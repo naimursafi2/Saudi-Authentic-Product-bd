@@ -1,9 +1,9 @@
 import { api } from "./client";
 import type { ApiFooterColumn, ApiFooterLink } from "@/types/api";
 
-export async function listFooterColumns(includeHidden = false) {
+export async function listFooterColumns(includeHidden = false, revalidate?: number) {
   const qs = includeHidden ? "?includeHidden=true" : "";
-  return api.get<{ footerColumns: ApiFooterColumn[] }>(`/footer-columns${qs}`);
+  return api.get<{ footerColumns: ApiFooterColumn[] }>(`/footer-columns${qs}`, { revalidate });
 }
 
 export interface FooterColumnInput {

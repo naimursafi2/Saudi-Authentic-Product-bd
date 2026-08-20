@@ -84,7 +84,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
     <div className="fixed inset-0 z-[70] animate-fade-in">
       <button
         aria-label="Close search"
-        className="absolute inset-0 bg-green-950/40 backdrop-blur-sm"
+        className="absolute inset-0 cursor-pointer bg-green-950/40 backdrop-blur-sm"
         onClick={handleClose}
       />
       <div className="relative mx-auto mt-24 w-[92%] max-w-2xl rounded-lg bg-cream-100 shadow-2xl">
@@ -107,7 +107,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
             type="button"
             aria-label="Close search"
             onClick={handleClose}
-            className="shrink-0 text-brown-500 hover:text-green-950"
+            className="shrink-0 cursor-pointer text-brown-500 hover:text-green-950"
           >
             <X size={18} />
           </button>
@@ -157,7 +157,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
             {results.length > 0 && (
               <button
                 onClick={goToShop}
-                className="mt-1 w-full rounded-md p-3 text-center text-xs font-bold uppercase tracking-[0.1em] text-green-900 hover:bg-green-950/5"
+                className="mt-1 w-full cursor-pointer rounded-md p-3 text-center text-xs font-bold uppercase tracking-[0.1em] text-green-900 hover:bg-green-950/5"
               >
                 View all results
               </button>

@@ -27,7 +27,7 @@ export function SortBar({
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenMobileFilters}
-          className="flex items-center gap-1.5 rounded border border-green-900/20 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-green-950 lg:hidden"
+          className="flex cursor-pointer items-center gap-1.5 rounded border border-green-900/20 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-green-950 lg:hidden"
         >
           <SlidersHorizontal size={14} /> Filters
         </button>

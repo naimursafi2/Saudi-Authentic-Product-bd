@@ -1,9 +1,9 @@
 import { api } from "./client";
 import type { ApiNavLink } from "@/types/api";
 
-export async function listNavLinks(includeHidden = false) {
+export async function listNavLinks(includeHidden = false, revalidate?: number) {
   const qs = includeHidden ? "?includeHidden=true" : "";
-  return api.get<{ navLinks: ApiNavLink[] }>(`/nav-links${qs}`);
+  return api.get<{ navLinks: ApiNavLink[] }>(`/nav-links${qs}`, { revalidate });
 }
 
 export interface NavLinkInput {

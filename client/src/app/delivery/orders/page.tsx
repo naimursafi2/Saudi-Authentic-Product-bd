@@ -310,7 +310,7 @@ function DeliveryOrderModal({
                     type="button"
                     disabled={isActing}
                     onClick={handleOutForDelivery}
-                    className="mt-2 text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950 disabled:opacity-50"
+                    className="mt-2 cursor-pointer text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950 disabled:opacity-50"
                   >
                     Resend code
                   </button>
@@ -320,7 +320,7 @@ function DeliveryOrderModal({
                   <button
                     type="button"
                     onClick={() => setShowFailureForm(true)}
-                    className="self-start text-xs font-bold uppercase tracking-[0.06em] text-[#8a4a3f] hover:underline"
+                    className="cursor-pointer self-start text-xs font-bold uppercase tracking-[0.06em] text-[#8a4a3f] hover:underline"
                   >
                     Delivery failed instead?
                   </button>

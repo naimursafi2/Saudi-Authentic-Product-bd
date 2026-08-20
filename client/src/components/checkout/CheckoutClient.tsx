@@ -379,7 +379,7 @@ export function CheckoutClient() {
                   type="button"
                   onClick={handleRemoveCoupon}
                   aria-label="Remove coupon"
-                  className="text-brown-500 hover:text-green-950"
+                  className="cursor-pointer text-brown-500 hover:text-green-950"
                 >
                   <X size={14} />
                 </button>

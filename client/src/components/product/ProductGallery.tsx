@@ -45,7 +45,7 @@ export function ProductGallery({ product }: { product: Product }) {
             aria-label={`Show image ${i + 1}`}
             onClick={() => setActive(i)}
             className={cn(
-              "relative aspect-square overflow-hidden rounded border-2 transition-colors",
+              "relative aspect-square cursor-pointer overflow-hidden rounded border-2 transition-colors",
               active === i ? "border-green-900" : "border-transparent"
             )}
           >

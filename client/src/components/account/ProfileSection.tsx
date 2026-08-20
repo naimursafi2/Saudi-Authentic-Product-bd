@@ -66,7 +66,7 @@ function AvatarUploader({ user }: { user: ApiUser }) {
           aria-label="Change profile picture"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
-          className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full border-2 border-cream-50 bg-gold-500 text-green-950 shadow-sm transition-colors hover:bg-gold-600 disabled:opacity-60"
+          className="absolute -bottom-1 -right-1 flex size-8 cursor-pointer items-center justify-center rounded-full border-2 border-cream-50 bg-gold-500 text-green-950 shadow-sm transition-colors hover:bg-gold-600 disabled:opacity-60"
         >
           <Camera size={14} />
         </button>
@@ -86,7 +86,7 @@ function AvatarUploader({ user }: { user: ApiUser }) {
             type="button"
             onClick={handleRemove}
             disabled={isUploading}
-            className="mt-1.5 flex items-center gap-1 text-xs font-bold uppercase tracking-[0.06em] text-brown-500 hover:text-[#8a4a3f] disabled:opacity-60"
+            className="mt-1.5 flex cursor-pointer items-center gap-1 text-xs font-bold uppercase tracking-[0.06em] text-brown-500 hover:text-[#8a4a3f] disabled:opacity-60"
           >
             <Trash2 size={12} /> Remove Photo
           </button>

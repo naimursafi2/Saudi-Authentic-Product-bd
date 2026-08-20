@@ -30,7 +30,7 @@ export function QuantityInput({
         aria-label="Decrease quantity"
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
-        className="flex h-full w-10 items-center justify-center text-green-950 transition-colors hover:bg-green-950/5 disabled:opacity-30"
+        className="flex h-full w-10 cursor-pointer items-center justify-center text-green-950 transition-colors hover:bg-green-950/5 disabled:opacity-30"
       >
         <Minus size={14} />
       </button>
@@ -51,7 +51,7 @@ export function QuantityInput({
         aria-label="Increase quantity"
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
-        className="flex h-full w-10 items-center justify-center text-green-950 transition-colors hover:bg-green-950/5 disabled:opacity-30"
+        className="flex h-full w-10 cursor-pointer items-center justify-center text-green-950 transition-colors hover:bg-green-950/5 disabled:opacity-30"
       >
         <Plus size={14} />
       </button>

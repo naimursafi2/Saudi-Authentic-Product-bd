@@ -1,8 +1,4 @@
-import { getSiteSettings } from "@/lib/api/siteSettings";
-
-export async function AnnouncementBar() {
-  const { data } = await getSiteSettings();
-  const text = data.settings.announcementText;
+export function AnnouncementBar({ text }: { text?: string | null }) {
   if (!text) return null;
 
   return (

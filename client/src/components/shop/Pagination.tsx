@@ -20,7 +20,7 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
         aria-label="Previous page"
         onClick={() => onPageChange(Math.max(1, page - 1))}
         disabled={page === 1}
-        className="flex size-9 items-center justify-center rounded border border-green-900/15 text-green-950 disabled:opacity-30"
+        className="flex size-9 cursor-pointer items-center justify-center rounded border border-green-900/15 text-green-950 disabled:opacity-30"
       >
         <ChevronLeft size={16} />
       </button>
@@ -30,7 +30,7 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
           onClick={() => onPageChange(p)}
           aria-current={p === page ? "page" : undefined}
           className={cn(
-            "flex size-9 items-center justify-center rounded text-sm font-semibold transition-colors",
+            "flex size-9 cursor-pointer items-center justify-center rounded text-sm font-semibold transition-colors",
             p === page
               ? "bg-green-900 text-white"
               : "text-green-950 hover:bg-green-950/5"
@@ -43,7 +43,7 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
         aria-label="Next page"
         onClick={() => onPageChange(Math.min(pageCount, page + 1))}
         disabled={page === pageCount}
-        className="flex size-9 items-center justify-center rounded border border-green-900/15 text-green-950 disabled:opacity-30"
+        className="flex size-9 cursor-pointer items-center justify-center rounded border border-green-900/15 text-green-950 disabled:opacity-30"
       >
         <ChevronRight size={16} />
       </button>

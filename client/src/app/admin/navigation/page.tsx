@@ -156,7 +156,7 @@ export default function AdminNavigationPage() {
                         aria-label="Move up"
                         disabled={i === 0}
                         onClick={() => moveLink(link, "up")}
-                        className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                        className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                       >
                         <ArrowUp size={14} />
                       </button>
@@ -164,14 +164,14 @@ export default function AdminNavigationPage() {
                         aria-label="Move down"
                         disabled={i === sorted.length - 1}
                         onClick={() => moveLink(link, "down")}
-                        className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                        className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                       >
                         <ArrowDown size={14} />
                       </button>
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => toggleVisibility(link)}>
+                    <button onClick={() => toggleVisibility(link)} className="cursor-pointer">
                       <StatusBadge status={link.isVisible ? "active" : "inactive"} />
                     </button>
                   </td>
@@ -179,14 +179,14 @@ export default function AdminNavigationPage() {
                     <button
                       aria-label="Edit"
                       onClick={() => setEditing(link)}
-                      className="mr-3 text-brown-500 hover:text-green-950"
+                      className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                     >
                       <Pencil size={15} />
                     </button>
                     <button
                       aria-label="Delete"
                       onClick={() => handleDelete(link)}
-                      className="text-brown-500 hover:text-[#8a4a3f]"
+                      className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                     >
                       <Trash2 size={15} />
                     </button>

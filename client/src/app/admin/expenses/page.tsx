@@ -173,7 +173,7 @@ export default function AdminExpensesPage() {
                           aria-label="Confirm"
                           disabled={actingId === expense._id}
                           onClick={() => handleConfirm(expense)}
-                          className="text-green-900 hover:text-green-950 disabled:opacity-50"
+                          className="cursor-pointer text-green-900 hover:text-green-950 disabled:opacity-50"
                         >
                           <Check size={16} />
                         </button>
@@ -181,7 +181,7 @@ export default function AdminExpensesPage() {
                           aria-label="Reject"
                           disabled={actingId === expense._id}
                           onClick={() => handleReject(expense)}
-                          className="text-[#8a4a3f] hover:text-[#6f3b32] disabled:opacity-50"
+                          className="cursor-pointer text-[#8a4a3f] hover:text-[#6f3b32] disabled:opacity-50"
                         >
                           <X size={16} />
                         </button>

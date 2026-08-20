@@ -112,7 +112,7 @@ export default function AdminStaticPagesPage() {
           <button
             key={type}
             onClick={() => setActiveType(type)}
-            className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`cursor-pointer border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               activeType === type
                 ? "border-green-900 text-green-950"
                 : "border-transparent text-brown-500 hover:text-green-950"

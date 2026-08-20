@@ -17,7 +17,6 @@ import {
 } from "@/lib/api/homepageSections";
 import { listCategories } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
-import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -71,9 +70,6 @@ function sectionFormData(values: HomepageSectionFormValues, image: File | null):
 }
 
 export default function AdminHomepagePage() {
-  const { user } = useAuth();
-  const isRestricted = user?.role === "co_admin";
-
   const [slides, setSlides] = useState<ApiHeroSlide[]>([]);
   const [sections, setSections] = useState<ApiHomepageSection[]>([]);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
@@ -212,19 +208,6 @@ export default function AdminHomepagePage() {
   const sortedSlides = [...slides].sort((a, b) => a.sortOrder - b.sortOrder);
   const sortedSections = [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
 
-  if (isRestricted) {
-    return (
-      <div>
-        <PageHeader title="Homepage" />
-        <EmptyState
-          icon={LayoutPanelTop}
-          title="Access restricted"
-          description="Homepage content management is available to Admin and Super Admin only."
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-10">
       <div>
@@ -274,7 +257,7 @@ export default function AdminHomepagePage() {
                           aria-label="Move up"
                           disabled={i === 0}
                           onClick={() => moveSlide(slide, "up")}
-                          className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                         >
                           <ArrowUp size={14} />
                         </button>
@@ -282,7 +265,7 @@ export default function AdminHomepagePage() {
                           aria-label="Move down"
                           disabled={i === sortedSlides.length - 1}
                           onClick={() => moveSlide(slide, "down")}
-                          className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                         >
                           <ArrowDown size={14} />
                         </button>
@@ -295,14 +278,14 @@ export default function AdminHomepagePage() {
                       <button
                         aria-label="Edit"
                         onClick={() => setEditingSlide(slide)}
-                        className="mr-3 text-brown-500 hover:text-green-950"
+                        className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                       >
                         <Pencil size={15} />
                       </button>
                       <button
                         aria-label="Delete"
                         onClick={() => handleDeleteSlide(slide)}
-                        className="text-brown-500 hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -356,7 +339,7 @@ export default function AdminHomepagePage() {
                           aria-label="Move up"
                           disabled={i === 0}
                           onClick={() => moveSection(section, "up")}
-                          className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                         >
                           <ArrowUp size={14} />
                         </button>
@@ -364,14 +347,14 @@ export default function AdminHomepagePage() {
                           aria-label="Move down"
                           disabled={i === sortedSections.length - 1}
                           onClick={() => moveSection(section, "down")}
-                          className="text-brown-500 hover:text-green-950 disabled:opacity-30"
+                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
                         >
                           <ArrowDown size={14} />
                         </button>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => toggleSectionVisibility(section)}>
+                      <button onClick={() => toggleSectionVisibility(section)} className="cursor-pointer">
                         <StatusBadge status={section.isVisible ? "active" : "inactive"} />
                       </button>
                     </td>
@@ -379,7 +362,7 @@ export default function AdminHomepagePage() {
                       <button
                         aria-label="Edit"
                         onClick={() => setEditingSection(section)}
-                        className="mr-3 text-brown-500 hover:text-green-950"
+                        className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                       >
                         <Pencil size={15} />
                       </button>
@@ -387,7 +370,7 @@ export default function AdminHomepagePage() {
                         <button
                           aria-label="Delete"
                           onClick={() => handleDeleteSection(section)}
-                          className="text-brown-500 hover:text-[#8a4a3f]"
+                          className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                         >
                           <Trash2 size={15} />
                         </button>

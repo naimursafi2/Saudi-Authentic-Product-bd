@@ -149,7 +149,7 @@ export default function AdminCouponsPage() {
                     <button
                       aria-label="Edit"
                       onClick={() => setEditing(coupon)}
-                      className="mr-3 text-brown-500 hover:text-green-950"
+                      className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                     >
                       <Pencil size={15} />
                     </button>
@@ -157,7 +157,7 @@ export default function AdminCouponsPage() {
                       <button
                         aria-label="Delete"
                         onClick={() => handleDelete(coupon)}
-                        className="text-brown-500 hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                       >
                         <Trash2 size={15} />
                       </button>

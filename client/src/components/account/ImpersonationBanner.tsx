@@ -25,7 +25,7 @@ export function ImpersonationBanner() {
       <span className="flex items-center gap-1.5">
         <UserCheck size={14} /> Support login — you are viewing the site as {user.name} ({user.email}).
       </span>
-      <button onClick={handleStop} className="rounded bg-white/20 px-3 py-1 uppercase tracking-[0.06em] hover:bg-white/30">
+      <button onClick={handleStop} className="cursor-pointer rounded bg-white/20 px-3 py-1 uppercase tracking-[0.06em] hover:bg-white/30">
         Stop Impersonating
       </button>
     </div>

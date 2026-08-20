@@ -237,7 +237,7 @@ export function ProductForm({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <label className={`${labelClasses} mb-0`}>Variants *</label>
-          <button type="button" onClick={addVariant} className="text-xs font-bold text-green-900 hover:underline">
+          <button type="button" onClick={addVariant} className="cursor-pointer text-xs font-bold text-green-900 hover:underline">
             <Plus size={12} className="inline" /> Add Variant
           </button>
         </div>
@@ -293,7 +293,7 @@ export function ProductForm({
                     type="button"
                     aria-label="Remove variant"
                     onClick={() => removeVariant(i)}
-                    className="shrink-0 text-brown-500 hover:text-[#8a4a3f]"
+                    className="shrink-0 cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                   >
                     <Trash2 size={16} />
                   </button>

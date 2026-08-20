@@ -192,7 +192,7 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
                       setShowAddForm(false);
                       setEditingId(address._id);
                     }}
-                    className="rounded p-1.5 text-brown-500/70 hover:bg-green-950/5 hover:text-green-950"
+                    className="cursor-pointer rounded p-1.5 text-brown-500/70 hover:bg-green-950/5 hover:text-green-950"
                   >
                     <Pencil size={14} />
                   </button>
@@ -200,7 +200,7 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
                     aria-label="Remove address"
                     onClick={() => handleRemove(address._id)}
                     disabled={busyId === address._id}
-                    className="rounded p-1.5 text-brown-500/70 hover:bg-[#fbeceb] hover:text-[#8a4a3f] disabled:opacity-50"
+                    className="cursor-pointer rounded p-1.5 text-brown-500/70 hover:bg-[#fbeceb] hover:text-[#8a4a3f] disabled:opacity-50"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -216,7 +216,7 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
                 <button
                   onClick={() => handleSetDefault(address._id)}
                   disabled={busyId === address._id}
-                  className="self-start text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950 disabled:opacity-50"
+                  className="cursor-pointer self-start text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950 disabled:opacity-50"
                 >
                   Set as Default
                 </button>

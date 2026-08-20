@@ -142,7 +142,7 @@ export default function AdminTasksPage() {
                     <button
                       aria-label="Edit"
                       onClick={() => setEditing(task)}
-                      className="mr-3 text-brown-500 hover:text-green-950"
+                      className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
                     >
                       <Pencil size={15} />
                     </button>
@@ -150,7 +150,7 @@ export default function AdminTasksPage() {
                       <button
                         aria-label="Delete"
                         onClick={() => handleDelete(task)}
-                        className="text-brown-500 hover:text-[#8a4a3f]"
+                        className="cursor-pointer text-brown-500 hover:text-[#8a4a3f]"
                       >
                         <Trash2 size={15} />
                       </button>

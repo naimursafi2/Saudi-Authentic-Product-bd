@@ -147,7 +147,7 @@ export default function AdminSalaryPage() {
                       {payment.status === "pending" && (
                         <button
                           onClick={() => handleMarkPaid(payment)}
-                          className="text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
+                          className="cursor-pointer text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
                         >
                           Mark Paid
                         </button>
@@ -157,7 +157,7 @@ export default function AdminSalaryPage() {
                       ) : (
                         <button
                           onClick={() => handleRemind(payment)}
-                          className="text-xs font-bold uppercase tracking-wide text-brown-500 hover:text-green-950"
+                          className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-500 hover:text-green-950"
                         >
                           Send Reminder
                         </button>

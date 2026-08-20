@@ -163,7 +163,7 @@ export function ShopPageClient() {
               </p>
               <button
                 onClick={() => updateFilters(DEFAULT_FILTERS)}
-                className="text-xs font-bold uppercase tracking-[0.1em] text-brown-600 underline hover:text-green-950"
+                className="cursor-pointer text-xs font-bold uppercase tracking-[0.1em] text-brown-600 underline hover:text-green-950"
               >
                 Clear all filters
               </button>
@@ -184,7 +184,7 @@ export function ShopPageClient() {
         <div className="fixed inset-0 z-[95] lg:hidden">
           <button
             aria-label="Close filters"
-            className="absolute inset-0 bg-green-950/40"
+            className="absolute inset-0 cursor-pointer bg-green-950/40"
             onClick={() => setMobileFiltersOpen(false)}
           />
           <div className="absolute right-0 top-0 h-full w-[85%] max-w-sm animate-slide-in-right overflow-y-auto bg-cream-100 p-6 shadow-2xl">
@@ -193,6 +193,7 @@ export function ShopPageClient() {
               <button
                 aria-label="Close filters"
                 onClick={() => setMobileFiltersOpen(false)}
+                className="cursor-pointer"
               >
                 <X size={20} className="text-green-950" />
               </button>

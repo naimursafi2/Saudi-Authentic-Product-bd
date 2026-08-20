@@ -17,7 +17,7 @@ export function CartDrawer() {
     <div className="fixed inset-0 z-[80]">
       <button
         aria-label="Close cart"
-        className="absolute inset-0 animate-fade-in bg-green-950/40 backdrop-blur-sm"
+        className="absolute inset-0 cursor-pointer animate-fade-in bg-green-950/40 backdrop-blur-sm"
         onClick={closeDrawer}
       />
       <div className="absolute right-0 top-0 flex h-full w-full max-w-md animate-slide-in-right flex-col bg-cream-100 shadow-2xl">
@@ -26,7 +26,7 @@ export function CartDrawer() {
           <button
             aria-label="Close cart"
             onClick={closeDrawer}
-            className="text-brown-500 hover:text-green-950"
+            className="cursor-pointer text-brown-500 hover:text-green-950"
           >
             <X size={20} />
           </button>
@@ -83,7 +83,7 @@ export function CartDrawer() {
                       <button
                         aria-label="Remove item"
                         onClick={() => removeItem(item.product.id, item.variant.id)}
-                        className="shrink-0 text-brown-500/70 hover:text-[#8a4a3f]"
+                        className="shrink-0 cursor-pointer text-brown-500/70 hover:text-[#8a4a3f]"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -96,7 +96,7 @@ export function CartDrawer() {
                           onClick={() =>
                             updateQuantity(item.product.id, item.variant.id, item.quantity - 1)
                           }
-                          className="flex size-7 items-center justify-center text-green-950 hover:bg-green-950/5"
+                          className="flex size-7 cursor-pointer items-center justify-center text-green-950 hover:bg-green-950/5"
                         >
                           <Minus size={12} />
                         </button>
@@ -108,7 +108,7 @@ export function CartDrawer() {
                           onClick={() =>
                             updateQuantity(item.product.id, item.variant.id, item.quantity + 1)
                           }
-                          className="flex size-7 items-center justify-center text-green-950 hover:bg-green-950/5"
+                          className="flex size-7 cursor-pointer items-center justify-center text-green-950 hover:bg-green-950/5"
                         >
                           <Plus size={12} />
                         </button>

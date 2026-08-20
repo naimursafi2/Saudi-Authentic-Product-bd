@@ -57,7 +57,7 @@ export function CustomerSidebar({
               type="button"
               onClick={() => onTabChange(item.id)}
               className={cn(
-                "group relative flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all duration-150",
+                "group relative flex shrink-0 cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all duration-150",
                 active ? "bg-white/10 text-white" : "text-cream-100/65 hover:bg-white/5 hover:text-white"
               )}
             >
@@ -84,7 +84,7 @@ export function CustomerSidebar({
       <button
         type="button"
         onClick={onLogout}
-        className="flex items-center justify-center gap-2 rounded-xl bg-green-950 px-3 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition-colors hover:bg-green-900"
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-green-950 px-3 py-3 text-sm font-bold uppercase tracking-[0.06em] text-white transition-colors hover:bg-green-900"
       >
         <LogOut size={16} /> Logout
       </button>

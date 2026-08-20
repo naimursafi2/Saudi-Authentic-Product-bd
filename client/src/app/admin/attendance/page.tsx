@@ -132,7 +132,7 @@ export default function AdminAttendancePage() {
                     <button
                       aria-label="Edit"
                       onClick={() => setEditing(record)}
-                      className="text-brown-500 hover:text-green-950"
+                      className="cursor-pointer text-brown-500 hover:text-green-950"
                     >
                       <Pencil size={15} />
                     </button>

@@ -82,7 +82,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: ScrollText,
     roles: ["co_admin", "order_manager", "admin", "super_admin"],
   },
-  { href: "/admin/homepage", label: "Homepage", icon: LayoutPanelTop, roles: ["admin", "super_admin"] },
+  {
+    href: "/admin/homepage",
+    label: "Homepage",
+    icon: LayoutPanelTop,
+    roles: ["co_admin", "admin", "super_admin"],
+  },
   { href: "/admin/navigation", label: "Navigation", icon: Compass, roles: ["admin", "super_admin"] },
   { href: "/admin/footer", label: "Footer", icon: PanelBottom, roles: ["admin", "super_admin"] },
   { href: "/admin/pages", label: "Pages", icon: FileText, roles: ["admin", "super_admin"] },

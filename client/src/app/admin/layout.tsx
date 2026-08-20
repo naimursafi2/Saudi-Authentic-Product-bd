@@ -24,7 +24,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
           </p>
           <button
             onClick={logout}
-            className="flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-cream-100/80 hover:bg-white/10"
+            className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm font-medium text-cream-100/80 hover:bg-white/10"
           >
             <LogOut size={16} /> Sign Out
           </button>

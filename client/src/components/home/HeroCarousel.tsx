@@ -112,7 +112,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlideData[] }) {
             type="button"
             aria-label="Previous slide"
             onClick={() => goTo(active - 1)}
-            className="absolute left-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition-colors hover:bg-white/25 sm:flex lg:left-6"
+            className="absolute left-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition-colors hover:bg-white/25 sm:flex lg:left-6"
           >
             <ChevronLeft size={20} />
           </button>
@@ -120,7 +120,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlideData[] }) {
             type="button"
             aria-label="Next slide"
             onClick={() => goTo(active + 1)}
-            className="absolute right-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition-colors hover:bg-white/25 sm:flex lg:right-6"
+            className="absolute right-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition-colors hover:bg-white/25 sm:flex lg:right-6"
           >
             <ChevronRight size={20} />
           </button>
@@ -132,7 +132,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlideData[] }) {
                 aria-label={`Go to slide ${index + 1}`}
                 onClick={() => goTo(index)}
                 className={cn(
-                  "h-1.5 rounded-full transition-all",
+                  "h-1.5 cursor-pointer rounded-full transition-all",
                   index === active ? "w-7 bg-gold-500" : "w-1.5 bg-white/50 hover:bg-white/70"
                 )}
               />

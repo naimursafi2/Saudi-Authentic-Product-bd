@@ -17,11 +17,11 @@ const router = Router();
 // -- Public --
 router.get("/", validate({ query: listHomepageSectionsQuerySchema }), homepageSectionController.listSections);
 
-// -- Admin / Super Admin only --
+// -- Admin / Super Admin / Co-Admin can create + update; delete stays Admin / Super Admin only --
 router.post(
   "/",
   authenticate,
-  authorize("admin", "super_admin"),
+  authorize("admin", "super_admin", "co_admin"),
   upload.single("image"),
   validate({ body: createHomepageSectionSchema }),
   homepageSectionController.createSection
@@ -29,7 +29,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
-  authorize("admin", "super_admin"),
+  authorize("admin", "super_admin", "co_admin"),
   upload.single("image"),
   parseMultipartJsonFields(["blocks"]),
   validate({ params: mongoIdParamSchema, body: updateHomepageSectionSchema }),

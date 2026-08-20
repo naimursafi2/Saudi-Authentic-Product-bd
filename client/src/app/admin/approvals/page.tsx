@@ -263,7 +263,7 @@ export default function AdminApprovalsPage() {
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
+              className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
                 statusFilter === s ? "bg-green-900 text-white" : "bg-cream-300 text-brown-600"
               }`}
             >
@@ -328,7 +328,7 @@ export default function AdminApprovalsPage() {
                             aria-label="Grant"
                             disabled={actingId === action._id}
                             onClick={() => handleGrant(action)}
-                            className="text-green-900 hover:text-green-950 disabled:opacity-50"
+                            className="cursor-pointer text-green-900 hover:text-green-950 disabled:opacity-50"
                           >
                             <Check size={16} />
                           </button>
@@ -336,7 +336,7 @@ export default function AdminApprovalsPage() {
                             aria-label="Deny"
                             disabled={actingId === action._id}
                             onClick={() => handleDeny(action)}
-                            className="text-[#8a4a3f] hover:text-[#6f3b32] disabled:opacity-50"
+                            className="cursor-pointer text-[#8a4a3f] hover:text-[#6f3b32] disabled:opacity-50"
                           >
                             <X size={16} />
                           </button>

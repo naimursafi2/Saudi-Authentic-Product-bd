@@ -87,7 +87,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
             e.preventDefault();
             toggleWishlist(product.id);
           }}
-          className="absolute right-3 top-3 flex size-7 items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-[#8a4a3f]"
+          className="absolute right-3 top-3 flex size-7 cursor-pointer items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-[#8a4a3f]"
         >
           <Heart size={14} className={wishlisted ? "fill-[#8a4a3f] text-[#8a4a3f]" : ""} />
         </button>
