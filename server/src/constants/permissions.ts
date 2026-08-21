@@ -47,6 +47,14 @@ export const PERMISSIONS = [
   "inventory.logs.view",
   "inventory.manage",
 
+  // -- Purchasing & shops --
+  "shops.view",
+  "shops.manage",
+  "purchases.view",
+  "purchases.create",
+  "purchases.edit",
+  "purchases.delete",
+
   // -- Staff & customers --
   "employees.view",
   "employees.manage",
@@ -142,6 +150,17 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
       { key: "inventory.view", label: "View live stock" },
       { key: "inventory.logs.view", label: "View stock logs & low-stock list" },
       { key: "inventory.manage", label: "Adjust stock" },
+    ],
+  },
+  {
+    group: "Purchasing & Shops",
+    permissions: [
+      { key: "shops.view", label: "View shops" },
+      { key: "shops.manage", label: "Create, edit & assign shops" },
+      { key: "purchases.view", label: "View purchase batches & their costs" },
+      { key: "purchases.create", label: "Record purchase batches" },
+      { key: "purchases.edit", label: "Edit purchases & their cost items" },
+      { key: "purchases.delete", label: "Delete purchase batches" },
     ],
   },
   {
@@ -277,6 +296,13 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "inventory.view",
     "inventory.logs.view",
     "inventory.manage",
+    // Purchasing: a Co-Admin records purchases and their cost items, but only
+    // for the shops assigned to them (purchase.service.ts scopes every read
+    // and write to `User.assignedShops`) and never deletes one.
+    "shops.view",
+    "purchases.view",
+    "purchases.create",
+    "purchases.edit",
     "employees.view",
     "attendance.view",
     "attendance.manage",
@@ -316,6 +342,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "inventory.view",
     "inventory.logs.view",
     "inventory.manage",
+    "shops.view",
+    "shops.manage",
+    "purchases.view",
+    "purchases.create",
+    "purchases.edit",
+    "purchases.delete",
     "employees.view",
     "employees.manage",
     "attendance.view",

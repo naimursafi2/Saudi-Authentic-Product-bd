@@ -63,6 +63,9 @@ export interface ApiUser {
   lockedUntil?: string;
   addresses: ApiAddress[];
   staffMeta?: ApiStaffMeta;
+  /** Shops this staff member may record/view purchases for. Ids as returned
+   * by `GET /users`; populated shop documents from `GET /shops/users/:id`. */
+  assignedShops?: (string | ApiShop)[];
   createdAt: string;
   updatedAt: string;
 }
@@ -532,4 +535,75 @@ export interface FinanceSummary {
   netProfitBDT: number;
   cashBalanceBDT: number;
   expensesByCategory: Record<ExpenseCategory, number>;
+}
+
+// -- Purchasing: shops, purchase batches & flexible landed costs --
+
+export interface ApiShop {
+  _id: string;
+  name: string;
+  code: string;
+  location?: string;
+  note?: string;
+  isActive: boolean;
+  createdBy: string | { _id: string; name: string; email: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One free-text cost attached to a purchase. There is no category enum here
+ * on purpose — see `server/src/models/Purchase.model.ts`. */
+export interface ApiPurchaseCostItem {
+  _id: string;
+  name: string;
+  amountBDT: number;
+  note?: string;
+  proof?: { url: string; publicId: string };
+  addedBy: string | { _id: string; name: string; email: string };
+  addedAt: string;
+}
+
+export type PurchaseStatus = "draft" | "awaiting_stock_approval" | "received" | "cancelled";
+
+export interface ApiPurchase {
+  _id: string;
+  reference: string;
+  shop: string | { _id: string; name: string; code: string; isActive: boolean };
+  product?: string | { _id: string; name: string; slug: string; images: ApiProductImage[] };
+  variantId?: string;
+  variantLabel?: string;
+  itemName: string;
+  supplierName?: string;
+  purchasedAt: string;
+  quantity: number;
+  unit: string;
+  productCostBDT: number;
+  costItems: ApiPurchaseCostItem[];
+  note?: string;
+  status: PurchaseStatus;
+  stockPendingActionId?: string;
+  receivedAt?: string;
+  recordedBy: string | { _id: string; name: string; email: string };
+  recordedByRole: Role;
+  /** Derived server-side on every read (Mongoose virtuals) — never stored. */
+  additionalCostBDT: number;
+  totalLandedCostBDT: number;
+  unitCostBDT: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductCostHistory {
+  purchases: ApiPurchase[];
+  totalQuantity: number;
+  totalLandedCostBDT: number;
+  averageUnitCostBDT: number;
+}
+
+export interface ApiUserShopAssignment {
+  _id: string;
+  name: string;
+  email: string;
+  role: Role;
+  assignedShops: ApiShop[];
 }

@@ -12,6 +12,19 @@ export function formatBDT(amount: number): string {
   return `৳ ${formatted}`;
 }
 
+/**
+ * Like `formatBDT` but keeps two decimals. Used for derived per-unit
+ * figures — a landed unit cost of 412.50 rounds to 413 under `formatBDT`,
+ * which hides exactly the difference the cost breakdown exists to show.
+ */
+export function formatBDTPrecise(amount: number): string {
+  const formatted = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `৳ ${formatted}`;
+}
+
 export function slugify(value: string): string {
   return value
     .toLowerCase()

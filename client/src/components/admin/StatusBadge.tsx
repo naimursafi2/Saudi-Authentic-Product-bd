@@ -7,6 +7,7 @@ const PALETTE: Record<string, string> = {
   todo: "bg-cream-300 text-brown-600",
   scheduled: "bg-cream-300 text-brown-600",
   pending_review: "bg-cream-300 text-brown-600",
+  draft: "bg-cream-300 text-brown-600",
   // in-progress / informational
   processing: "bg-gold-soft text-gold-700",
   packed: "bg-gold-soft text-gold-700",
@@ -15,12 +16,14 @@ const PALETTE: Record<string, string> = {
   late: "bg-gold-soft text-gold-700",
   half_day: "bg-gold-soft text-gold-700",
   pending_approval: "bg-gold-soft text-gold-700",
+  awaiting_stock_approval: "bg-gold-soft text-gold-700",
   // positive / complete
   delivered: "bg-brand-deep-2 text-white",
   done: "bg-brand-deep-2 text-white",
   paid: "bg-brand-deep-2 text-white",
   approved: "bg-brand-deep-2 text-white",
   granted: "bg-brand-deep-2 text-white",
+  received: "bg-brand-deep-2 text-white",
   present: "bg-success-soft text-green-900",
   shipped: "bg-success-soft text-green-900",
   active: "bg-success-soft text-green-900",

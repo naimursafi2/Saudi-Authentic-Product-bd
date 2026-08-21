@@ -70,6 +70,8 @@ Register every new router in `routes/index.ts`.
 | `/expenses` | `GET /`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject` | list/create: `co_admin`,`admin`,`super_admin` (co_admin scoped to own submissions); confirm/reject: `admin`,`super_admin` only |
 | `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` — a `customer` viewer is force-scoped server-side to their own refunds (same pattern as `co_admin`'s own-submissions scoping), which is what powers the account portal's per-order refund status; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
 | `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot | `finance.view` (`admin`,`super_admin` by default) — `co_admin` finance visibility is off by default per the spec |
+| `/shops` | `GET /` (scoped list), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` and `PATCH /users/:userId` (a staff member's shop assignment) | list: `shops.view`; create/update/delete/assign: `shops.manage` (`admin`,`super_admin` by default). A caller without `shops.manage` only ever sees the shops in their own `User.assignedShops` — see "Purchasing: shops, batches & flexible landed costs" below |
+| `/purchases` | `GET /`, `GET /:id`, `POST /` (multipart), `PATCH /:id`, `PATCH /:id/receive`, `PATCH /:id/cancel`, `DELETE /:id`, the cost-item endpoints `POST /:id/costs` / `PATCH /:id/costs/:costId` / `DELETE /:id/costs/:costId`, and `GET /product/:productId` (per-product landed-cost history) | view: `purchases.view`; create: `purchases.create`; edit/costs/receive/cancel: `purchases.edit`; delete: `purchases.delete` (`co_admin` deliberately lacks it). Every read and write is additionally shop-scoped |
 | `/roles` | `GET /permissions` (the permission catalogue, grouped + labelled), `GET /` (all roles with assigned-user counts), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` (one user's effective permissions) and `PATCH /users/:userId` (assign/clear a custom role) | read: `roles.view`; author roles: `roles.manage`; assign a role to a person: `employees.manage` — see "Roles & permissions" below for the guards the service adds on top |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
@@ -438,7 +440,7 @@ list view (reachable by every admin-portal role plus `order_manager`).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -505,6 +507,106 @@ breakdown.
   `OrderHistory` gets that status by calling the same `GET /refunds` the
   admin page uses — the endpoint force-scopes a `customer` viewer to their
   own refunds server-side, so no per-order lookup endpoint was needed.
+
+#### Purchasing: shops, batches & flexible landed costs
+
+Every purchase is recorded as its own batch with its own cost breakdown, so
+the real cost of the goods on the shelf is a fact the system can answer rather
+than an estimate someone keeps in a spreadsheet.
+
+**The additional-cost system is completely open-ended, and that is the whole
+point.** `Purchase.costItems[]` holds `{name, amountBDT, note?, proof?,
+addedBy, addedAt}` — **there is no category enum and no predefined list of
+cost types, and none may be added**. The cost's identity is the free text the
+person recording it types, so a dates batch ("Shipping", "Customs",
+"Transport") and a watch batch ("Parts", "Repair", "Supplier Fee") both work
+with no code change, and a product category nobody has thought of yet works
+too. A purchase can carry any number of cost items. `Expense.category` is the
+fixed-taxonomy model and is a *separate* concern (ongoing operational spend,
+not per-batch landed cost) — the two are not merged and the enum from one must
+not leak into the other.
+
+The maths is **derived on every read, never stored** — Mongoose virtuals on
+`Purchase`, the same reasoning as `computeCouponStatus()`: a stored total goes
+stale the moment a cost is added, edited or removed, with no way to notice.
+
+```
+additionalCostBDT   = sum of every costItems[].amountBDT
+totalLandedCostBDT  = productCostBDT + additionalCostBDT
+unitCostBDT         = totalLandedCostBDT / quantity
+```
+
+Adding a cost item is therefore the only write; the totals follow. `formatBDT`
+rounds to whole taka, so the per-unit figure is rendered with
+`formatBDTPrecise` (`lib/utils.ts`) — 412.50 rounding to 413 would hide
+exactly the difference the breakdown exists to show.
+
+**Batches are kept separately, permanently.** `GET /purchases/product/:productId`
+returns every *received* batch of a product newest-first with the unit cost
+each one actually worked out to, plus a `averageUnitCostBDT` weighted across
+them (not the mean of the per-batch unit costs). Nothing averages a single
+"cost price" onto the product document, so a price rise between shipments stays
+visible. Once a purchase is `received` its cost breakdown is **immutable** —
+`assertEditable()` rejects any cost-item write, and the batch cannot be
+deleted or cancelled. A correction is a new batch, the same rule the
+append-only `Investment` ledger follows.
+
+**Proof images**: each cost item may carry one receipt photo, uploaded through
+the existing `upload` middleware and `uploadBufferToCloudinary()` (folder
+`saudi-authentic-product/purchase-proofs`) — no parallel upload path. On
+`POST /purchases` the up-front cost items' files arrive as `costProof0`,
+`costProof1`, … so an item *without* a receipt doesn't shift the ones after it
+onto the wrong index; that route inherits the shared 5MB/6-file limits, and a
+batch needing more receipts adds them one at a time through `POST /:id/costs`,
+which is unlimited.
+
+**Status pipeline**: `draft` → (`awaiting_stock_approval`) → `received`, plus
+`cancelled`. A `draft` is freely editable; `cancelled` and `received` are not.
+
+**Receiving moves stock, so it goes through the existing approval gate rather
+than around it.** `PATCH /purchases/:id/receive` on a batch linked to a
+catalogue variant applies `+quantity` immediately **only** for `super_admin`;
+every other role (Admin included) gets `202 {pendingActionId}`, the batch sits
+at `awaiting_stock_approval`, and the live count is untouched until a Super
+Admin grants it — identical to the rule in "Stock-change approval gate" above.
+The action type is `purchase.receive` and its handler is registered at the
+bottom of `purchase.service.ts` (the service imports `pendingAction.service`
+to *request* a grant, so the reverse import would be circular). The movement
+is written to `InventoryLog` with the new reason `purchase_received` rather
+than `manual_adjustment`, so a receipt is distinguishable from a correction in
+the stock history. A purchase with **no** catalogue link has no stock to move
+and is simply marked received — that is the path for packaging, consumables
+and anything else not in the catalogue.
+
+**Shop scoping** (`Shop` model, `User.assignedShops[]`,
+`shop.service.ts#resolveShopScope`): `super_admin` — and any role holding
+`shops.manage`, which is `admin` by default — sees and manages every shop.
+Everyone else, Co-Admin included, is scoped server-side to the shops listed in
+their own `User.assignedShops`, on every read *and* every write: a shop filter
+in the query string narrows that scope but can never widen it, and recording a
+purchase against an unassigned shop is a 403. The scope **fails closed** —
+returning an empty array is meaningful and different from "no restriction", so
+a staff member nobody has assigned a shop to sees nothing rather than
+everything. A shop can't be deleted while purchases reference it or staff are
+assigned to it (deactivate it instead), because those purchases carry the cost
+history the module exists to preserve. `npm run seed` creates one default shop
+(code `MAIN`) so the module is usable immediately.
+
+Frontend: `/admin/purchases` is the batch list (shop/status filters, a row per
+batch showing landed cost and unit cost) with a detail modal carrying
+`PurchaseSummary` (the maths spelled out, not reduced to one number) and
+`PurchaseCostEditor` (add/edit/remove costs, view receipts). `/admin/shops` is
+shop CRUD plus the per-staff assignment picker. Both are nav-gated by
+`purchases.view` / `shops.view`; as everywhere else in this project that is
+visibility polish, and `requirePermission(...)` plus the shop scope on the
+route are the real boundary.
+
+**Deliberately not wired into `/finance`.** `getFinanceSummary` derives its
+expense total from confirmed `Expense` documents; auto-logging a purchase
+there as well would double-count anything a user also recorded as an expense.
+Purchase costs are landed-cost accounting for a batch, and the finance summary
+is operational spend — joining them is a decision for whoever owns the
+finance model, not a side effect of this module.
 
 #### Homepage content management (not a general CMS)
 
@@ -923,7 +1025,7 @@ locking in the `order_manager`/`delivery_agent` role strings), plus
 HTTP-through-Mongoose integration specs (`auth`, `emailVerification`,
 `catalog`, `order`, `orderStatus`, `task`, `coupon`, `approvalGate`,
 `stockApproval`, `finance`, `security`, `notification`, `siteSettings`,
-`heroSlide`, `permissions`) run against an
+`heroSlide`, `permissions`, `purchase`) run against an
 actual in-memory MongoDB via `mongodb-memory-server`
 (`tests/integration/setup.ts` starts/stops it and wipes collections between
 tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
@@ -959,7 +1061,14 @@ different stock action types, and the flag clearing plus the audit note once
 one side is granted — plus the title/description half:
 immediate application, field-level old/new audit entries naming only what
 changed, no entry for a no-op submit, and super-admin visibility at
-`/audit-logs`), and
+`/audit-logs`), `purchase.integration.test.ts` (the landed-cost maths over
+arbitrarily-named cost items — including two batches whose cost vocabularies
+share nothing — totals recomputing as costs are added and removed, per-batch
+history with a weighted average unit cost, the receipt path through the stock
+approval gate for both `super_admin` and `admin`, an unlinked batch receiving
+without touching stock, a received batch refusing further cost edits, shop
+scoping including a scoped viewer failing closed with no assignment and being
+unable to widen scope with a `?shop=` filter, and the RBAC matrix), and
 `finance.integration.test.ts` (investment RBAC, co_admin expense submission
 + threshold-gated confirmation, a full refund walk from request through
 Order-Manager review to Admin approval — including the above-threshold
@@ -1092,7 +1201,10 @@ create/update requests may come back as a pending-approval notice instead
 of an immediate save), `/admin/customers`, `/admin/reviews`,
 `/admin/employees` (each staff row has an **Access** action — assign a custom role, review the person's effective permissions), `/admin/roles` (Roles & Permissions management — create/edit/delete custom roles, assign permissions; visible with `roles.view`, editable with `roles.manage`), `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
-`/admin/inventory`, `/admin/reports`, `/admin/finance` (revenue/expense/
+`/admin/inventory`, `/admin/purchases` (purchase batches + their fully
+custom cost breakdowns — see "Purchasing: shops, batches & flexible landed
+costs" above), `/admin/shops` (shops + per-staff shop assignment; the
+assignment picker needs `shops.manage`), `/admin/reports`, `/admin/finance` (revenue/expense/
 investment/profit-loss summary, nav-hidden from co_admin),
 `/admin/investments` (nav-hidden from co_admin), `/admin/expenses`
 (reachable by co_admin — scoped to their own submissions), `/admin/approvals`
@@ -1535,6 +1647,15 @@ catch-all rewrite here.
   `createPendingAction()` at the point where the gate should trigger. Any
   new Super-Admin-editable numeric threshold belongs on `ApprovalSettings`,
   never hardcoded.
+- **Never add a fixed category/type enum to `Purchase.costItems[]`.** Cost
+  names are free text so that any product's cost structure fits without a
+  code change — see "Purchasing: shops, batches & flexible landed costs".
+  The fixed-taxonomy model is `Expense.category`, which is a separate
+  concern; don't merge the two or copy one's enum into the other.
+- Any new read or write over `Purchase`/`Shop` must go through
+  `shop.service.ts#resolveShopScope` (or `assertShopAccess`) rather than
+  querying the collections directly — that single function is where the
+  "Co-Admin only sees assigned shops" boundary lives, and it fails closed.
 - Call `recordAuditLog()` (`services/auditLog.service.ts`) for any new
   sensitive action outside what `InventoryLog`/`Order.statusHistory` already
   cover (role/status changes, financial approvals, settings changes,
@@ -1600,11 +1721,12 @@ catch-all rewrite here.
   integrated.
 - **The approval-gate system covers a fixed, spec-defined list of actions**
   (`coupon.create`/`.update`, `product.delete`, `product.stock.update`,
-  `inventory.adjust`, `refund.request`/`.approve`, `expense.confirm`) — role
+  `inventory.adjust`, `refund.request`/`.approve`, `expense.confirm`,
+  `purchase.receive`) — role
   changes, settings changes, product content edits, and other sensitive
   actions are audit-*logged* (see "Approval-gate system & audit logging"
   above) but are **not** routed through the Grant-Based Approval Workflow;
-  only the eight action types above create a `PendingAction`.
+  only the nine action types above create a `PendingAction`.
 - **A queued stock change is still not *locked* against concurrent edits** —
   two staff members can each queue a change to the same variant and both
   apply in grant order (`inventory.adjust` deltas compose correctly;
@@ -1627,6 +1749,23 @@ catch-all rewrite here.
   per-user notification-preference model, no in-app inbox, and no
   digest/batching — a busy day means one email per order to every
   order-owning staff account.
+- **Purchase costs are not fed into the finance summary.** `GET
+  /finance/summary` still derives its expense total from confirmed
+  `Expense` documents only; a purchase batch's landed cost is not
+  auto-logged as an expense, because a user who records both would be
+  double-counted. Landed cost is per-batch cost accounting and the finance
+  summary is operational spend — joining them is a deliberate decision left
+  open, not an oversight.
+- **A purchase's cost breakdown is immutable once received, with no
+  correction path** — no edit, no reversal, no delete; the intended fix is a
+  new batch (the `Investment` ledger's rule). If a batch is received with a
+  wrong quantity, the stock it added is corrected through the normal
+  `POST /inventory/adjust` gate, and the purchase record keeps the number it
+  was received with.
+- **Shop assignment is per user and additive only** — there is no per-shop
+  deny list and no way to give someone every shop *except* one; unrestricted
+  access is all-or-nothing via `shops.manage`. Same shape as the custom-role
+  limitation above.
 - **Cart/wishlist don't persist server-side or cross-device** — they're
   `localStorage`-only (see "Cart & wishlist are client-side only" above).
 - **No `frontend/src/middleware.ts`** — route protection is entirely

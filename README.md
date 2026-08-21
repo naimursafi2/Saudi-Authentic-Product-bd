@@ -93,7 +93,9 @@ form or state-management library — forms/data fetching are hand-rolled with
   routed through the approval-gate system below), customers, reviews,
   employees, attendance, leave, tasks (categorized by task type),
   performance, salary & payments (admin/super_admin only), inventory (stock
-  adjustments + audit log), reports (sales summary), finance (revenue/
+  adjustments + audit log), purchases (purchase batches with unlimited
+  custom cost items and automatic landed-/unit-cost maths), shops (sourcing
+  outlets plus per-staff shop assignment), reports (sales summary), finance (revenue/
   expense/investment/profit-loss summary, admin/super_admin only),
   investments (append-only investor ledger, admin/super_admin can view,
   super_admin can record), expenses (co_admin can submit — auto-confirmed
@@ -213,6 +215,27 @@ form or state-management library — forms/data fetching are hand-rolled with
   from the existing sales-report calculation, not duplicated), total
   investment, total confirmed expenses (by category), and net profit/loss —
   all admin/super_admin only.
+- **Purchasing with fully flexible additional costs** — every purchase is
+  recorded as its own batch (shop, optional catalogue product/variant,
+  supplier, quantity, product cost) and carries **any number of custom cost
+  items**, each just a name you type yourself, an amount, an optional note
+  and an optional receipt photo. There is deliberately **no fixed list of
+  expense types**: a dates batch might carry Shipping, Customs and
+  Transport, a watch batch Parts, Repair and a Supplier Fee, and a future
+  product something else entirely — all with no code change. The system
+  computes `Product Cost + all custom costs = Total Landed Cost` and
+  `Total Landed Cost / Quantity = Actual Unit Cost` on every read, so the
+  numbers can never drift from the cost list beside them, and each batch is
+  kept separately (with a weighted average across batches) so a price rise
+  between shipments stays visible instead of being averaged away. Receiving
+  a batch that is linked to a catalogue variant adds its quantity to live
+  stock **through the existing Super-Admin approval gate**, exactly like
+  every other stock change; a batch with no catalogue link (packaging,
+  consumables) is simply marked received. Once received, a batch's cost
+  breakdown is immutable — a correction is a new batch. Super Admin sees and
+  manages everything; Co-Admin is scoped server-side to the shops assigned
+  to them, on reads and writes alike, and sees nothing at all until someone
+  assigns them one.
 - **Homepage content management** — admin-editable hero slides (image,
   title, subtitle, a primary and an optional secondary CTA, sort order,
   active flag) and a fixed set of eight homepage section types (hero, trust
@@ -396,10 +419,17 @@ machine.
   API access and stops the moment it is deactivated, that an Admin cannot
   grant a permission they lack or re-permission a built-in role, that a Super
   Admin's edit applies on the very next request, and that built-in or
-  still-assigned roles cannot be deleted) run with `supertest` against an
-  actual in-memory MongoDB via `mongodb-memory-server`. 177 tests across 26
-  suites passing as of the roles-and-permissions build. Coverage is still
-  partial, not exhaustive.
+  still-assigned roles cannot be deleted); and the purchasing module — the
+  landed-cost maths over arbitrarily-named cost items (including two batches
+  whose cost vocabularies share nothing), totals recomputing as costs are
+  added and removed, per-batch history with a weighted average unit cost,
+  receipt through the stock approval gate for both Super Admin and Admin, an
+  unlinked batch receiving without touching stock, a received batch refusing
+  further cost edits, and shop scoping — a scoped viewer failing closed with
+  no assignment and unable to widen scope with a `?shop=` filter — run with
+  `supertest` against an actual in-memory MongoDB via
+  `mongodb-memory-server`. 198 tests across 27 suites passing as of the
+  purchasing build. Coverage is still partial, not exhaustive.
 - **Frontend**: `npm test` runs Vitest (`vitest.config.mts`, jsdom
   environment) with React Testing Library. Covers pure-logic modules
   (`lib/utils`, `lib/passwordStrength`, `lib/mappers`, `lib/stock`), one
@@ -454,12 +484,25 @@ missing/malformed):
   `Order.isPaid` for them; only a `cod` order that reaches `delivered` gets
   marked paid. Treat non-COD checkout as UI-only until a real gateway is
   wired up.
-- The approval-gate system covers a fixed, spec-defined list of eight action
+- The approval-gate system covers a fixed, spec-defined list of nine action
   types (coupon create/update, product deletion, product stock update,
-  inventory adjustment, refund request/approval, expense confirmation) —
+  inventory adjustment, refund request/approval, expense confirmation,
+  purchase receipt) —
   role changes, settings changes, product content edits, and other
   sensitive actions are audit-logged but do not go through the
   grant/deny `PendingAction` queue.
+- Purchase costs are not fed into the finance summary — `/admin/finance`
+  still totals confirmed `Expense` documents only, because auto-logging a
+  batch's landed cost there would double-count anything the user also
+  recorded as an expense. Landed cost is per-batch cost accounting; the
+  finance summary is operational spend.
+- A purchase's cost breakdown is immutable once the batch is received —
+  there is no edit, reversal or delete, and the intended correction is a new
+  batch. A wrong received quantity is fixed through the normal inventory
+  adjustment gate, and the purchase keeps the number it was received with.
+- Shop assignment is per user and additive only — there is no per-shop deny
+  list and no "every shop except one"; unrestricted access is all-or-nothing
+  via the `shops.manage` permission.
 - Two queued stock changes to the same variant are flagged for the reviewer
   but not locked — both still apply in grant order (deltas compose; absolute
   updates are last-grant-wins). Nothing blocks the grant or auto-supersedes

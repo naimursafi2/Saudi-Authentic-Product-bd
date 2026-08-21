@@ -50,7 +50,13 @@ export async function recordStockChange(input: RecordStockChangeInput): Promise<
  */
 async function applyStockDelta(
   actorId: string,
-  input: { productId: string; variantId: string; delta: number; note?: string }
+  input: {
+    productId: string;
+    variantId: string;
+    delta: number;
+    note?: string;
+    reason?: InventoryLogReason;
+  }
 ) {
   const product = await ProductModel.findById(input.productId);
   if (!product) throw ApiError.notFound("Product not found");
@@ -70,12 +76,31 @@ async function applyStockDelta(
     variantLabel: variant.label,
     delta: input.delta,
     balanceAfter: newStock,
-    reason: "manual_adjustment",
+    reason: input.reason ?? "manual_adjustment",
     note: input.note,
     actor: actorId,
   });
 
   return product;
+}
+
+/**
+ * Stock arriving from a received purchase batch. Separate from
+ * `adjustStock` only so the movement is logged as `purchase_received`
+ * rather than a manual correction — the gating decision itself lives in
+ * `purchase.service.ts`, which also has to flip the purchase's own status.
+ */
+export async function applyPurchaseStock(
+  actorId: string,
+  input: { productId: string; variantId: string; quantity: number; note?: string }
+) {
+  return applyStockDelta(actorId, {
+    productId: input.productId,
+    variantId: input.variantId,
+    delta: input.quantity,
+    note: input.note,
+    reason: "purchase_received",
+  });
 }
 
 /**

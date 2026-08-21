@@ -27,6 +27,8 @@ import expenseRoutes from "./expense.routes";
 import refundRoutes from "./refund.routes";
 import financeRoutes from "./finance.routes";
 import roleRoutes from "./role.routes";
+import shopRoutes from "./shop.routes";
+import purchaseRoutes from "./purchase.routes";
 
 const router = Router();
 
@@ -58,5 +60,7 @@ router.use("/expenses", expenseRoutes);
 router.use("/refunds", refundRoutes);
 router.use("/finance", financeRoutes);
 router.use("/roles", roleRoutes);
+router.use("/shops", shopRoutes);
+router.use("/purchases", purchaseRoutes);
 
 export default router;

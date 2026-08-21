@@ -17,6 +17,7 @@ export const PENDING_ACTION_TYPES = [
   "refund.request",
   "refund.approve",
   "expense.confirm",
+  "purchase.receive",
 ] as const;
 export type PendingActionType = (typeof PENDING_ACTION_TYPES)[number];
 

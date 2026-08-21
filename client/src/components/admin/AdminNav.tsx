@@ -29,6 +29,8 @@ import {
   Undo2,
   ShieldCheck,
   ScrollText,
+  Store,
+  Truck,
   CircleUser,
   KeyRound,
 } from "lucide-react";
@@ -84,6 +86,8 @@ const NAV_ITEMS: NavItem[] = [
     icon: Boxes,
     permissions: ["inventory.logs.view", "inventory.manage"],
   },
+  { href: "/admin/purchases", label: "Purchases", icon: Truck, permissions: ["purchases.view"] },
+  { href: "/admin/shops", label: "Shops", icon: Store, permissions: ["shops.view"] },
   { href: "/admin/reports", label: "Reports", icon: BarChart3, permissions: ["reports.view"] },
   { href: "/admin/finance", label: "Finance", icon: Landmark, permissions: ["finance.view"] },
   { href: "/admin/investments", label: "Investments", icon: PiggyBank, permissions: ["investments.view"] },

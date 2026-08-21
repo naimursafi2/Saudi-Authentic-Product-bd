@@ -40,6 +40,14 @@ export interface IUser extends Document {
   tokenVersion: number;
   addresses: IAddress[];
   staffMeta?: IStaffMeta;
+  /**
+   * Shops this staff member may record and view purchases for. Empty (the
+   * default) means no shop access at all for a scoped role — a Co-Admin with
+   * no assignment sees an empty purchase list rather than everything. Roles
+   * holding `shops.manage` bypass this entirely; see
+   * `purchase.service.ts#resolveShopScope`.
+   */
+  assignedShops: Types.ObjectId[];
   failedLoginAttempts: number;
   lockedUntil?: Date;
   lastSeenAt?: Date;
@@ -99,6 +107,7 @@ const userSchema = new Schema<IUser>(
     tokenVersion: { type: Number, default: 0 },
     addresses: { type: [addressSchema], default: [] },
     staffMeta: { type: staffMetaSchema },
+    assignedShops: [{ type: Schema.Types.ObjectId, ref: "Shop", index: true }],
     failedLoginAttempts: { type: Number, default: 0 },
     lockedUntil: { type: Date },
     lastSeenAt: { type: Date },
