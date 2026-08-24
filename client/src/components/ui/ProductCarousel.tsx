@@ -149,7 +149,6 @@ function getCurrentTranslateX(el: HTMLElement): number {
  * window position.
  */
 export function ProductCarousel({ products }: { products: Product[] }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const stepWidthRef = useRef(0);
   const positionPxRef = useRef(0);
@@ -297,7 +296,6 @@ export function ProductCarousel({ products }: { products: Product[] }) {
   return (
     <div>
       <div
-        ref={viewportRef}
         aria-roledescription={canSlide ? "carousel" : undefined}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
