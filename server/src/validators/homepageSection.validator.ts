@@ -9,12 +9,12 @@ const trustStripBlockSchema = z.object({
   isVisible: booleanish.optional().default(true),
 });
 
-/** Only `promoBanner` and `productShowcase` sections are freely creatable —
- * the five fixed types are lazily seeded and only ever updated (see
- * homepageSection.service.ts). */
+/** Only `promoBanner`, `productShowcase` and `banner` sections are freely
+ * creatable — the six fixed types are lazily seeded and only ever updated
+ * (see homepageSection.service.ts). */
 export const createHomepageSectionSchema = z
   .object({
-    type: z.enum(["promoBanner", "productShowcase"]),
+    type: z.enum(["promoBanner", "productShowcase", "banner"]),
     title: z.string().trim().max(160).optional(),
     subtitle: z.string().trim().max(240).optional(),
     description: z.string().trim().max(1000).optional(),

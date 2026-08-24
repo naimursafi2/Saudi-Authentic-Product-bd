@@ -2,17 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
-import { getSiteSettings, updateSiteSettings } from "@/lib/api/siteSettings";
+import { getSiteSettings, updateSiteSettings, updateSiteLogo } from "@/lib/api/siteSettings";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { SiteSettingsForm, type SiteSettingsFormValues } from "@/components/admin/SiteSettingsForm";
+import { BrandingLogoForm } from "@/components/admin/BrandingLogoForm";
 import type { ApiSiteSettings } from "@/types/api";
 
 export default function AdminSettingsPage() {
   const { hasPermission } = useAuth();
-  const isRestricted = !hasPermission("settings.manage");
+  const canManageSettings = hasPermission("settings.manage");
+  // Co-Admin holds this narrower permission instead — logo only, not the
+  // rest of site settings (see BrandingLogoForm's comment).
+  const canManageLogo = hasPermission("content.branding.manage");
+  const isRestricted = !canManageSettings && !canManageLogo;
 
   const [settings, setSettings] = useState<ApiSiteSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +61,21 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function handleLogoSubmit(logo: File) {
+    setFormError(null);
+    setIsSubmitting(true);
+    try {
+      const form = new FormData();
+      form.set("logo", logo);
+      const { data } = await updateSiteLogo(form);
+      setSettings(data.settings);
+    } catch (err) {
+      setFormError(err instanceof ApiClientError ? err.message : "Could not save logo.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   if (isRestricted) {
     return (
       <div>
@@ -73,15 +93,26 @@ export default function AdminSettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Site logo, branding, and the storefront's announcement bar."
+        description={
+          canManageSettings
+            ? "Site logo, branding, and the storefront's announcement bar."
+            : "Company logo."
+        }
       />
 
       {isLoading ? (
         <TableSkeleton rows={3} />
       ) : error || !settings ? (
         <ErrorState message={error ?? "Could not load site settings."} />
-      ) : (
+      ) : canManageSettings ? (
         <SiteSettingsForm settings={settings} error={formError} isSubmitting={isSubmitting} onSubmit={handleSubmit} />
+      ) : (
+        <BrandingLogoForm
+          settings={settings}
+          error={formError}
+          isSubmitting={isSubmitting}
+          onSubmit={handleLogoSubmit}
+        />
       )}
     </div>
   );

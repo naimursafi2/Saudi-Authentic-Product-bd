@@ -11,7 +11,7 @@ import type {
 } from "../validators/homepageSection.validator";
 
 const FOLDER = "saudi-authentic-product/homepage";
-const CREATABLE_TYPES: HomepageSectionType[] = ["promoBanner", "productShowcase"];
+const CREATABLE_TYPES: HomepageSectionType[] = ["promoBanner", "productShowcase", "banner"];
 
 /** Idempotent — safe to call on every list request. Only inserts docs that don't exist yet. */
 async function ensureDefaultSections() {

@@ -34,8 +34,14 @@ export const metadata: Metadata = {
  * wrapped in try/catch so storage being unavailable can never break the
  * page. `THEME_STORAGE_KEY` in context/ThemeContext.tsx must match the key
  * used here.
+ *
+ * Deliberately does NOT fall back to `prefers-color-scheme` — the default
+ * for a fresh visitor with no saved preference is always Light, regardless
+ * of their OS setting. The `<html>` tag below already carries
+ * `data-theme="light"` as its static default, so this script only needs to
+ * act when a saved preference actually says otherwise.
  */
-const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('sap:theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.dataset.theme=t;}catch(e){}})();`;
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('sap:theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t;}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

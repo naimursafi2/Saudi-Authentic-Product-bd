@@ -1,10 +1,14 @@
+import fs from "fs";
+import path from "path";
 import { connectDatabase, disconnectDatabase } from "../config/db";
 import { ensureSystemRoles } from "../services/role.service";
-import { env } from "../config/env";
+import { env, isCloudinaryConfigured } from "../config/env";
+import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { UserModel } from "../models/User.model";
 import { CategoryModel } from "../models/Category.model";
 import { ProductModel } from "../models/Product.model";
 import { HomepageSectionModel } from "../models/HomepageSection.model";
+import { HeroSlideModel } from "../models/HeroSlide.model";
 import { ShopModel } from "../models/Shop.model";
 import { slugify } from "../utils/slugify";
 
@@ -476,6 +480,77 @@ async function seed() {
     if (!result) showcaseCount += 1;
   }
   console.log(`${showcaseCount} homepage product-showcase sections created (rest already existed).`);
+
+  // -- Default homepage banner-carousel images (upsert by title; safe to
+  // re-run) — three so a fresh install's carousel already shows the
+  // "more than two banners" behaviour, not just the two-up desktop case.
+  // Admin/Co-Admin/Super Admin can still replace/add/remove/reorder them
+  // from /admin/homepage exactly like any other `banner`-type section.
+  // Skipped entirely when Cloudinary isn't configured, same guard the live
+  // upload endpoints use.
+  const BANNER_SEEDS = [
+    { title: "demo1", file: "banner1.png", sortOrder: 0.5 },
+    { title: "demo2", file: "banner2.png", sortOrder: 0.6 },
+    { title: "offer", file: "offer.png", sortOrder: 0.7 },
+  ];
+  if (isCloudinaryConfigured) {
+    let bannerCount = 0;
+    for (const banner of BANNER_SEEDS) {
+      const existing = await HomepageSectionModel.findOne({ type: "banner", title: banner.title });
+      if (existing) continue;
+      const filePath = path.join(__dirname, "assets", banner.file);
+      if (!fs.existsSync(filePath)) continue;
+      const buffer = fs.readFileSync(filePath);
+      const uploaded = await uploadBufferToCloudinary(buffer, {
+        folder: "saudi-authentic-product/homepage",
+      });
+      await HomepageSectionModel.create({
+        type: "banner",
+        title: banner.title,
+        image: { url: uploaded.url, publicId: uploaded.publicId },
+        isVisible: true,
+        sortOrder: banner.sortOrder,
+      });
+      bannerCount += 1;
+    }
+    console.log(`${bannerCount} homepage banners created (rest already existed).`);
+  } else {
+    console.log("Cloudinary not configured — skipped demo banner seeding.");
+  }
+
+  // -- Default homepage hero-carousel slides (upsert by title; safe to
+  // re-run). The storefront hero is image-only (no title/subtitle/CTA
+  // rendered — see HeroCarousel.tsx), so `title` here is purely an internal
+  // label for the admin table; it reuses the same "Premium Dates" artwork
+  // as the banner-carousel seeds above rather than duplicating image files.
+  // Skipped entirely when Cloudinary isn't configured, same guard as above.
+  const HERO_SLIDE_SEEDS = [
+    { title: "Premium Dates — Ramadan", file: "banner1.png", sortOrder: 0 },
+    { title: "Premium Dates — Nature's Gift", file: "banner2.png", sortOrder: 1 },
+  ];
+  if (isCloudinaryConfigured) {
+    let heroSlideCount = 0;
+    for (const slide of HERO_SLIDE_SEEDS) {
+      const existing = await HeroSlideModel.findOne({ title: slide.title });
+      if (existing) continue;
+      const filePath = path.join(__dirname, "assets", slide.file);
+      if (!fs.existsSync(filePath)) continue;
+      const buffer = fs.readFileSync(filePath);
+      const uploaded = await uploadBufferToCloudinary(buffer, {
+        folder: "saudi-authentic-product/hero",
+      });
+      await HeroSlideModel.create({
+        title: slide.title,
+        image: { url: uploaded.url, publicId: uploaded.publicId },
+        isActive: true,
+        sortOrder: slide.sortOrder,
+      });
+      heroSlideCount += 1;
+    }
+    console.log(`${heroSlideCount} homepage hero slides created (rest already existed).`);
+  } else {
+    console.log("Cloudinary not configured — skipped hero slide seeding.");
+  }
 
   // -- A default shop, so purchase batches can be recorded straight away.
   // Purchases require a shop, and shops are Super-Admin/Admin-created, so

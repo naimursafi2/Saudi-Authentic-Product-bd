@@ -78,6 +78,7 @@ const FIELD_VISIBILITY: Record<
     blocks: false,
   },
   promoBanner: { subtitle: false, description: true, image: true, cta: true, productShowcase: false, blocks: false },
+  banner: { subtitle: false, description: false, image: true, cta: false, productShowcase: false, blocks: false },
   productShowcase: {
     subtitle: true,
     description: false,

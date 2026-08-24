@@ -14,7 +14,12 @@ import { mongoIdParamSchema, slugParamSchema } from "../validators/common.valida
 
 const router = Router();
 
-const parseProductJsonFields = parseMultipartJsonFields(["categories", "variants", "highlights"]);
+const parseProductJsonFields = parseMultipartJsonFields([
+  "categories",
+  "variants",
+  "highlights",
+  "existingImages",
+]);
 
 // -- Public --
 router.get("/", validate({ query: listProductsQuerySchema }), productController.listProducts);

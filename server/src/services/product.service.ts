@@ -278,8 +278,30 @@ export async function updateProduct(
     }) as IProduct["variants"];
   }
 
-  if (images && images.length > 0) {
-    // Replacing the gallery — clean up the old images from Cloudinary.
+  if (input.existingImages) {
+    // Granular gallery edit: keep only images the admin round-tripped
+    // (identity matched by `publicId`, same "strict match, no grafting"
+    // rule as variant ids above — a foreign publicId can't be used to
+    // smuggle someone else's image into this product), in the order given,
+    // then append any newly uploaded files. Anything dropped from the kept
+    // list gets cleaned up from Cloudinary.
+    const keptPublicIds = new Set(input.existingImages.map((img) => img.publicId));
+    const currentByPublicId = new Map(product.images.map((img) => [img.publicId, img]));
+    const kept = input.existingImages
+      .filter((img) => currentByPublicId.has(img.publicId))
+      .map((img) => currentByPublicId.get(img.publicId)!);
+    const removed = product.images.filter((img) => !keptPublicIds.has(img.publicId));
+
+    if (kept.length + (images?.length ?? 0) > 6) {
+      throw ApiError.badRequest("A product can have at most 6 images");
+    }
+
+    await Promise.all(removed.map((img) => deleteCloudinaryImage(img.publicId)));
+    const uploaded = images && images.length > 0 ? await uploadProductImages(images) : [];
+    product.images = [...kept, ...uploaded] as IProduct["images"];
+  } else if (images && images.length > 0) {
+    // No `existingImages` sent — legacy wholesale replace: clean up every
+    // old image and swap in the newly uploaded set.
     await Promise.all(
       product.images.map((img) => deleteCloudinaryImage(img.publicId))
     );

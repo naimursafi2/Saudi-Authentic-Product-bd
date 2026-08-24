@@ -176,7 +176,8 @@ export type HomepageSectionType =
   | "productStory"
   | "customerReviews"
   | "promoBanner"
-  | "productShowcase";
+  | "productShowcase"
+  | "banner";
 
 /** `productShowcase` sections only — how the product grid is resolved. */
 export type ProductShowcaseMode = "category" | "bestSellers" | "newArrivals" | "onSale";

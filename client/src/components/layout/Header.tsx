@@ -7,8 +7,11 @@ import { useState } from "react";
 import {
   ChevronDown,
   Heart,
+  HelpCircle,
+  Info,
   LogOut,
   Menu,
+  Phone,
   Search,
   ShoppingCart,
   Truck,
@@ -16,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toTelHref, toWhatsAppHref } from "@/lib/phone";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
@@ -23,6 +27,7 @@ import { SearchOverlay } from "./SearchOverlay";
 import { HeaderSearchBar } from "./HeaderSearchBar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { SocialIcon } from "@/components/ui/SocialIcon";
 import type { Category } from "@/types/product";
 import type { ApiNavLink, ApiSiteSettings } from "@/types/api";
 
@@ -41,6 +46,13 @@ import type { ApiNavLink, ApiSiteSettings } from "@/types/api";
  * into the left-hand drawer.
  */
 
+/**
+ * Day-one default logo, shown until an Admin/Co-Admin/Super Admin uploads
+ * one via /admin/settings (see `SiteSettingsForm`/`BrandingLogoForm`) —
+ * never preferred over `SiteSettings.logo.url` once one exists.
+ */
+const FALLBACK_LOGO_SRC = "/images/branding/logo2.png";
+
 /** A labelled action in the top row: icon above/next to its own text. */
 const ACTION_CLASS =
   "group relative flex cursor-pointer flex-col items-center gap-0.5 rounded-lg px-2.5 py-1.5 text-green-950 transition-colors duration-200 hover:bg-green-950/[0.06] hover:text-gold-600";
@@ -51,13 +63,37 @@ const ACTION_LABEL_CLASS =
 const BADGE_CLASS =
   "absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-gold-500 text-[9px] font-bold text-on-gold";
 
-/** A link in the second-row nav bar. */
+/**
+ * A link in the second-row nav bar — the premium emerald/gold pill row
+ * (Home/Shop/Offers/About/Contact/Categories). `navbar-secondary*` and
+ * `on-gold` are the constant (non-theme-switching) tokens in globals.css;
+ * see their comment there for why this bar doesn't follow the light/dark
+ * toggle. `duration-200 ease-in-out` is the "smooth hover/active" transition
+ * asked for — 200ms sits inside the requested 200–250ms window.
+ */
 function navLinkClass(active: boolean) {
   return cn(
-    "relative flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.1em] transition-colors duration-200",
+    "relative flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.1em] transition-colors duration-200 ease-in-out",
     active
-      ? "bg-brand-deep text-on-brand"
-      : "text-green-950/80 hover:bg-green-950/[0.08] hover:text-gold-600"
+      ? "bg-navbar-secondary-active text-on-gold"
+      : "text-on-navbar-secondary hover:bg-navbar-secondary-hover hover:text-navbar-secondary-active"
+  );
+}
+
+/**
+ * The same nav links' treatment inside the mobile drawer, which is where
+ * this bar actually lives below `lg` (the pill row itself is `lg:block`
+ * only) — each link becomes its own small emerald/gold pill so the drawer
+ * stays visually tied to the desktop bar instead of falling back to plain
+ * text on the drawer's cream background. Every other drawer row (Track
+ * Order, Wishlist, account, Sign Out) is untouched — `MOBILE_ITEM_CLASS`.
+ */
+function mobileNavLinkClass(active: boolean) {
+  return cn(
+    "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-semibold tracking-[0.04em] transition-colors duration-200 ease-in-out",
+    active
+      ? "bg-navbar-secondary-active text-on-gold"
+      : "bg-navbar-secondary text-on-navbar-secondary hover:bg-navbar-secondary-hover hover:text-navbar-secondary-active active:bg-navbar-secondary-hover active:text-navbar-secondary-active"
   );
 }
 
@@ -91,6 +127,46 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
   const siteName = settings?.siteName || "Saudi Authentic Product";
   const isAuthenticated = status === "authenticated" && Boolean(user);
 
+  // "More" menu — About Us / Wishlist / FAQs / Call Us / WhatsApp, in the
+  // header's row 2 on desktop and the mobile drawer below `lg`. Call
+  // Us/WhatsApp read the phone number from `SiteSettings.contactPhone`
+  // (edited at /admin/settings, same field the Contact page already shows)
+  // rather than a hardcoded number, and simply don't render until an
+  // admin sets one — same graceful-degrade pattern as the announcement
+  // strip and Google Sign-In elsewhere in this app.
+  const contactPhone = settings?.contactPhone?.trim();
+  const moreMenuItems: {
+    key: string;
+    label: string;
+    href: string;
+    icon: React.ReactNode;
+    external?: boolean;
+  }[] = [
+    { key: "about", label: "About Us", href: "/about", icon: <Info size={16} /> },
+    { key: "wishlist", label: "Wishlist", href: "/wishlist", icon: <Heart size={16} /> },
+    { key: "faq", label: "FAQs", href: "/faq", icon: <HelpCircle size={16} /> },
+    ...(contactPhone
+      ? [
+          {
+            key: "call",
+            label: "Call Us",
+            href: toTelHref(contactPhone),
+            icon: <Phone size={16} />,
+          },
+          {
+            key: "whatsapp",
+            label: "WhatsApp",
+            href: toWhatsAppHref(
+              contactPhone,
+              `Hi ${siteName}, I'd like to know more about your products.`
+            ),
+            icon: <SocialIcon platform="whatsapp" size={16} />,
+            external: true,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <header className="sticky top-0 z-50 bg-navbar shadow-[0_1px_3px_rgba(1,45,29,0.08)]">
@@ -107,18 +183,31 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
 
           <Link
             href="/"
-            className="flex shrink-0 cursor-pointer items-center gap-2 font-serif text-lg font-semibold tracking-[-0.02em] text-green-950 sm:text-xl lg:text-2xl"
+            className="flex shrink-0 cursor-pointer items-center self-stretch"
+            aria-label={siteName}
           >
-            {settings?.logo?.url && (
-              <span className="relative size-9 shrink-0 overflow-hidden rounded-full ring-1 ring-gold-500/30">
-                <Image src={settings.logo.url} alt={siteName} fill className="object-cover" />
-              </span>
-            )}
-            {/* Always visible: when no logo image is configured this text is
-                the only branding, so hiding it on small screens would leave
-                an empty slot. Clamped so a long site name can't crowd out
-                the actions on a narrow phone. */}
-            <span className="max-w-[9rem] truncate sm:max-w-none">{siteName}</span>
+            {/* Logo is 100% database-driven, same convention as the hero
+                banner (see "Homepage content management" in CLAUDE.md):
+                `settings.logo.url` is whatever Admin/Co-Admin/Super Admin
+                last uploaded via /admin/settings. `FALLBACK_LOGO_SRC` is only
+                the day-one default before anyone has uploaded one — it is
+                never preferred over a configured logo, and is a transparent
+                PNG so it sits cleanly on the navbar in both themes. Intrinsic
+                width/height match the fallback file's real aspect ratio
+                (2080x756) so the browser reserves the right box before it
+                loads, with no distortion or layout shift; `object-contain` +
+                `w-auto` + a fixed height is what actually renders it at
+                every breakpoint, and the parent's `self-stretch` +
+                `items-center` keeps it vertically centered against the
+                taller action icons beside it. */}
+            <Image
+              src={settings?.logo?.url || FALLBACK_LOGO_SRC}
+              alt={siteName}
+              width={2080}
+              height={756}
+              priority
+              className="h-11 w-auto object-contain sm:h-12 lg:h-14"
+            />
           </Link>
 
           {/* Search — the centre of the top row on desktop. */}
@@ -186,7 +275,7 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
         </div>
 
         {/* ---------- Row 2: main nav / categories ---------- */}
-        <nav className="hidden border-t border-green-950/10 bg-navbar-inner lg:block">
+        <nav className="hidden bg-navbar-secondary lg:block">
           <div className="mx-auto flex max-w-[1240px] items-center gap-1 px-4 py-1.5 sm:px-6 lg:px-8">
             {navLinks.map((link) => {
               const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
@@ -247,6 +336,48 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
               </div>
             </div>
 
+            {/* More dropdown — About Us / Wishlist / FAQs / Call Us /
+                WhatsApp, same hover + focus-within flyout pattern as
+                Categories above, just right-aligned since it's the last
+                item in the row. */}
+            <div className="group relative ml-auto flex items-stretch">
+              <button type="button" className={navLinkClass(false)}>
+                More
+                <ChevronDown
+                  size={12}
+                  className="transition-transform duration-200 group-hover:rotate-180"
+                />
+              </button>
+              <div className="invisible absolute right-0 top-full z-10 w-52 pt-2 opacity-0 transition-all duration-200 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="flex flex-col overflow-hidden rounded-xl border border-gold-500/25 bg-cream-50 py-2 shadow-[0_12px_30px_rgba(1,45,29,0.15)]">
+                  {moreMenuItems.map((item) => {
+                    const itemClassName =
+                      "flex cursor-pointer items-center gap-2.5 px-4 py-2 text-sm text-brown-600 hover:bg-green-950/5 hover:text-green-950";
+                    // tel:/wa.me links aren't app routes — a plain <a> avoids
+                    // next/link trying to client-navigate a non-http scheme
+                    // (same reasoning as the footer's mailto link).
+                    return item.href.startsWith("/") ? (
+                      <Link key={item.key} href={item.href} className={itemClassName}>
+                        {item.icon}
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <a
+                        key={item.key}
+                        href={item.href}
+                        target={item.external ? "_blank" : undefined}
+                        rel={item.external ? "noopener noreferrer" : undefined}
+                        className={itemClassName}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {/* No separate "Sign Up" here: "Sign In" in the top row is the
                 single auth entry point, and the sign-in page offers
                 registration via its own tabs and a "Create one" link. */}
@@ -273,22 +404,25 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
                 <X size={20} className="text-green-950" />
               </button>
             </div>
-            {navLinks.map((link) => (
-              <Link
-                key={link._id}
-                href={link.href}
-                target={link.openInNewTab ? "_blank" : undefined}
-                rel={link.openInNewTab ? "noopener noreferrer" : undefined}
-                onClick={() => setMobileOpen(false)}
-                className={MOBILE_ITEM_CLASS}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) => {
+              const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+              return (
+                <Link
+                  key={link._id}
+                  href={link.href}
+                  target={link.openInNewTab ? "_blank" : undefined}
+                  rel={link.openInNewTab ? "noopener noreferrer" : undefined}
+                  onClick={() => setMobileOpen(false)}
+                  className={mobileNavLinkClass(active)}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
             <Link
               href="/categories"
               onClick={() => setMobileOpen(false)}
-              className={MOBILE_ITEM_CLASS}
+              className={mobileNavLinkClass(pathname.startsWith("/categories"))}
             >
               Categories
             </Link>
@@ -307,6 +441,35 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
             >
               <Heart size={16} /> Wishlist
             </Link>
+            <Link href="/about" onClick={() => setMobileOpen(false)} className={MOBILE_ITEM_CLASS}>
+              <Info size={16} /> About Us
+            </Link>
+            <Link href="/faq" onClick={() => setMobileOpen(false)} className={MOBILE_ITEM_CLASS}>
+              <HelpCircle size={16} /> FAQs
+            </Link>
+            {contactPhone && (
+              <>
+                <a
+                  href={toTelHref(contactPhone)}
+                  onClick={() => setMobileOpen(false)}
+                  className={MOBILE_ITEM_CLASS}
+                >
+                  <Phone size={16} /> Call Us
+                </a>
+                <a
+                  href={toWhatsAppHref(
+                    contactPhone,
+                    `Hi ${siteName}, I'd like to know more about your products.`
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileOpen(false)}
+                  className={MOBILE_ITEM_CLASS}
+                >
+                  <SocialIcon platform="whatsapp" size={16} /> WhatsApp
+                </a>
+              </>
+            )}
             {isAuthenticated ? (
               <>
                 <Link

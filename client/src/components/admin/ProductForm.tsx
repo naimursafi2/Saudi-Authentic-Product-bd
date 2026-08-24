@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, ArrowRight, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import type { ApiProduct, ProductBadge } from "@/types/api";
+import type { ApiProduct, ApiProductImage, ProductBadge } from "@/types/api";
 import type { Category } from "@/types/product";
 
 export interface ProductFormVariant {
@@ -34,6 +35,8 @@ export interface ProductFormValues {
   storageInstructions?: string;
   isBestSeller: boolean;
   isFeatured: boolean;
+  /** The current gallery, in display order — see the "Photos" section below. */
+  existingImages: ApiProductImage[];
 }
 
 const BADGES: ProductBadge[] = ["Authentic", "Best Seller", "New", "Limited"];
@@ -53,6 +56,7 @@ function fromProduct(product?: ApiProduct): ProductFormValues {
       highlights: [],
       isBestSeller: false,
       isFeatured: false,
+      existingImages: [],
     };
   }
   return {
@@ -75,6 +79,7 @@ function fromProduct(product?: ApiProduct): ProductFormValues {
     storageInstructions: product.storageInstructions,
     isBestSeller: product.isBestSeller,
     isFeatured: product.isFeatured,
+    existingImages: product.images,
   };
 }
 
@@ -126,6 +131,37 @@ export function ProductForm({
         ? prev.categories.filter((c) => c !== id)
         : [...prev.categories, id],
     }));
+  }
+
+  function removeExistingImage(publicId: string) {
+    setValues((prev) => ({
+      ...prev,
+      existingImages: prev.existingImages.filter((img) => img.publicId !== publicId),
+    }));
+  }
+
+  function moveExistingImage(index: number, direction: "left" | "right") {
+    setValues((prev) => {
+      const swapWith = direction === "left" ? index - 1 : index + 1;
+      if (swapWith < 0 || swapWith >= prev.existingImages.length) return prev;
+      const next = [...prev.existingImages];
+      [next[index], next[swapWith]] = [next[swapWith], next[index]];
+      return { ...prev, existingImages: next };
+    });
+  }
+
+  function addNewImages(files: FileList | null) {
+    if (!files) return;
+    const totalAfter = values.existingImages.length + images.length + files.length;
+    if (totalAfter > 6) {
+      alert("A product can have at most 6 images.");
+      return;
+    }
+    setImages((prev) => [...prev, ...Array.from(files)]);
+  }
+
+  function removeNewImage(index: number) {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -305,14 +341,87 @@ export function ProductForm({
       </div>
 
       <div>
-        <label className={labelClasses}>Product Photos (replaces existing gallery if selected)</label>
+        <label className={labelClasses}>Product Photos (up to 6 — first is the primary image)</label>
+        {(values.existingImages.length > 0 || images.length > 0) && (
+          <div className="mb-3 flex flex-wrap gap-3">
+            {values.existingImages.map((img, i) => (
+              <div
+                key={img.publicId}
+                className="group relative size-20 shrink-0 overflow-hidden rounded border border-brown-600/15"
+              >
+                <Image src={img.url} alt="" fill sizes="80px" className="object-cover" />
+                <div className="absolute inset-0 flex flex-col items-center justify-between bg-black/0 opacity-0 transition-opacity group-hover:bg-black/40 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    aria-label="Remove image"
+                    onClick={() => removeExistingImage(img.publicId)}
+                    className="mt-1 cursor-pointer self-end rounded-full bg-white/90 p-0.5 mr-1 text-danger hover:bg-white"
+                  >
+                    <X size={12} />
+                  </button>
+                  <div className="mb-1 flex gap-1">
+                    <button
+                      type="button"
+                      aria-label="Move earlier"
+                      disabled={i === 0}
+                      onClick={() => moveExistingImage(i, "left")}
+                      className="cursor-pointer rounded-full bg-white/90 p-0.5 text-green-950 hover:bg-white disabled:opacity-30"
+                    >
+                      <ArrowLeft size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Move later"
+                      disabled={i === values.existingImages.length - 1}
+                      onClick={() => moveExistingImage(i, "right")}
+                      className="cursor-pointer rounded-full bg-white/90 p-0.5 text-green-950 hover:bg-white disabled:opacity-30"
+                    >
+                      <ArrowRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {images.map((file, i) => (
+              <div
+                key={`${file.name}-${i}`}
+                className="group relative size-20 shrink-0 overflow-hidden rounded border-2 border-dashed border-gold-500/50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={URL.createObjectURL(file)}
+                  alt=""
+                  className="size-full object-cover"
+                />
+                <span className="absolute bottom-0 left-0 right-0 bg-black/50 py-0.5 text-center text-[9px] font-bold uppercase tracking-wide text-white">
+                  New
+                </span>
+                <button
+                  type="button"
+                  aria-label="Remove new image"
+                  onClick={() => removeNewImage(i)}
+                  className="absolute right-1 top-1 cursor-pointer rounded-full bg-white/90 p-0.5 text-danger opacity-0 transition-opacity hover:bg-white group-hover:opacity-100"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <input
           type="file"
           accept="image/*"
           multiple
-          onChange={(e) => setImages(Array.from(e.target.files ?? []))}
+          onChange={(e) => {
+            addNewImages(e.target.files);
+            e.target.value = "";
+          }}
           className="text-sm text-brown-600"
         />
+        <p className="mt-1 text-xs text-brown-500">
+          Hover a photo to remove or reorder it. New photos are added to the gallery — they don&apos;t
+          replace what&apos;s already there.
+        </p>
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}

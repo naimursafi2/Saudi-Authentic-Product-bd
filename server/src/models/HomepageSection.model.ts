@@ -5,13 +5,18 @@ import { STATIC_PAGE_BLOCK_ICONS, type StaticPageBlockIcon } from "./StaticPage.
  * The six fixed types map 1:1 to the storefront's existing homepage
  * components — one document each, lazily seeded by
  * `homepageSection.service.ts#ensureDefaultSections`, editable (title/
- * subtitle/description/visibility/order) but not deletable. `promoBanner`
- * and `productShowcase` are the two freely creatable/deletable types:
- * `promoBanner` for ad-hoc promotional content, `productShowcase` for a
- * configurable product grid (by category, best sellers, new arrivals, or
- * on-sale) — this is how Admin adds things like "Premium Dates", "More Date
- * Varieties", or (once real stock exists) a Watches/Chocolates showcase
- * without any code change.
+ * subtitle/description/visibility/order) but not deletable. `promoBanner`,
+ * `productShowcase` and `banner` are the three freely creatable/deletable
+ * types: `promoBanner` for ad-hoc promotional content, `productShowcase`
+ * for a configurable product grid (by category, best sellers, new
+ * arrivals, or on-sale) — this is how Admin adds things like "Premium
+ * Dates", "More Date Varieties", or (once real stock exists) a
+ * Watches/Chocolates showcase without any code change — and `banner` for
+ * the homepage's dual/carousel promotional banner row (`BannerCarousel`,
+ * see `(site)/page.tsx`): every visible `banner` section is collected into
+ * one carousel (2-up on desktop, 1-up with arrows below `md`), not
+ * rendered individually like `promoBanner`, so it supports an unlimited
+ * number of banners with no code change either.
  */
 export const HOMEPAGE_SECTION_TYPES = [
   "hero",
@@ -22,6 +27,7 @@ export const HOMEPAGE_SECTION_TYPES = [
   "customerReviews",
   "promoBanner",
   "productShowcase",
+  "banner",
 ] as const;
 export type HomepageSectionType = (typeof HOMEPAGE_SECTION_TYPES)[number];
 
@@ -89,10 +95,10 @@ const homepageSectionSchema = new Schema<IHomepageSection>(
   { timestamps: true }
 );
 
-/** One document per fixed type; unlimited `promoBanner`/`productShowcase` documents. */
+/** One document per fixed type; unlimited `promoBanner`/`productShowcase`/`banner` documents. */
 homepageSectionSchema.index(
   { type: 1 },
-  { unique: true, partialFilterExpression: { type: { $nin: ["promoBanner", "productShowcase"] } } }
+  { unique: true, partialFilterExpression: { type: { $nin: ["promoBanner", "productShowcase", "banner"] } } }
 );
 
 export const HomepageSectionModel: Model<IHomepageSection> = model<IHomepageSection>(

@@ -37,6 +37,10 @@ export default async function HomePage() {
           case "productShowcase":
             return <ProductShowcase key={section._id} section={section} />;
           default:
+            // Includes `banner`-type sections — the homepage no longer
+            // renders the two-up banner carousel (it duplicated the hero
+            // carousel's images); the `HomepageSection` type/admin CRUD at
+            // /admin/homepage still exists, just unrendered here.
             return null;
         }
       })}

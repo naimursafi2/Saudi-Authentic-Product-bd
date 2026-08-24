@@ -67,6 +67,7 @@ export default function AdminProductsPage() {
       if (values.storageInstructions) form.set("storageInstructions", values.storageInstructions);
       form.set("isBestSeller", String(values.isBestSeller));
       form.set("isFeatured", String(values.isFeatured));
+      form.set("existingImages", JSON.stringify(values.existingImages));
       images.forEach((file) => form.append("images", file));
 
       const { data } =

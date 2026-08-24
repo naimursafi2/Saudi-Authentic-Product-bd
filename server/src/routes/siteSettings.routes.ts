@@ -23,4 +23,13 @@ router.patch(
   siteSettingsController.updateSiteSettings
 );
 
+// -- Logo only — also reachable by Co-Admin, who lacks "settings.manage" --
+router.patch(
+  "/logo",
+  authenticate,
+  requirePermission("settings.manage", "content.branding.manage"),
+  upload.single("logo"),
+  siteSettingsController.updateSiteLogo
+);
+
 export default router;

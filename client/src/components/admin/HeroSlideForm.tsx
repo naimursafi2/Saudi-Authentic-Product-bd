@@ -71,6 +71,10 @@ export function HeroSlideForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <div className="rounded-lg border border-gold-500/30 bg-gold-soft px-3 py-2 text-xs text-gold-700">
+        The storefront hero banner is image-only — the title, subtitle and buttons below are not displayed
+        publicly. They&apos;re kept only so this slide has a readable label in the table below.
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label className={labelClasses}>Title *</label>
@@ -79,10 +83,10 @@ export function HeroSlideForm({
             rows={2}
             value={values.title}
             onChange={(e) => update("title", e.target.value)}
-            placeholder={"Authentic Saudi Products\nDelivered to Your Doorstep."}
+            placeholder="Premium Dates — Ramadan"
             className={fieldClasses}
           />
-          <p className="mt-1 text-xs text-brown-500">Use a new line to control where the headline wraps.</p>
+          <p className="mt-1 text-xs text-brown-500">Internal label only — used in the admin table, not shown on the site.</p>
         </div>
         <div className="sm:col-span-2">
           <label className={labelClasses}>Subtitle</label>

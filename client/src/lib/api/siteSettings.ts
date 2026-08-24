@@ -8,3 +8,7 @@ export async function getSiteSettings(revalidate?: number) {
 export async function updateSiteSettings(formData: FormData) {
   return api.patchForm<{ settings: ApiSiteSettings }>("/site-settings", formData);
 }
+
+export async function updateSiteLogo(formData: FormData) {
+  return api.patchForm<{ settings: ApiSiteSettings }>("/site-settings/logo", formData);
+}

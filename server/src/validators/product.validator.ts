@@ -39,6 +39,20 @@ export const createProductSchema = z.object({
   // string fields (alongside image uploads), not just plain JSON.
   isBestSeller: booleanish.optional().default(false),
   isFeatured: booleanish.optional().default(false),
+  /**
+   * Update only — the gallery images to KEEP, in the order the admin wants
+   * them shown; any current image whose `publicId` isn't in this list is
+   * treated as removed (see product.service.ts#updateProduct). New files in
+   * the `images` upload field are appended after these rather than
+   * replacing them, so a save can add/remove/reorder existing photos
+   * without re-uploading the whole gallery. Absent entirely (an older
+   * caller that doesn't send it) falls back to the previous wholesale-
+   * replace behaviour when new files are uploaded.
+   */
+  existingImages: z
+    .array(z.object({ url: z.string(), publicId: z.string() }))
+    .max(6)
+    .optional(),
 });
 
 export const updateProductSchema = createProductSchema.partial();

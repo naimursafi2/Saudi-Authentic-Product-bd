@@ -128,6 +128,40 @@
   --color-navbar: #e5e5e5;
   --color-navbar-inner: #f2f2f2;
 
+  /**
+   * CONSTANT across themes, like the brand-deep family above — the
+   * second/bottom navbar row (Home / Shop / Offers / About / Contact /
+   * Categories) is a fixed premium brand statement, not something that
+   * should shift with the light/dark toggle. `-active` intentionally equals
+   * `gold-500`'s light-mode value; kept as its own constant token (rather
+   * than reusing `gold-500`, which brightens in dark mode) so this pill
+   * always renders the exact requested gold regardless of theme. Pair with
+   * the existing constant `on-gold` token for the active pill's text.
+   */
+  --color-navbar-secondary: #003b2f;
+  --color-navbar-secondary-hover: #0e5843;
+  --color-on-navbar-secondary: #f5f1e6;
+  --color-navbar-secondary-active: #d4af37;
+
+  /**
+   * CONSTANT across themes — the product page's four purchase-action
+   * buttons (Add to Cart / Buy Now / Order on WhatsApp / Call for Order,
+   * see `ProductInfo.tsx`) are a fixed, deliberately-specified color system
+   * of their own, same reasoning as `navbar-secondary*` above. `buynow`
+   * intentionally shares its base value with `navbar-secondary` (both are
+   * this brand's deep emerald) but is kept as its own token since the two
+   * are separate concerns with independent hover shades — don't couple
+   * them.
+   */
+  --color-action-cart: #f58220;
+  --color-action-cart-hover: #c86b1a;
+  --color-action-buynow: #003b2f;
+  --color-action-buynow-hover: #075744;
+  --color-action-whatsapp: #20b45a;
+  --color-action-whatsapp-hover: #1a944a;
+  --color-action-call: #29469b;
+  --color-action-call-hover: #22397f;
+
   /** Hairline borders — was a hardcoded rgba() in the `*` rule below. */
   --color-hairline: rgba(113, 121, 115, 0.15);
 

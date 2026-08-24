@@ -84,6 +84,7 @@ export const PERMISSIONS = [
   "content.homepage.delete",
   "content.navigation.manage",
   "content.pages.manage",
+  "content.branding.manage",
   "settings.manage",
 
   // -- Reviews --
@@ -203,6 +204,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
       { key: "content.homepage.delete", label: "Delete homepage banners & sections" },
       { key: "content.navigation.manage", label: "Edit header nav & footer" },
       { key: "content.pages.manage", label: "Edit About / Contact / Shipping pages" },
+      { key: "content.branding.manage", label: "Upload/change the company logo" },
       { key: "settings.manage", label: "Edit site settings" },
     ],
   },
@@ -316,6 +318,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "marketing.view",
     "marketing.manage",
     "content.homepage.manage",
+    // Narrower than "settings.manage" (which Co-Admin does not hold, per the
+    // deliberate site-settings exclusion) — this grants only the logo
+    // upload, not the rest of site settings (name/announcement/contact/
+    // footer/social links).
+    "content.branding.manage",
     "reviews.view",
     "reviews.delete",
     "reports.view",

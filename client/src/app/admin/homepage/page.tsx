@@ -38,6 +38,7 @@ const SECTION_LABELS: Record<HomepageSectionType, string> = {
   customerReviews: "Customer Reviews",
   promoBanner: "Promotional Banner",
   productShowcase: "Product Showcase",
+  banner: "Homepage Banner",
 };
 
 function heroSlideFormData(values: HeroSlideFormValues, image: File | null): FormData {
@@ -327,14 +328,17 @@ export default function AdminHomepagePage() {
       <div>
         <PageHeader
           title="Homepage Sections"
-          description="Toggle visibility, reorder, and edit content for each section. Add promo banners or product showcases as needed."
+          description="Toggle visibility, reorder, and edit content for each section. Add promo banners, product showcases, or homepage carousel banners as needed."
           action={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => openNewSection("productShowcase")}>
                 <Plus size={14} /> Add Product Showcase
               </Button>
-              <Button variant="primary" size="sm" onClick={() => openNewSection("promoBanner")}>
+              <Button variant="outline" size="sm" onClick={() => openNewSection("promoBanner")}>
                 <Plus size={14} /> Add Promo Banner
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => openNewSection("banner")}>
+                <Plus size={14} /> Add Homepage Banner
               </Button>
             </div>
           }
@@ -392,7 +396,9 @@ export default function AdminHomepagePage() {
                       >
                         <Pencil size={15} />
                       </button>
-                      {(section.type === "promoBanner" || section.type === "productShowcase") && (
+                      {(section.type === "promoBanner" ||
+                        section.type === "productShowcase" ||
+                        section.type === "banner") && (
                         <button
                           aria-label="Delete"
                           onClick={() => handleDeleteSection(section)}

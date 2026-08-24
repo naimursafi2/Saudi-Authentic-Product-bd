@@ -95,12 +95,12 @@ export function SiteSettingsForm({
       <div>
         <label className={labelClasses}>Logo</label>
         <div className="flex items-center gap-4">
-          <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-brown-600/15 bg-cream-200">
+          <span className="flex h-16 w-32 shrink-0 items-center justify-center overflow-hidden rounded border border-brown-600/15 bg-cream-200 p-2">
             {(() => {
               const logoSrc = logoPreview ?? settings.logo?.url;
               return logoSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoSrc} alt="Site logo" className="size-full object-cover" />
+                <img src={logoSrc} alt="Site logo" className="max-h-full max-w-full object-contain" />
               ) : (
                 <span className="text-xs text-brown-500">No logo</span>
               );

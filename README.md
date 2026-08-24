@@ -35,9 +35,14 @@ form or state-management library — forms/data fetching are hand-rolled with
 ## Features
 
 - **Customer storefront** (`client/src/app/(site)`): home, shop (filterable
-  catalog), product detail (image gallery, variant/quantity selection, a
-  wishlist toggle alongside Add to Cart/Buy Now, reviews, delivery info,
-  related products), categories, offers (discounted variants), cart,
+  catalog), product detail (a multi-photo gallery with thumbnails below the
+  main image and a cursor-following hover-zoom, variant/quantity selection,
+  a wishlist toggle alongside a 2x2 Add to Cart/Buy Now/Order on WhatsApp/
+  Call for Order action grid — colors from dedicated `--color-action-*`
+  tokens, WhatsApp/Call sourced from `SiteSettings.contactPhone` with a
+  dynamically-generated pre-filled message, not hardcoded — reviews,
+  delivery info, related products), categories, offers (discounted
+  variants), cart,
   wishlist, a sidebar-driven account dashboard (login/register; a persistent
   nav — Dashboard/My Orders/Wishlist/Address/Manage Profile/Logout — next to
   stat cards, recent-orders and wishlist-preview panels, profile photo
@@ -48,9 +53,11 @@ form or state-management library — forms/data fetching are hand-rolled with
   number + checkout email, no login required, auto-prefilled for signed-in
   customers, showing a full step-by-step delivery timeline and — while an
   order is out for delivery — the one-time code to share with the delivery
-  agent), about, contact, and shipping policy — all three admin-editable
+  agent), about, contact, shipping policy — all three admin-editable
   via the `StaticPage` content system (contact's phone/email still sourced
-  separately from the admin-editable `SiteSettings` singleton) — plus a standalone `/checkout`
+  separately from the admin-editable `SiteSettings` singleton) — and a
+  plain static FAQ page (`/faq`, hardcoded Q&A content, not part of the
+  `StaticPage` system) — plus a standalone `/checkout`
   flow with a coupon-code field (server-validated discount preview, applied
   total, never a client-trusted amount) — all backed by the live API and
   Cloudinary imagery. The navbar shows
@@ -106,8 +113,10 @@ form or state-management library — forms/data fetching are hand-rolled with
   content (hero slides + homepage sections, admin/super_admin only),
   navigation (header nav links, admin/super_admin only), footer (footer
   link columns, admin/super_admin only), pages (About/Contact/Shipping
-  Policy body copy, admin/super_admin only), site settings (admin/super_admin
-  only), and roles & permissions. Route access is guarded client-side
+  Policy body copy, admin/super_admin only), site settings (name/
+  announcement/contact/footer/social links are admin/super_admin only, but
+  the company logo specifically can also be uploaded by co_admin), and
+  roles & permissions. Route access is guarded client-side
   (`RoleGuard`, which admits a user by built-in role *or* by any admin-panel
   permission, so a custom role gets in) and enforced for real by the
   backend's `requirePermission(...)` on every route; every page whose API the
@@ -237,25 +246,34 @@ form or state-management library — forms/data fetching are hand-rolled with
   to them, on reads and writes alike, and sees nothing at all until someone
   assigns them one.
 - **Homepage content management** — admin-editable hero slides (image,
-  title, subtitle, a primary and an optional secondary CTA, sort order,
-  active flag) and a fixed set of eight homepage section types (hero, trust
-  strip, featured categories, best sellers, product story, customer
-  reviews, promo banners, product showcases). All active slides render on
-  the homepage as a carousel: autoplay every 6 seconds, previous/next arrows
-  at every breakpoint, pagination dots, swipe on touch devices, pause on
-  hover or focus, and a restarted timer after any manual navigation so the
-  carousel never jumps straight off the slide the visitor just chose. It is
-  skipped for viewers who prefer reduced motion. Slides are added, edited,
-  reordered and enabled/disabled from `/admin/homepage` by Admin, Super
-  Admin and Co-Admin; deleting one is Admin/Super Admin only. Nothing about
-  a slide — image, headline, or either button — is hardcoded in the
-  frontend. The six singleton sections are
+  plus a title/subtitle/CTA pair kept only as an internal admin-table label
+  — the storefront hero is image-only, see below) and a fixed set of nine
+  homepage section types (hero, trust strip, featured categories, best
+  sellers, product story, customer reviews, promo banners, product
+  showcases, homepage carousel banners). All active slides render on the
+  homepage as a single-image carousel: autoplay every 4.5 seconds, one image
+  visible at a time, previous/next arrows hidden until the banner is
+  hovered or focused, pagination dots below the image, swipe on touch
+  devices, pause on hover or focus, and a restarted timer after any manual
+  navigation so the carousel never jumps straight off the slide the visitor
+  just chose. It is skipped for viewers who prefer reduced motion. Slides
+  are added, edited, reordered and enabled/disabled from `/admin/homepage`
+  by Admin, Super Admin and Co-Admin; deleting one is Admin/Super Admin
+  only. Nothing about a slide's image is hardcoded in the frontend. Seeded
+  with two starter "Premium Dates" slides on `npm run seed`. The six
+  singleton sections are
   visibility/order-editable only (the trust strip's benefit items —
   icon + label — are individually editable/reorderable/toggleable); promo
   banners and product showcases can be freely created/deleted. A product
-  showcase pulls a configurable product grid (by category, best sellers, new
-  arrivals, or on-sale) — this is how sections like "Premium Dates" or a
-  future Watches/Chocolates showcase get added with no code change.
+  showcase pulls a configurable product grid (by category, best sellers,
+  new arrivals, or on-sale) — this is how sections like "Premium Dates" or
+  a future Watches/Chocolates showcase get added with no code change. A
+  fourth freely-creatable type, homepage carousel banners, still exists as
+  an admin-manageable type (create/edit/reorder/delete, seeded with three
+  starter "Premium Dates" banners on `npm run seed`) but is **not currently
+  rendered on the storefront homepage** — its section switch has no case
+  for that type, since displaying it duplicated the hero carousel's own
+  images directly beneath it.
 - **Navigation & footer content management** — the header's top-level nav
   links and the footer's link columns (`/admin/navigation`, `/admin/footer`)
   are freely add/edit/delete/reorder-able, same pattern as hero slides; the
@@ -264,25 +282,43 @@ form or state-management library — forms/data fetching are hand-rolled with
   (`/admin/settings`).
 - **Dark / light mode** — a toggle in the storefront header and in each
   portal shell, applied site-wide (storefront, admin, employee, delivery).
-  The choice persists in `localStorage` (`sap:theme`) and defaults to the
-  OS preference; an inline pre-hydration script applies it before first
-  paint so there is no white flash. Implemented by redefining the palette
-  variables under `[data-theme="dark"]` in `app/globals.css` rather than
-  per-component `dark:` classes.
-- **Two-row storefront header** — logo + search bar + labelled action icons
-  (Track Order / Wishlist / Cart / account) on the top row, the
-  admin-managed nav links and Categories dropdown on the second. Collapses
-  below `lg` into a left-hand drawer with the search bar on its own row. A
-  signed-in user is shown as their uploaded avatar, or a monogram fallback.
-  "Sign In" is the single auth entry point — registration is reached from
-  the sign-in form's own tabs and its "Don't have an account? Sign up" link.
+  The choice persists in `localStorage` (`sap:theme`); a visitor with no
+  saved preference always gets **Light**, regardless of their OS/browser
+  setting — an inline pre-hydration script only overrides the `<html>`
+  tag's static `light` default when a saved `dark`/`light` value actually
+  exists, which is also what gives a returning dark-mode visitor no white
+  flash. Implemented by redefining the palette variables under
+  `[data-theme="dark"]` in `app/globals.css` rather than per-component
+  `dark:` classes.
+- **Two-row storefront header** — a database-driven company logo (uploaded
+  via `/admin/settings`, `SiteSettings.logo`, with a static day-one fallback
+  until one is uploaded — no site-name text alongside it) + search bar +
+  labelled action icons (Track Order / Wishlist / Cart / account) on the top
+  row, the admin-managed nav links and Categories dropdown on the second. The
+  second row is a fixed premium emerald (`#003b2f`) + gold (`#d4af37`) pill
+  bar — cream nav text, a lighter-emerald + gold hover, a gold pill for the
+  active page, all on a smooth ~200ms transition — that deliberately does
+  **not** follow the site's light/dark toggle (unlike the rest of the
+  header), mirrored into the mobile drawer below `lg` so each nav link keeps
+  the same emerald/gold pill treatment there too. The row also ends in a
+  "More" dropdown (About Us / Wishlist / FAQs / Call Us / WhatsApp) — a
+  fixed structural menu, same convention as the Categories dropdown beside
+  it, not admin-editable; Call Us/WhatsApp read `SiteSettings.contactPhone`
+  and don't render (or render disabled, on the product page's action
+  buttons) until an admin sets one. Collapses below `lg` into
+  a left-hand drawer with the search bar on its own row. A signed-in user is
+  shown as their uploaded avatar, or a monogram
+  fallback. "Sign In" is the single auth entry point — registration is
+  reached from the sign-in form's own tabs and its "Don't have an account?
+  Sign up" link.
 - **Announcement strip** — the thin green bar above the main navbar (for
   occasions like Eid or a sale) is opt-in and **off by default**. Admin and
   Super Admin switch it on/off and edit its text together at
   `/admin/settings` (`announcementEnabled` + `announcementText` on
   `SiteSettings`), so running a seasonal message needs no code change or
   redeploy. It stays hidden while the text is blank, even when switched on.
-  Co-Admin cannot reach site settings, so cannot toggle it.
+  Co-Admin cannot reach the rest of site settings (it can only update the
+  logo, see above), so cannot toggle it.
 - **Static page content management** — `/admin/pages` edits the body copy of
   the three static informational pages (`/about`, `/contact`,
   `/shipping-policy`) via a `StaticPage` model: one fixed, lazily-seeded

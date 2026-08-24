@@ -113,7 +113,12 @@ const NAV_ITEMS: NavItem[] = [
     permissions: ["content.navigation.manage"],
   },
   { href: "/admin/pages", label: "Pages", icon: FileText, permissions: ["content.pages.manage"] },
-  { href: "/admin/settings", label: "Settings", icon: Settings, permissions: ["settings.manage"] },
+  {
+    href: "/admin/settings",
+    label: "Settings",
+    icon: Settings,
+    permissions: ["settings.manage", "content.branding.manage"],
+  },
   { href: "/admin/profile", label: "Profile", icon: CircleUser },
 ];
 

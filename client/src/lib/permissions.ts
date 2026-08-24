@@ -51,6 +51,7 @@ export const PERMISSIONS = [
   "content.homepage.delete",
   "content.navigation.manage",
   "content.pages.manage",
+  "content.branding.manage",
   "settings.manage",
   "reviews.view",
   "reviews.delete",

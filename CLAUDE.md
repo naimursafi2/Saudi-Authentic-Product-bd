@@ -46,7 +46,7 @@ Register every new router in `routes/index.ts`.
 | `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification, plus 2FA (`POST /2fa/setup`, `/2fa/enable`, `/2fa/disable`, `/2fa/verify` — see "Security hardening" below). Login/register/google/refresh/forgot/reset/verify-email/resend-verification/`2fa/verify` are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password`, `/2fa/setup`, `/2fa/enable`, `/2fa/disable` require auth; `/2fa/verify` is public (it carries its own short-lived challenge token); `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
 | `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates; `PATCH /:id/unlock` (clear a failed-login lockout); `POST /:id/impersonate` (support-login) | create/role/status/staff-meta/unlock: `admin`,`super_admin`; list/get: + `co_admin`; impersonate: `super_admin` only (and never onto another `super_admin`); all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
-| `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
+| `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`/`existingImages`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
 | `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
 | `/reviews` | public: recent reviews, reviews by product; customer creates one review per product; staff lists all/deletes | list-all/delete: `admin`,`super_admin`,`co_admin` |
 | `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
@@ -57,8 +57,8 @@ Register every new router in `routes/index.ts`.
 | `/inventory` | `GET /stock` (read-only live per-variant stock), low-stock list, logs, manual stock adjustment | `GET /stock`: + `employee`,`order_manager` (read-only — warehouse staff need the real count, not the ability to change it); low-stock/logs/adjust: `admin`,`super_admin`,`co_admin`. `POST /adjust` applies immediately **only** for `super_admin`; every other role gets `202 {pendingActionId}` and live stock is unchanged — see "Stock-change approval gate" below |
 | `/reports` | any staff: `/employee-dashboard`; admin/co-admin: `/dashboard`, `/sales` | dashboard/sales: `admin`,`super_admin`,`co_admin` |
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
-| `/homepage-sections` | public list; create (promo banners & product showcases only)/update/delete of homepage content sections | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
-| `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement strip (`announcementEnabled` + `announcementText`)/contact/footer | `admin`,`super_admin` only — `co_admin` is **not** able to reach site settings (unlike `/hero-slides` and `/homepage-sections`, whose create/update do allow `co_admin`) |
+| `/homepage-sections` | public list; create (promo banners, homepage carousel banners & product showcases only)/update/delete of homepage content sections | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
+| `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement strip (`announcementEnabled` + `announcementText`)/contact/footer; `PATCH /logo` (logo only) | `PATCH /`: `admin`,`super_admin` only — `co_admin` is **not** able to reach the full settings update (unlike `/hero-slides` and `/homepage-sections`, whose create/update do allow `co_admin`); `PATCH /logo`: also `co_admin` via the narrower `content.branding.manage` permission — see "Storefront header" below |
 | `/coupons` | `POST /validate` (authenticated customer, preview a discount); `GET /`, `POST /`, `PATCH /:id` (create/update — may be gated through the approval system, see "Approval-gate system" below); `DELETE /:id` | list/create/update: `co_admin`,`admin`,`super_admin`; delete: `admin`,`super_admin` only; `/validate` just requires `authenticate` |
 | `/nav-links` | public list (sorted, visible-only by default); admin create/update/delete of the storefront header's top-level nav links | create/update/delete: `admin`,`super_admin` only |
 | `/footer-columns` | public list (sorted, visible-only by default); admin create/update/delete of the storefront footer's link columns (each with an embedded, wholesale-replaced `links[]`) | create/update/delete: `admin`,`super_admin` only |
@@ -616,50 +616,64 @@ not a page builder:
 
 - **Hero slides** (`HeroSlide`): freely creatable/orderable/deletable —
   image, title, subtitle, CTA label/href, an optional **secondary** CTA
-  label/href, sort order, active flag. All active slides render on the
-  homepage as an auto-rotating carousel (`HeroCarousel.tsx`); a single slide
-  (or none — falling back to the `hero` homepage section's own
-  admin-uploaded image and text) renders as a static banner with no
-  controls. Managed at `/admin/homepage`: add/edit, up-down reorder arrows,
-  a click-to-toggle Active badge in the table (no need to open the form),
-  and delete. **Deletion is `admin`/`super_admin` only** — a `co_admin`
-  creates, edits, reorders and disables slides but cannot delete one, per
-  the project-wide convention that Co-Admin never deletes; disabling takes a
-  slide off the storefront just as effectively.
+  label/href, sort order, active flag. **The storefront hero is
+  image-only** — `HeroCarousel.tsx` renders exclusively the slide's
+  `image`; `title`/`subtitle`/`ctaLabel`/`ctaHref`/`secondaryCtaLabel`/
+  `secondaryCtaHref` are still stored and still editable from
+  `/admin/homepage`, but exist purely as an internal label for that row in
+  the admin table (`HeroSlideForm.tsx` shows an inline note saying so) —
+  none of them render publicly. All active slides render as an
+  auto-rotating, looping single-image carousel; a single slide (or none —
+  falling back to the `hero` homepage section's own admin-uploaded image)
+  renders as a static image with no controls. Managed at `/admin/homepage`:
+  add/edit, up-down reorder arrows, a click-to-toggle Active badge in the
+  table (no need to open the form), and delete. **Deletion is
+  `admin`/`super_admin` only** — a `co_admin` creates, edits, reorders and
+  disables slides but cannot delete one, per the project-wide convention
+  that Co-Admin never deletes; disabling takes a slide off the storefront
+  just as effectively. Seeded on first `npm run seed` with two starter
+  "Premium Dates" slides (reusing the same artwork as the homepage
+  `banner`-type seeds, uploaded separately to Cloudinary folder
+  `saudi-authentic-product/hero`), freely replaceable from `/admin/homepage`
+  like any other hero slide.
 
-  Carousel behaviour: autoplay every 6s, previous/next arrows (visible at
-  **every** breakpoint, including mobile), pagination dots with
-  `aria-current`, horizontal swipe on touch/pen pointers (mouse drags are
-  left alone so text selection still works), and pause on hover *and* on
-  focus. Manual navigation **restarts** the autoplay timer via a
-  `restartKey` state bumped by `goTo()` — without it a click landing late in
-  the cycle was followed almost immediately by an automatic advance, which
-  read as the carousel jumping away from the slide the visitor just picked.
-  Autoplay is skipped entirely when the viewer has `prefers-reduced-motion:
-  reduce`, read through `useSyncExternalStore` (not a `useEffect`, which
-  this project's lint config rejects for setState). Off-screen slides are
-  `aria-hidden` and their CTAs carry `tabIndex={-1}` so they can't be
-  focused.
+  Carousel behaviour: autoplay every 4.5s, previous/next arrows **hidden until
+  the banner is hovered or focused** (`opacity-0 group-hover:opacity-100
+  group-focus-within:opacity-100`, so they never sit visible over the image
+  at rest), pagination dots rendered **below** the image (not overlaid on
+  top of it) with `aria-current`, horizontal swipe on touch/pen pointers
+  (mouse drags are left alone so the hover-reveal still works normally on
+  desktop), and pause-on-hover/pause-on-focus for autoplay (the same
+  hover/focus state that reveals the arrows). Manual navigation **restarts**
+  the autoplay timer via a `restartKey` state bumped by `goTo()` — without
+  it a click landing late in the cycle was followed almost immediately by an
+  automatic advance, which read as the carousel jumping away from the slide
+  the visitor just picked. Autoplay is skipped entirely when the viewer has
+  `prefers-reduced-motion: reduce`, read through `useSyncExternalStore` (not
+  a `useEffect`, which this project's lint config rejects for setState).
+  Off-screen slides are `aria-hidden`.
 
-  **There is no hardcoded slide content in the component.** A fixed
-  "Explore Dates" button used to render beside the main CTA on every slide
-  regardless of configuration; it is now the optional
-  `secondaryCtaLabel`/`secondaryCtaHref` pair, rendered only when a label is
-  set. Do not reintroduce a hardcoded button, headline or link here.
+  **There is no hardcoded slide content in the component.** Do not
+  reintroduce a headline, paragraph, or CTA button into `HeroCarousel` — a
+  fixed text overlay used to render here (with a further hardcoded "Explore
+  Dates" secondary button) and was deliberately removed in favor of a pure
+  image-only banner; the title/subtitle/CTA fields on `HeroSlide` remain
+  admin-table labels only, not content to render.
 
   The banner is a **contained, compact promo card**, not a full-bleed hero:
   `HeroCarousel` wraps itself in a padded container and renders a rounded
-  `max-w-[1200px]` block at `min-h-[240px]` / `sm:280px` / `lg:340px`.
+  `max-w-[1200px]` block at `min-h-[240px]` / `sm:280px` / `lg:340px`, with
+  the dots row directly beneath it (outside the rounded card, on the page
+  background).
 
   **Its image is 100% database-driven — there is deliberately no image
-  fallback in the component.** `HeroBanner.tsx` keeps text fallbacks
-  (`FALLBACK_TITLE`/`FALLBACK_SUBTITLE`) for blank fields, but `image` is
-  `slide.image?.url ?? section?.image?.url ?? null`, and `HeroCarousel` only
-  renders the `<Image>` when that is non-null. A bundled default
-  (`/images/editorial/…`) used to be hardcoded here and silently overrode
-  whatever the admin uploaded, which made the banner look un-editable — do
-  not reintroduce one. With no image set the banner simply shows the brand's
-  deep-green ground, which is a valid intentional look.
+  fallback in the component.** `image` is `slide.image?.url ??
+  section?.image?.url ?? null`, and `HeroCarousel` only renders the
+  `<Image>` when that is non-null. A bundled default (`/images/editorial/…`)
+  used to be hardcoded here and silently overrode whatever the admin
+  uploaded, which made the banner look un-editable — do not reintroduce one.
+  With no image set the banner simply shows the brand's deep-green ground,
+  which is a valid intentional look.
 
   **`updateHeroSlideSchema` is written out in full rather than derived with
   `createHeroSlideSchema.partial()`** — and any future update schema should
@@ -675,10 +689,10 @@ not a page builder:
   still `.partial()`-derived over defaulted fields and carry the same latent
   behaviour (their admin forms happen to submit every field, so it does not
   currently bite).
-- **Homepage sections** (`HomepageSection`): a **fixed enum** of eight
+- **Homepage sections** (`HomepageSection`): a **fixed enum** of nine
   types — `hero`, `trustStrip`, `featuredCategories`, `bestSellers`,
-  `productStory`, `customerReviews`, `promoBanner`, `productShowcase`. The
-  first six are singleton documents (unique index on `type`), lazily seeded
+  `productStory`, `customerReviews`, `promoBanner`, `productShowcase`,
+  `banner`. The first six are singleton documents (unique index on `type`), lazily seeded
   from `HOMEPAGE_SECTION_DEFAULTS`, editable (title/subtitle/description/
   image/visibility/sort order) but **not creatable or deletable**.
   `trustStrip` is the homepage's benefit/trust icon row (e.g. "100%
@@ -687,18 +701,34 @@ not a page builder:
   `{icon, label, isVisible}`, `icon` drawn from the same allow-listed
   lucide-icon set `StaticPage`'s value-highlight blocks use
   (`STATIC_PAGE_BLOCK_ICONS`), edited via the same add/remove/reorder block
-  editor pattern as `StaticPageForm.tsx`. `promoBanner`
-  and `productShowcase` are unlimited/freely creatable and deletable.
-  `promoBanner` is for ad-hoc promotional banners (image/description/CTA).
-  `productShowcase` renders a configurable product grid — `productMode` is
-  `"category"` (paired with `categorySlug`), `"bestSellers"`,
-  `"newArrivals"` (backend `sort=newest`), or `"onSale"` (client-computed
-  from `compareAtPriceBDT`, shared with `/offers` via
+  editor pattern as `StaticPageForm.tsx`. `promoBanner`,
+  `productShowcase` and `banner` are unlimited/freely creatable and
+  deletable. `promoBanner` is for ad-hoc promotional banners
+  (image/description/CTA), each rendered as its own full-width section
+  inline in page order. `productShowcase` renders a configurable product
+  grid — `productMode` is `"category"` (paired with `categorySlug`),
+  `"bestSellers"`, `"newArrivals"` (backend `sort=newest`), or `"onSale"`
+  (client-computed from `compareAtPriceBDT`, shared with `/offers` via
   `lib/productOffers.ts`), plus a `limit`. This is how admins add things
   like "Premium Dates", additional date-variety showcases, or — once real
   stock exists — a Watches/Chocolates showcase, with no code change; a
   showcase for a category with zero active products simply renders nothing
-  rather than a broken/empty section.
+  rather than a broken/empty section. `banner` is different from
+  `promoBanner` in the data model — every visible `banner` section is
+  meant to be collected together and rendered as one image-only carousel
+  rather than one per document — but **`banner`-type sections are
+  currently not rendered anywhere on the storefront homepage**:
+  `app/(site)/page.tsx`'s section switch has no `"banner"` case (it falls
+  through to `default: return null`), because rendering them duplicated the
+  hero carousel's own images directly beneath it. The type, its admin CRUD
+  at `/admin/homepage`, its model/validator, and the `BannerCarousel.tsx`
+  component (built on native horizontal CSS scroll-snap, two-up on desktop)
+  still exist and still work — an admin can still create/edit/reorder/
+  delete `banner` sections — they simply have no current storefront output.
+  `npm run seed` still seeds three starter "Premium Dates" `banner`
+  documents (titled `demo1`/`demo2`/`offer`, Cloudinary-uploaded from
+  `server/src/seed/assets/`) for that same reason: the admin-side feature is
+  intact, only its homepage rendering was removed.
 
 There is no arbitrary page/route creation and no rich-text/WYSIWYG block
 editor — see "Static page content management" below for `/about`,
@@ -1163,7 +1193,10 @@ Password — Confirm Password field + live strength meter, see above),
 no login required; auto-prefills from a logged-in customer's own email and
 from an `?orderNumber=` query param when arrived at via the "Track Order"
 link on an order card; see "Public order tracking" above), `/about`,
-`/contact`, `/shipping-policy`. There is no standalone `/reviews` page —
+`/contact`, `/shipping-policy`, `/faq` (plain static page, hardcoded Q&A
+content — **not** wired into the `StaticPage` admin content system, which
+stays a fixed three-type enum; see "Static page content management" below).
+There is no standalone `/reviews` page —
 reviews render inline on the product page and homepage, and are moderated
 from `/admin/reviews`. `/checkout` is a separate top-level route (see folder
 structure above), not part of `(site)`.
@@ -1234,19 +1267,29 @@ backend `authorize()`.
 accepts the whole `["co_admin","order_manager","admin","super_admin"]` union
 — it's a role gate, not a per-page one — so a co_admin who navigates
 directly to `/admin/salary`, `/admin/finance`, `/admin/investments`,
-`/admin/navigation`, `/admin/footer`, `/admin/pages`, or
-`/admin/settings` still reaches the page shell (`AdminNav.tsx` only hides
-the link, it doesn't block the route). Each of those pages handles this
-itself with a page-level check — `const isRestricted = user?.role ===
-"co_admin"` — that renders a friendly `EmptyState` ("Access restricted...
-available to Admin and Super Admin only") instead of attempting to load
-data, rather than letting the page render its normal shell and have every
-API call inside it 403. This is UX polish on top of the backend's real
-authorization boundary (those routes already reject co_admin server-side)
-— not a substitute for it, and not a security fix, since the API was never
-reachable by co_admin in the first place. **`/admin/coupons` is no longer on
-this restricted list** — co_admin has real, working (if discount-size-gated)
-access to it now, unlike the other pages here which remain fully blocked.
+`/admin/navigation`, `/admin/footer`, or `/admin/pages` still reaches the
+page shell (`AdminNav.tsx` only hides the link, it doesn't block the
+route). Each of those pages handles this itself with a page-level check —
+`const isRestricted = user?.role === "co_admin"` — that renders a friendly
+`EmptyState` ("Access restricted... available to Admin and Super Admin
+only") instead of attempting to load data, rather than letting the page
+render its normal shell and have every API call inside it 403. This is UX
+polish on top of the backend's real authorization boundary (those routes
+already reject co_admin server-side) — not a substitute for it, and not a
+security fix, since the API was never reachable by co_admin in the first
+place. **`/admin/coupons` is no longer on this restricted list** — co_admin
+has real, working (if discount-size-gated) access to it now, unlike the
+other pages here which remain fully blocked. **`/admin/settings` is a
+special case, not fully blocked or fully open**: its page-level check keys
+off permissions rather than role (`canManageSettings =
+hasPermission("settings.manage")`, `canManageLogo =
+hasPermission("content.branding.manage")`) — co_admin holds only the
+narrower `content.branding.manage`, so it reaches the page and gets
+`BrandingLogoForm` (logo upload only, posting to `PATCH
+/site-settings/logo`) instead of the full `SiteSettingsForm` (site name,
+announcement strip, contact, footer, social links — still `settings.manage`
+only, still admin/super_admin). See "Storefront header" below for why the
+logo specifically was carved out.
 `/admin/approvals` follows the same page-level-guard pattern but with a
 narrower audience: its check is `user?.role !== "super_admin"` (not just
 `=== "co_admin"`), since the backing routes (`/pending-actions`,
@@ -1407,6 +1450,61 @@ own row. `HeaderSearchBar` submits to `/shop?q=…`, which `ShopPageClient`
 already reads — no new endpoint or search page; the richer live-results
 `SearchOverlay` still opens from the compact search icon on small screens.
 
+**Row 2 is a fixed premium emerald/gold bar — a deliberate exception to
+site-wide dark mode.** `navLinkClass()` styles each link as a rounded-full
+pill on a `bg-navbar-secondary` (`#003b2f`) bar: `text-on-navbar-secondary`
+(`#f5f1e6`) normally, `hover:bg-navbar-secondary-hover` (`#0e5843`) +
+`hover:text-navbar-secondary-active` on hover, and
+`bg-navbar-secondary-active` (`#d4af37`) + `text-on-gold` for the active
+page — all on a `duration-200 ease-in-out` color transition. These four
+`navbar-secondary*` tokens (`globals.css`) are CONSTANT across themes, same
+as `brand-deep-*`/`on-brand`: this bar does not follow the light/dark
+toggle, by design. Below `lg`, where row 2 itself is `lg:hidden`, the same
+treatment is mirrored in the mobile drawer via `mobileNavLinkClass()` — each
+of `NavLink` + Categories becomes its own small emerald/gold pill on the
+drawer's cream background, so mobile stays visually tied to the desktop
+bar. Every other drawer row (Track Order, Wishlist, account, Sign Out) is
+unrelated and still uses the original `MOBILE_ITEM_CLASS`. Only row 2 (and
+its mobile-drawer mirror) uses this palette — row 1 and the Categories
+dropdown's flyout panel are untouched and still follow the site-wide
+light/dark theme.
+
+**"More" dropdown** — the last item in row 2, right-aligned via `ml-auto`,
+same hover + focus-within flyout pattern as the Categories dropdown beside
+it (a cream `bg-cream-50` panel, not the emerald palette). Contains About
+Us, Wishlist, FAQs, Call Us and WhatsApp — a **fixed structural menu**, the
+same convention as the Categories dropdown itself (see its own comment
+above): there is no dropdown/grouping concept in the `NavLink` admin model
+(one flat link per row), so this isn't admin-editable, only its content is
+data-driven. Mirrored into the mobile drawer as flat rows using the
+unrelated `MOBILE_ITEM_CLASS` (About Us/FAQs/Call Us/WhatsApp — Wishlist is
+already a drawer row on its own). Call Us (`tel:`) and WhatsApp (`wa.me`,
+with a pre-filled generic greeting) both read `SiteSettings.contactPhone` —
+edited at `/admin/settings`, the same field the Contact page already
+shows — through `lib/phone.ts`'s `toTelHref`/`toWhatsAppHref`, which treat a
+bare local number (leading `0`) as Bangladeshi and prefix country code
+`880`; both menu items simply don't render (desktop) or render disabled
+(product page buttons, see below) when `contactPhone` is blank, the same
+graceful-degrade convention as the announcement strip and Google Sign-In.
+
+**The logo is the only branding in row 1 — there is no "Saudi Authentic
+Product" site-name text next to it.** It renders `SiteSettings.logo.url`
+(`next/image`, intrinsic `2080×756`, `h-11 w-auto sm:h-12 lg:h-14
+object-contain` so it scales without distortion at any breakpoint) with a
+day-one static fallback at `client/public/images/branding/logo2.png` (a
+transparent PNG) for a fresh install before anyone has uploaded one — the
+fallback is never preferred over a configured logo. Changing it is a Site Settings action
+(`SiteSettingsForm`/`BrandingLogoForm` on `/admin/settings`, `PATCH
+/site-settings/logo`), reachable by `admin`/`super_admin` (via
+`settings.manage`, same as the rest of site settings) and **also
+`co_admin`**, via the narrower `content.branding.manage` permission — a
+deliberate carve-out from the "co_admin can't reach site settings" rule
+above, scoped to just the logo field so the rest of site settings
+(name/announcement/contact/footer/social links) stays admin/super-admin
+only. A change applies across the storefront on the next page load, no
+redeploy — the header always reads the live `SiteSettings` document, never
+a hardcoded image path.
+
 A signed-in user is shown as `components/ui/UserAvatar.tsx` — their uploaded
 `avatar.url` if they have one, otherwise a circular monogram of the first
 letter of their name — rather than as a name string. The same component is
@@ -1428,6 +1526,59 @@ images sit in a fixed `aspect-[4/3]` box and pass `fit="cover"` to
 `ProductMedia`, overriding its per-source default, so every tile in a grid
 is identically shaped regardless of whether the image is an uploaded
 Cloudinary photo or a curated local fallback.
+
+**Product detail page gallery** (`components/product/ProductGallery.tsx`):
+a real photo per `Product.images[]` entry renders as a thumbnail strip
+**below** the main image (`grid-cols-4`); clicking one swaps the main
+image. Hovering the main image (a real photo only — never the decorative
+`ProductVisual` fallback) applies a cursor-following 2x magnify: an inner
+wrapper around `ProductMedia` is scaled via inline `transform`/
+`transformOrigin` computed from the pointer position, with the outer box's
+`overflow-hidden` clipping it — `ProductMedia` itself is untouched (it's
+shared by cards/cart/checkout/search, so the zoom stays local to the
+gallery rather than becoming a prop every consumer has to think about).
+
+**Product gallery editing** (`ProductForm.tsx`, part of the existing
+`/products` create/update endpoint — see the routes table above, no
+separate upload system): the admin form round-trips the current gallery as
+`existingImages` (JSON, `{url, publicId}[]`) alongside any newly selected
+files. `product.service.ts#updateProduct` keeps only the images whose
+`publicId` is still present in `existingImages` (identity matched
+strictly, same "no grafting a foreign id/publicId in" rule as variant
+`_id`s — see "Variant identity across edits" above), in the order given,
+deletes whatever was dropped from Cloudinary, and appends newly uploaded
+files after — so one save can add, remove and reorder existing photos
+without re-uploading the whole gallery, capped at 6 total. Sending no
+`existingImages` at all (an older caller) falls back to the previous
+wholesale-replace behaviour. The admin form's thumbnail strip shows a
+remove (✕) and move-left/right control per existing photo on hover, plus a
+separate "add more" file input that appends rather than replaces.
+
+**Product page purchase actions** (`components/product/ProductInfo.tsx`):
+four buttons in a 2x2 grid (same at every breakpoint) — Add to Cart, Buy
+Now, Order on WhatsApp, Call for Order — using four new `Button` variants
+(`cart`/`buyNow`/`whatsapp`/`call`) whose colors come from `globals.css`'s
+CONSTANT `--color-action-*` tokens (not theme-swapped, same reasoning as
+`navbar-secondary*`). Add to Cart runs a brief local
+`"idle"→"adding"→"added"` sequence (not a real network call — cart is
+`localStorage`, see "Cart & wishlist are client-side only" below — this is
+purely the requested "Adding…/Added" button feedback) and is guarded
+against double-firing while non-idle; the cart drawer opening
+(`CartContext#addItem` already does this) is the actual "added" signal.
+Buy Now adds to cart then routes to `/checkout` — there is no separate
+direct-checkout path, since checkout already reads from the cart. WhatsApp
+and Call read `SiteSettings.contactPhone` exactly like the header's "More"
+menu (see "Storefront header" above) and render disabled with a title
+tooltip when it's blank, rather than being omitted, so the grid stays 2x2.
+The WhatsApp message is generated from the live product/variant/quantity —
+never hardcoded. Both purchase buttons (not WhatsApp/Call, which are
+inquiry channels) disable when the selected variant's stock is 0. The
+Button component's shared base class was split so shape (radius/casing/
+transition duration) lives per-variant instead of in the common base — a
+base-level utility and a variant-level override of the same CSS property
+landing on one element is unreliable to resolve by class-string order (see
+`Button.tsx`'s comment), so the four new variants own their radius/casing/
+timing outright rather than fighting the older four's defaults.
 
 **Images**: real Cloudinary photos render via `next/image` when
 `product.images.length > 0` / `category.image` is set; otherwise components
@@ -1483,21 +1634,32 @@ consequences to respect:
 background always carries its matching foreground (`danger-soft` + `danger`,
 `gold-soft` + `gold-700`, `success-soft` + `green-900`) so both halves invert
 together and the contrast ratio is preserved by construction rather than by
-luck. Three families are deliberately **constant** across themes:
+luck. Several families are deliberately **constant** across themes:
 `brand-deep-*`/`on-brand`, `danger-solid` (a filled badge that always carries
 white text), `on-gold` (text on a gold fill — gold stays light in both
 themes, so `text-green-950` there inverted to near-white and dropped the CTA
-to 1.6:1), and `visual-*` (ProductVisual's five decorative gradients, which
-stand in for photography and shouldn't recolour). There should be **no
-arbitrary hex left in any `.tsx`** — add a token instead.
+to 1.6:1), `visual-*` (ProductVisual's five decorative gradients, which
+stand in for photography and shouldn't recolour), `navbar-secondary*`
+(the header's second-row nav bar — see "Storefront header" above), and
+`action-*` (the product page's four purchase buttons — see "Product page
+purchase actions" above). There
+should be **no arbitrary hex left in any `.tsx`** — add a token instead.
 
-Preference is persisted in `localStorage` under `sap:theme`, defaulting to
-the OS `prefers-color-scheme`. An inline pre-hydration script in
-`app/layout.tsx` applies the attribute before first paint so a returning
-dark-mode visitor gets no white flash — its storage key must stay in sync
-with `THEME_STORAGE_KEY`. `ThemeToggle` renders both its icons and lets CSS
-(`.icon-when-light` / `.icon-when-dark`) pick one, so nothing renders from
-theme state and there is no hydration mismatch.
+Preference is persisted in `localStorage` under `sap:theme`. **The default
+for a visitor with no saved preference is always Light — deliberately not
+the OS `prefers-color-scheme`,** so a device set to system dark mode still
+opens the app in Light on a first visit; the toggle still works normally
+from there and the choice is remembered like any other saved preference. An
+inline pre-hydration script in `app/layout.tsx` applies a saved `dark`/
+`light` value to `<html>` before first paint (the `<html>` tag itself
+already carries `data-theme="light"` as its static default, so the script
+only needs to act when a saved preference actually overrides that) — this
+is what gives a returning dark-mode visitor no white flash, and what keeps
+a fresh visitor from ever flashing into dark before settling on light; its
+storage key must stay in sync with `THEME_STORAGE_KEY`. `ThemeToggle`
+renders both its icons and lets CSS (`.icon-when-light` / `.icon-when-dark`)
+pick one, so nothing renders from theme state and there is no hydration
+mismatch.
 
 **Product grid columns** — two shared scales in `lib/utils.ts`, so
 breakpoints can't drift page to page. `PRODUCT_GRID_CLASS` (homepage rails,
