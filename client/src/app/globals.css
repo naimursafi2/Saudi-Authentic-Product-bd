@@ -162,6 +162,20 @@
   --color-action-call: #29469b;
   --color-action-call-hover: #22397f;
 
+  /**
+   * CONSTANT across themes, same reasoning as `action-*` above — the
+   * product card grid's "Add to Cart" button (`ProductCard.tsx`,
+   * `AddToCartButton.tsx`) has its own liquid-fill hover treatment and
+   * shouldn't shift with the light/dark toggle. `-cart-soft` is a
+   * deliberately lighter, softer green than `brand-deep-2` (the plain
+   * `primary` button variant's background) per the redesign request;
+   * `-cart-liquid` is a step *darker* than `-cart-soft` — the shade the
+   * fill layer rises to on hover, chosen over a lighter shade for cleaner,
+   * more noticeable contrast against the resting color.
+   */
+  --color-cart-soft: #2b6b52;
+  --color-cart-liquid: #1f4d3b;
+
   /** Hairline borders — was a hardcoded rgba() in the `*` rule below. */
   --color-hairline: rgba(113, 121, 115, 0.15);
 

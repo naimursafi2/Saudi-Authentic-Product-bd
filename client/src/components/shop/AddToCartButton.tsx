@@ -16,11 +16,11 @@ export function AddToCartButton({
   return (
     <Button
       type="button"
-      variant="primary"
+      variant="addToCart"
       size="xs"
       aria-label="Add to cart"
       onClick={() => addItem(productId, variantId, 1)}
-      className="w-full gap-2 rounded-full shadow-sm transition-all duration-300 hover:shadow-[0_6px_16px_rgba(1,45,29,0.25)]"
+      className="w-full gap-2"
     >
       <ShoppingCart size={14} />
       Add to Cart

@@ -113,14 +113,14 @@ export function ProductCard({ product, className }: ProductCardProps) {
           </span>
           <Button
             type="button"
-            variant="primary"
+            variant="addToCart"
             size="xs"
             disabled={!addableVariant}
             aria-label={
               addableVariant ? `Add ${product.name} to cart` : `${product.name} is out of stock`
             }
             onClick={() => addableVariant && addItem(product.id, addableVariant.id, 1)}
-            className="w-full gap-2 rounded-full shadow-sm transition-all duration-300 hover:shadow-[0_6px_16px_rgba(1,45,29,0.25)]"
+            className="w-full gap-2"
           >
             <ShoppingCart size={14} />
             {addableVariant ? "Add to Cart" : "Stock Out"}

@@ -36,7 +36,10 @@ form or state-management library — forms/data fetching are hand-rolled with
 
 - **Customer storefront** (`client/src/app/(site)`): home, shop (filterable
   catalog), product detail (a multi-photo gallery with thumbnails below the
-  main image and a cursor-following hover-zoom, variant/quantity selection,
+  main image, a cursor-following hover-zoom, and a click-to-open fullscreen
+  lightbox — dark backdrop, close/prev/next, its own thumbnail strip,
+  Escape and arrow-key navigation, click-outside-to-close — variant/quantity
+  selection,
   a wishlist toggle alongside a 2x2 Add to Cart/Buy Now/Order on WhatsApp/
   Call for Order action grid — colors from dedicated `--color-action-*`
   tokens, WhatsApp/Call sourced from `SiteSettings.contactPhone` with a

@@ -1450,6 +1450,33 @@ own row. `HeaderSearchBar` submits to `/shop?q=…`, which `ShopPageClient`
 already reads — no new endpoint or search page; the richer live-results
 `SearchOverlay` still opens from the compact search icon on small screens.
 
+**Sticky-on-scroll behaviour is pure CSS (`position: sticky`), deliberately
+not scroll-event-driven JS.** At `lg`+, row 1 is plain normal-flow content
+(`lg:static`) — it scrolls away naturally as the page scrolls, and row 2
+(`sticky top-0 z-50`) takes over as the pinned nav once row 1 has scrolled
+past. Below `lg`, row 2 doesn't render at all (nav links live in the
+drawer instead), so row 1 itself is the one that's `sticky top-0` there,
+and only the separate mobile search row (its own plain block below row 1)
+scrolls away normally underneath it. Scrolling back up reveals row 1 again
+exactly when its ordinary document position comes back into view — no
+JS, no state, nothing to animate, so there's no scroll-vs-animation race to
+cause jitter.
+
+The one non-obvious requirement this depends on: **`<header>` itself must
+be `display: contents`, not a normal block.** A `position: sticky`
+descendant's containing block is its nearest block-container ancestor
+*regardless of that ancestor's own `position`* (this "positioned ancestor"
+requirement only applies to `absolute`/`fixed`) — so an ordinary `<header>`
+wrapping both rows would silently cap how far either sticky row can
+travel to header's own short (~120px) box, un-sticking the instant the
+page scrolls past it, which is a real, easy-to-reintroduce regression that
+looks fine at the very top of the page and only breaks once you scroll
+further. `display: contents` removes header's own box (so its children's
+containing block becomes `<body>`, which spans the whole page) while
+keeping `<header>` in the accessibility tree as a landmark. Don't reintroduce
+a plain `<header className="...">` wrapper around the two rows without
+re-verifying this.
+
 **Row 2 is a fixed premium emerald/gold bar — a deliberate exception to
 site-wide dark mode.** `navLinkClass()` styles each link as a rounded-full
 pill on a `bg-navbar-secondary` (`#003b2f`) bar: `text-on-navbar-secondary`
@@ -1536,7 +1563,30 @@ wrapper around `ProductMedia` is scaled via inline `transform`/
 `transformOrigin` computed from the pointer position, with the outer box's
 `overflow-hidden` clipping it — `ProductMedia` itself is untouched (it's
 shared by cards/cart/checkout/search, so the zoom stays local to the
-gallery rather than becoming a prop every consumer has to think about).
+gallery rather than becoming a prop every consumer has to think about). A
+`ZoomIn` icon badge fades in over the top-right corner on hover (`group`/
+`group-hover`, `pointer-events-none` so it doesn't add a second click
+target), and the whole main-image area is a `<button>` (not a `div` with an
+`onClick`, for native keyboard focus/Enter-Space support) that opens a
+**fullscreen lightbox** — a separate `ImageLightbox` function in the same
+file, `fixed inset-0 z-[110]` above everything else in the app (the mobile
+nav drawer is `z-[90]`, `SearchOverlay` is `z-[70]`). It follows the same
+"backdrop `<button>` behind, content as a DOM sibling" pattern
+`SearchOverlay` uses for click-outside-to-close (no `stopPropagation`
+needed — clicks on the backdrop button close it, clicks on sibling content
+don't bubble to it) — the one thing to get right is that the image's own
+wrapper must be `pointer-events-auto` (not inherit the centering flex
+wrapper's `pointer-events-none`), or a click directly on the image falls
+through to the backdrop underneath and closes the lightbox, which is the
+opposite of "click outside closes it, click the image doesn't." Escape and
+arrow-left/right are handled via a `keydown` listener scoped to while the
+lightbox is open; previous/next arrows and a bottom thumbnail strip only
+render `when images.length > 1`. Backdrop is `bg-black/95` rather than the
+brand's green scrim used elsewhere (mobile drawer, etc.) — a colored
+backdrop would visibly shift how the product photo's own colors read, which
+defeats the point of a detail/zoom view meant to show the product
+accurately. The enlarged image uses `object-contain` (never `cover`) so it
+is never cropped or distorted.
 
 **Product gallery editing** (`ProductForm.tsx`, part of the existing
 `/products` create/update endpoint — see the routes table above, no
@@ -1640,10 +1690,33 @@ white text), `on-gold` (text on a gold fill — gold stays light in both
 themes, so `text-green-950` there inverted to near-white and dropped the CTA
 to 1.6:1), `visual-*` (ProductVisual's five decorative gradients, which
 stand in for photography and shouldn't recolour), `navbar-secondary*`
-(the header's second-row nav bar — see "Storefront header" above), and
+(the header's second-row nav bar — see "Storefront header" above),
 `action-*` (the product page's four purchase buttons — see "Product page
-purchase actions" above). There
+purchase actions" above), and `cart-soft`/`cart-liquid` (the product-card
+grid's "Add to Cart" button, see below). There
 should be **no arbitrary hex left in any `.tsx`** — add a token instead.
+
+**Product cards' "Add to Cart" button** (`Button.tsx`'s `addToCart`
+variant, used by `ProductCard.tsx` and `shop/AddToCartButton.tsx` — the
+`/offers` page's own card markup) has a **liquid/water-fill hover effect**
+instead of a flat color swap: `bg-cart-soft` (a lighter, softer green than
+the plain `primary` variant's `bg-brand-deep-2`) at rest, with a
+`before:` pseudo-element as the "liquid" — full width, anchored to the
+bottom via `[transform-origin:bottom]`, scaled to 0 height at rest and
+grown to full height (`bg-cart-liquid` — a shade *darker* than `cart-soft`,
+chosen over a lighter fill for cleaner, more noticeable contrast) on hover
+over `duration-300`. CSS
+transforms don't affect the box model, so the pseudo-element's
+`border-radius: 50% 50% 0 0 / 10px 10px 0 0` (a shallow dome across the
+*whole* top edge, not just rounded corners — the "wave") stays crisp as it
+scales. `before:-z-10` is required: a plain, non-positioned child (the
+button's own icon/text) would otherwise render *behind* a `position:
+absolute` pseudo-element by default, hiding it; `isolate` on the button
+keeps that negative z-index scoped locally rather than leaking into the
+page's stacking order. `relative overflow-hidden rounded-full` on the
+button clips the fill layer to the pill shape. The reverse
+(`scale-y-100` → `scale-y-0`) plays automatically on mouse-leave via the
+same transition — nothing extra needed for "the liquid recedes smoothly."
 
 Preference is persisted in `localStorage` under `sap:theme`. **The default
 for a visitor with no saved preference is always Light — deliberately not

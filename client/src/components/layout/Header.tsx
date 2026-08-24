@@ -169,8 +169,32 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-navbar shadow-[0_1px_3px_rgba(1,45,29,0.08)]">
-        {/* ---------- Row 1: logo | search | labelled actions ---------- */}
+      {/* `display: contents` (not a normal block): a `position: sticky`
+          descendant's containing block is its nearest block-container
+          ancestor REGARDLESS of that ancestor's own `position` (this only
+          differs for absolute/fixed, which need a positioned ancestor) — so
+          a plain, ordinary `<header>` wrapping both rows would silently cap
+          how far row 1 (sticky below `lg`) and row 2 (sticky at `lg`+) can
+          stick to header's own short ~124px box, un-sticking the instant
+          the page scrolls past it. `contents` removes header's own box
+          entirely (so its children's containing block becomes `<body>`,
+          which spans the whole page) while keeping `<header>` in the
+          accessibility tree as a landmark — verified empirically: nav
+          stayed pinned through a full scroll only after this change, not
+          before. Confirmed independently that this isn't the earlier
+          "stuttering" bug either — that was caused by an animated
+          grid-template-rows collapse fighting live scroll input on a
+          sticky element's OWN box; nothing here animates any element's
+          size, so there's nothing to fight the scroll gesture. */}
+      <header className="contents">
+        {/* ---------- Row 1: logo | search | labelled actions ----------
+            Sticky only below `lg` (it's the only persistent nav bar on
+            mobile, so it stays put); at `lg`+ it's plain normal-flow
+            content, so it scrolls away naturally as the page scrolls and
+            row 2 takes over as the sticky nav — no JS, no animated
+            height/collapse, just native `position: sticky` plus ordinary
+            document flow, which is what keeps this perfectly smooth. */}
+        <div className="sticky top-0 z-50 bg-navbar shadow-[0_1px_3px_rgba(1,45,29,0.08)] lg:static lg:shadow-none">
         <div className="mx-auto flex max-w-[1240px] items-center gap-3 px-4 py-3 sm:gap-5 sm:px-6 lg:px-8">
           {/* Hamburger — LEFT, so the drawer slides in from the edge it sits on. */}
           <button
@@ -268,14 +292,20 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
             <ThemeToggle className="ml-0.5" />
           </div>
         </div>
+        </div>
 
-        {/* Search bar drops to its own row on tablet, where row 1 is full. */}
+        {/* Search bar drops to its own row on tablet/mobile, where row 1 is
+            full. Plain normal-flow content, same as row 1 above at `lg`+ —
+            it scrolls away under the sticky row 1 as the page scrolls,
+            with no JS needed. */}
         <div className="mx-auto max-w-[1240px] px-4 pb-3 sm:px-6 lg:hidden">
           <HeaderSearchBar className="w-full" />
         </div>
 
-        {/* ---------- Row 2: main nav / categories ---------- */}
-        <nav className="hidden bg-navbar-secondary lg:block">
+        {/* ---------- Row 2: main nav / categories ----------
+            Sticky only at `lg`+, taking over from row 1 once it's scrolled
+            out of the normal document flow above. */}
+        <nav className="sticky top-0 z-50 hidden bg-navbar-secondary lg:block">
           <div className="mx-auto flex max-w-[1240px] items-center gap-1 px-4 py-1.5 sm:px-6 lg:px-8">
             {navLinks.map((link) => {
               const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);

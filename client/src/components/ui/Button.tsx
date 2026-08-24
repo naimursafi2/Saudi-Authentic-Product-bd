@@ -10,7 +10,8 @@ export type ButtonVariant =
   | "cart"
   | "buyNow"
   | "whatsapp"
-  | "call";
+  | "call"
+  | "addToCart";
 export type ButtonSize = "xs" | "sm" | "md" | "lg" | "action";
 
 /**
@@ -41,6 +42,27 @@ const variantClasses: Record<ButtonVariant, string> = {
   whatsapp:
     "rounded-lg normal-case tracking-normal transition-colors duration-200 ease-in-out bg-action-whatsapp text-white hover:bg-action-whatsapp-hover",
   call: "rounded-lg normal-case tracking-normal transition-colors duration-200 ease-in-out bg-action-call text-white hover:bg-action-call-hover",
+  /**
+   * Product-card grid's "Add to Cart" button — a liquid/water-fill hover
+   * effect rather than a flat color swap. `relative isolate overflow-hidden`
+   * on the button clips the fill layer to its own (pill) shape and gives it
+   * a local stacking context; `before:` is the liquid itself: full width,
+   * anchored to the bottom via `[transform-origin:bottom]`, scaled to 0
+   * height at rest and grown to full height on hover — CSS transforms don't
+   * affect layout/box-model, so the `border-radius` wave shape (a shallow
+   * dome across the whole top edge, not just rounded corners) stays crisp
+   * as it grows. `-z-10` keeps it behind the button's actual text/icon
+   * content, which — being plain, non-positioned children — would otherwise
+   * sit BEHIND a positioned pseudo-element by default. The reverse
+   * (scale-y-100 → scale-y-0) plays automatically on mouse-leave via the
+   * same transition, so the liquid recedes smoothly rather than vanishing.
+   */
+  addToCart:
+    "relative isolate overflow-hidden rounded-full uppercase tracking-[0.05em] text-white shadow-sm bg-cart-soft " +
+    "transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-px hover:shadow-[0_6px_14px_rgba(2,45,29,0.28)] active:translate-y-0 " +
+    "before:content-[''] before:absolute before:inset-x-0 before:bottom-0 before:-z-10 before:h-full before:bg-cart-liquid " +
+    "before:[transform-origin:bottom] before:scale-y-0 before:rounded-[50%_50%_0_0/10px_10px_0_0] " +
+    "before:transition-transform before:duration-300 before:ease-out hover:before:scale-y-100",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
