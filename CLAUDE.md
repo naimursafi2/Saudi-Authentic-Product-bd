@@ -1735,13 +1735,130 @@ pick one, so nothing renders from theme state and there is no hydration
 mismatch.
 
 **Product grid columns** — two shared scales in `lib/utils.ts`, so
-breakpoints can't drift page to page. `PRODUCT_GRID_CLASS` (homepage rails,
-offers, wishlist, related products): 2 → 3 → 4 → 5 columns at
-base/`sm`/`lg`/`xl`. `SHOP_GRID_CLASS` (shop page and its skeleton): one
-column narrower at every step above the floor — 2 → 2 → 3 → 4 — because the
-shop gives up width to its filter sidebar. **Both never drop below 2
-columns**, including on small phones. Shop `PAGE_SIZE` is 20, which divides
-evenly by 2/3/4/5 so a full page never ends in an orphaned part-row.
+breakpoints can't drift page to page. `PRODUCT_GRID_CLASS` (offers, wishlist,
+related products): 2 → 3 → 4 → 5 columns at base/`sm`/`lg`/`xl`.
+`SHOP_GRID_CLASS` (shop page and its skeleton): one column narrower at every
+step above the floor — 2 → 2 → 3 → 4 — because the shop gives up width to
+its filter sidebar. **Both never drop below 2 columns**, including on small
+phones. Shop `PAGE_SIZE` is 20, which divides evenly by 2/3/4/5 so a full
+page never ends in an orphaned part-row. The homepage's own product rails
+(`BestSellers`, `ProductShowcase`) don't use `PRODUCT_GRID_CLASS` — they use
+`ProductCarousel` instead (see below), which mirrors the same 2/3/4/5 column
+counts as a per-card width rather than a CSS grid.
+
+**`ProductCarousel`** (`components/ui/ProductCarousel.tsx`) — the sliding
+product rail every homepage product section (`BestSellers`,
+`ProductShowcase`, for Best Sellers plus every category/new-arrivals/on-sale
+showcase configured in `/admin/homepage`) renders through, replacing what
+used to be a static `PRODUCT_GRID_CLASS` grid. Since it's one shared
+component, every section using it behaves identically — there's no
+per-section carousel logic to keep in sync. **Deliberately no visible
+prev/next arrow buttons** — built and then removed on request because they
+read as clutter on the homepage. Manual navigation is native touch swipe,
+click-and-drag with a mouse, and a row of dot buttons below the track;
+left alone, it autoplays too (`AUTOPLAY_MS`, paused on hover/focus/drag).
+Only the homepage rails use this; `/shop`, `/offers`, `/wishlist` and
+related-products still use the static `PRODUCT_GRID_CLASS`/`SHOP_GRID_CLASS`
+grids.
+
+**It's a bounded single-card sliding window, not an infinite loop, and it
+moves exactly one card per interaction — never a page/group, never a skip.**
+`[1 2 3 4]` → drag → `[2 3 4 5]` → drag → `[3 4 5 6]`, one product at a
+time, original order always preserved, never `[1 2 3 4]` → `[5 6 7 8]`. The
+window's start index (`activeIndex`) is clamped to `[0, products.length -
+visibleCount]` and simply stops at either end — `[5 6 7 8]` is the last
+position for 8 products at 4-visible, and dragging or autoplaying further
+does nothing rather than overshooting or leaving a gap. This is the
+opposite of two earlier versions of this component: one that tripled the
+product list to loop forever, and one that (briefly) moved a full page
+(`visibleCount` cards) per interaction — both were deliberately removed.
+Visible-card count (`VISIBLE_COUNT_BREAKPOINTS`, 2/3/4/5 by breakpoint,
+mirroring `CARD_WIDTH_CLASS`) is unchanged by any of this — it only decides
+how far the window can slide (`maxIndex`), not how far one interaction
+moves it.
+
+**Position is driven entirely by JS, through one function.** A single
+`positionPxRef` (px) is the only source of truth for "where the track is,"
+and autoplay ticks, dot clicks, and drag all funnel through the same
+`applyPosition(px, opts)`, which clamps it into `[0, maxIndex * stepWidth]`,
+writes the `transform`, and derives `activeIndex` from it. There is
+deliberately no second code path that independently tracks position —
+that's what keeps drag, autoplay, and the dots in sync with each other.
+
+This does **not** use native horizontal scrolling (`overflow-x-auto` +
+`scrollLeft`), which an earlier version of this component was built on.
+That combination fought itself once a mouse-drag was layered on top: CSS
+`scroll-snap` resisting a directly-assigned `scrollLeft` on every
+`pointermove` (the slider felt like it was sticking), and
+`element.setPointerCapture()` intermittently retargeting the
+`pointerup`/`click` pair away from the `<ProductCard>` link under the
+cursor (an ordinary click stopped opening the product page). Moving the
+track with `transform` inside a plain `overflow-hidden` viewport sidesteps
+both — there's no native scroll gesture for anything to fight. Reading the
+live position when a drag starts is a `getComputedStyle` transform-matrix
+parse (`getCurrentTranslateX`), not a scroll position the browser is also
+trying to own, so grabbing the slider mid-animation continues smoothly from
+where it visually is rather than snapping first.
+
+One CSS pitfall worth flagging for any future change here: the track's
+className is `w-full`, **not** `w-max`/`w-fit`. Each card's width
+(`CARD_WIDTH_CLASS`) is a *percentage*, which can only resolve against a
+track with a definite width — an earlier version sized the track to its
+own (then tripled-list) content instead, leaving the percentages with
+nothing to resolve against, and Chrome fell back to sizing every card near
+the full container width. With `w-full` the track's own box is exactly one
+viewport wide; its content still naturally overflows that box whenever
+there are more than `visibleCount` products (`shrink-0` on every card, so
+they never compress to fit), which is fine — `overflow-hidden` on the
+viewport clips it for display.
+
+Card width is measured once (on mount and on resize) into `stepWidthRef`
+rather than re-measured with `getBoundingClientRect` on every drag frame —
+that forces a synchronous layout, and doing that 60+ times a second during
+a drag is what made an earlier version of this component feel laggy.
+
+Mouse and touch share one code path via Pointer Events, listened on
+`window` (not captured on the track — see the pointer-capture note above)
+for the duration of an active drag, torn down together via an
+`AbortController` created in the `pointerdown` handler rather than
+`removeEventListener` with a stored function reference (which would need a
+"latest callback" ref — this project's lint config, the React Compiler
+rules, rejects mutating a ref outside a plain DOM-ref effect). The track
+carries Tailwind's `touch-pan-y`, so a vertical touch gesture is left
+entirely to the browser's native page scroll (delivered to this component
+as a `pointercancel`, which ends the drag cleanly) while a horizontal one
+is this component's to animate — the standard way to combine a horizontal
+drag surface with a vertically-scrolling page. A capture-phase `click`
+handler on the track swallows exactly the one click that follows a real
+drag (tracked via a ref that flips once pointer movement exceeds
+`DRAG_CLICK_THRESHOLD`, a small ~6px hair-trigger just for telling a click
+from a drag), so a drag never accidentally opens the product page, while an
+ordinary click — including one with a few pixels of the jitter any real
+click has — still does.
+
+**A drag always resolves to exactly the next or previous card, never a
+partial one and never more than one.** While the pointer is down the track
+follows it 1:1 (live, no easing) via the same `applyPosition`; on release,
+`endDrag` compares the net displacement against `DRAG_COMMIT_RATIO` (15%)
+of one *card's* width — short of that it springs back (animated) to the
+card it started on, past it, it commits to exactly one card forward or
+back in the drag's direction, regardless of how much further past the
+ratio it was dragged. This two-tier threshold (`DRAG_CLICK_THRESHOLD` for
+click-vs-drag, `DRAG_COMMIT_RATIO` for card-vs-spring-back) is why a small
+accidental drag neither opens a product nor moves the slider.
+
+The dot row has one dot per single-card position the window can stop at —
+`products.length - visibleCount + 1` of them (5 dots for 8 products at
+4-visible: positions `[1234] [2345] [3456] [4567] [5678]`), **not** one dot
+per product and **not** grouped into pages — clicking one jumps straight to
+that window position via the same `applyPosition` every other movement
+goes through, so autoplay, a dot click, a drag, and a swipe all stay in
+sync through one code path. Hidden entirely when every product already
+fits on screen (`products.length <= visibleCount`), same as an earlier
+page-based version of this dot row did. `visibleCount` is read via
+`useSyncExternalStore` on `resize` (not `useEffect` + `setState`, which the
+React Compiler lint rules reject) so the SSR snapshot (2, the base
+breakpoint) matches the first client render with no hydration mismatch.
 
 **No form or state-management library**: forms and data fetching are
 hand-rolled with `useState`/`useEffect` + the custom `lib/api` client — no

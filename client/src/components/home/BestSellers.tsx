@@ -1,8 +1,7 @@
-import { PRODUCT_GRID_CLASS } from "@/lib/utils";
 import Link from "next/link";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
-import { ProductCard } from "@/components/ui/ProductCard";
+import { ProductCarousel } from "@/components/ui/ProductCarousel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import type { ApiHomepageSection } from "@/types/api";
 
@@ -24,11 +23,7 @@ export async function BestSellers({ section }: { section?: ApiHomepageSection })
             View All <span aria-hidden>&rarr;</span>
           </Link>
         </div>
-        <div className={PRODUCT_GRID_CLASS}>
-          {bestSellers.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        <ProductCarousel products={bestSellers} />
       </div>
     </section>
   );

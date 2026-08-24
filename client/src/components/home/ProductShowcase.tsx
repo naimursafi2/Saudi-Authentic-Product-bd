@@ -2,9 +2,9 @@ import Link from "next/link";
 import { listProducts } from "@/lib/api/products";
 import { toProduct } from "@/lib/mappers";
 import { getProductDeals } from "@/lib/productOffers";
-import { ProductCard } from "@/components/ui/ProductCard";
+import { ProductCarousel } from "@/components/ui/ProductCarousel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { cn, PRODUCT_GRID_CLASS } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ApiHomepageSection } from "@/types/api";
 import type { Product } from "@/types/product";
 
@@ -75,11 +75,7 @@ export async function ProductShowcase({ section }: { section: ApiHomepageSection
             </Link>
           )}
         </div>
-        <div className={PRODUCT_GRID_CLASS}>
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        <ProductCarousel products={products} />
       </div>
     </section>
   );
