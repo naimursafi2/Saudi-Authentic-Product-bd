@@ -174,7 +174,7 @@ export const STATIC_PAGE_DEFAULTS: Array<
       },
       {
         title: "Order Tracking",
-        body: "Once your order is dispatched, you will receive a confirmation with tracking details via SMS and email.",
+        body: "Once your order is dispatched, you will receive a confirmation with tracking details via email, and you can track its status anytime using your order number and email on our Track Order page.",
         isVisible: true,
       },
     ],
