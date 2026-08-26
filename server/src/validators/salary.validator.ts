@@ -5,6 +5,7 @@ export const createSalaryPaymentSchema = z.object({
   month: z.number().int().min(1).max(12),
   year: z.number().int().min(2000),
   amountBDT: z.number().positive(),
+  dailyAllowanceBDT: z.number().nonnegative().optional().default(0),
   note: z.string().trim().max(500).optional(),
 });
 

@@ -230,7 +230,7 @@ describe("Stock changes require Super Admin approval", () => {
       expect(res.body.data.stockPendingActionId).toBeUndefined();
     });
 
-    it("creates a co_admin's product with zero stock until the quantity is approved", async () => {
+    it("queues a co_admin's whole new product for approval instead of creating it", async () => {
       const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
       const { token: superAdminToken } = await createAuthedUser({ role: "super_admin" });
       const category = await CategoryModel.create({ name: "Gifts", slug: "gifts" });
@@ -244,18 +244,81 @@ describe("Stock changes require Super Admin approval", () => {
         .field("origin", "Madinah")
         .field("categories", JSON.stringify([category._id.toString()]))
         .field("variants", JSON.stringify([{ label: "Large", priceBDT: 3000, stock: 30 }]));
-      expect(res.status).toBe(201);
-      expect(res.body.data.stockPendingActionId).toBeTruthy();
+      expect(res.status).toBe(202);
+      expect(res.body.data.pendingActionId).toBeTruthy();
+      expect(res.body.data.product).toBeUndefined();
 
-      const created = await ProductModel.findById(res.body.data.product._id);
-      expect(created!.variants[0]!.stock).toBe(0);
+      // Nothing exists in the catalog until a Super Admin grants it.
+      expect(await ProductModel.findOne({ slug: "gift-box" })).toBeNull();
 
-      await request(app)
-        .patch(`/api/v1/pending-actions/${res.body.data.stockPendingActionId}/grant`)
+      const grant = await request(app)
+        .patch(`/api/v1/pending-actions/${res.body.data.pendingActionId}/grant`)
         .set(...authHeader(superAdminToken))
         .send({});
+      expect(grant.status).toBe(200);
 
-      expect(await liveStock(created!._id.toString())).toBe(30);
+      const created = await ProductModel.findOne({ slug: "gift-box" });
+      expect(created).not.toBeNull();
+      expect(created!.variants[0]!.stock).toBe(30);
+    });
+
+    it("gates an admin's new product too — only super_admin publishes directly", async () => {
+      const { token: adminToken } = await createAuthedUser({ role: "admin" });
+      const category = await CategoryModel.create({ name: "Gifts", slug: "gifts-admin" });
+
+      const res = await request(app)
+        .post("/api/v1/products")
+        .set(...authHeader(adminToken))
+        .field("name", "Admin Gift Box")
+        .field("tagline", "A curated gift box")
+        .field("description", "Contains an assortment of dates.")
+        .field("origin", "Madinah")
+        .field("categories", JSON.stringify([category._id.toString()]))
+        .field("variants", JSON.stringify([{ label: "Large", priceBDT: 3000, stock: 30 }]));
+      expect(res.status).toBe(202);
+      expect(await ProductModel.findOne({ slug: "admin-gift-box" })).toBeNull();
+    });
+
+    it("leaves nothing behind when a new-product request is denied", async () => {
+      const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
+      const { token: superAdminToken } = await createAuthedUser({ role: "super_admin" });
+      const category = await CategoryModel.create({ name: "Gifts", slug: "gifts-deny" });
+
+      const res = await request(app)
+        .post("/api/v1/products")
+        .set(...authHeader(coAdminToken))
+        .field("name", "Rejected Box")
+        .field("tagline", "A curated gift box")
+        .field("description", "Contains an assortment of dates.")
+        .field("origin", "Madinah")
+        .field("categories", JSON.stringify([category._id.toString()]))
+        .field("variants", JSON.stringify([{ label: "Large", priceBDT: 3000, stock: 30 }]));
+
+      const deny = await request(app)
+        .patch(`/api/v1/pending-actions/${res.body.data.pendingActionId}/deny`)
+        .set(...authHeader(superAdminToken))
+        .send({ note: "Not needed" });
+      expect(deny.status).toBe(200);
+
+      expect(await ProductModel.findOne({ slug: "rejected-box" })).toBeNull();
+    });
+
+    it("creates a super_admin's new product directly, with real stock, no approval needed", async () => {
+      const { token: superAdminToken } = await createAuthedUser({ role: "super_admin" });
+      const category = await CategoryModel.create({ name: "Gifts", slug: "gifts-direct" });
+
+      const res = await request(app)
+        .post("/api/v1/products")
+        .set(...authHeader(superAdminToken))
+        .field("name", "Super Admin Box")
+        .field("tagline", "A curated gift box")
+        .field("description", "Contains an assortment of dates.")
+        .field("origin", "Madinah")
+        .field("categories", JSON.stringify([category._id.toString()]))
+        .field("variants", JSON.stringify([{ label: "Large", priceBDT: 3000, stock: 30 }]));
+      expect(res.status).toBe(201);
+      expect(res.body.data.pendingActionId).toBeUndefined();
+      expect(await liveStock(res.body.data.product._id)).toBe(30);
     });
   });
 

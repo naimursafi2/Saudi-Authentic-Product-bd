@@ -70,6 +70,10 @@ async function createReturnedOrder() {
     .patch(`/api/v1/orders/${order._id}/delivery-status`)
     .set(...authHeader(agentToken))
     .send({ status: "out_for_delivery" });
+  await request(app)
+    .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
+    .set(...authHeader(agentToken))
+    .send({});
 
   const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
   await request(app)

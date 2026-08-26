@@ -6,6 +6,7 @@ import { denyPendingAction, grantPendingAction, listPendingActions } from "@/lib
 import { getApprovalSettings, updateApprovalSettings } from "@/lib/api/approvalSettings";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -19,6 +20,7 @@ const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] t
 const ACTION_LABELS: Record<string, string> = {
   "coupon.create": "Create coupon",
   "coupon.update": "Update coupon",
+  "product.create": "New product",
   "product.delete": "Delete product",
   "product.stock.update": "Product stock update",
   "inventory.adjust": "Stock adjustment",
@@ -42,6 +44,17 @@ function PayloadSummary({ action }: { action: ApiPendingAction }) {
           {p.discountType === "percentage" ? "%" : " BDT"}
         </span>
       );
+    case "product.create": {
+      const variants = (p.variants ?? []) as { label: string; priceBDT: number; stock: number }[];
+      const imageCount = ((p.images ?? []) as unknown[]).length;
+      return (
+        <span>
+          {String(p.name ?? "")} —{" "}
+          {variants.map((v) => `${v.label}: ${v.stock} @ ${v.priceBDT} BDT`).join(", ")}
+          {imageCount > 0 ? `, ${imageCount} photo${imageCount === 1 ? "" : "s"}` : ""}
+        </span>
+      );
+    }
     case "product.delete":
       return <span>{String(p.productName ?? p.productId ?? "")}</span>;
     case "inventory.adjust": {
@@ -78,6 +91,7 @@ function PayloadSummary({ action }: { action: ApiPendingAction }) {
 
 export default function AdminApprovalsPage() {
   const { hasPermission } = useAuth();
+  const confirmDialog = useConfirm();
   const isRestricted = !hasPermission("approvals.manage");
 
   const [actions, setActions] = useState<ApiPendingAction[]>([]);
@@ -120,17 +134,21 @@ export default function AdminApprovalsPage() {
 
   async function handleGrant(action: ApiPendingAction) {
     const conflicts = action.conflictingActionIds ?? [];
-    if (
-      conflicts.length > 0 &&
-      !confirm(
-        `Heads up: ${conflicts.length} other pending request(s) change the stock of the same variant.\n\n` +
+    if (conflicts.length > 0) {
+      const proceed = await confirmDialog({
+        title: "Conflicting Stock Requests",
+        message:
+          `Heads up: ${conflicts.length} other pending request(s) change the stock of the same variant.\n\n` +
           "Granting this one applies it now; the others stay pending and will apply on top when granted. " +
-          "Review them together before approving.\n\nGrant this request anyway?"
-      )
-    ) {
-      return;
+          "Review them together before approving.",
+        confirmLabel: "Grant Anyway",
+        tone: "danger",
+      });
+      if (!proceed) return;
     }
-    const note = prompt("Note for this approval (optional):") ?? undefined;
+    const note = prompt("Note for this approval (optional):");
+    // Cancelling the note prompt must not grant the request anyway.
+    if (note === null) return;
     setActionError(null);
     setActingId(action._id);
     try {
@@ -144,7 +162,9 @@ export default function AdminApprovalsPage() {
   }
 
   async function handleDeny(action: ApiPendingAction) {
-    const note = prompt("Reason for denying (optional):") ?? undefined;
+    const note = prompt("Reason for denying (optional):");
+    // Cancelling the reason prompt must not deny the request anyway.
+    if (note === null) return;
     setActionError(null);
     setActingId(action._id);
     try {

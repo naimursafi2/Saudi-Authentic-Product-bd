@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, Trash2, User as UserIcon } from "lucide-react";
+import { Camera, CheckCircle2, IdCard, MailCheck, Trash2, User as UserIcon } from "lucide-react";
 import Image from "next/image";
 import { updateMyProfile, updateMyAvatar, removeMyAvatar } from "@/lib/api/users";
-import { changePassword } from "@/lib/api/auth";
+import { changePassword, resendVerification } from "@/lib/api/auth";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
@@ -169,6 +169,90 @@ function ProfileDetailsForm({ user }: { user: ApiUser }) {
   );
 }
 
+/**
+ * Shown to every role in the shared profile page — customers, employees,
+ * delivery agents, co-admins, order managers, admins and super admins all
+ * verify the same way. Sends via the existing (existence-hiding, rate
+ * limited) `POST /auth/resend-verification` — the viewer's own email is
+ * already known here, so no separate authenticated endpoint is needed.
+ */
+function EmailVerificationSection({ user }: { user: ApiUser }) {
+  const [isSending, setIsSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleVerify() {
+    setError(null);
+    setIsSending(true);
+    try {
+      await resendVerification(user.email);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Could not send the verification email.");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <h2 className="mb-4 flex items-center gap-2 font-serif text-lg text-green-950">
+        <MailCheck size={18} className="text-green-900" /> Email Verification
+      </h2>
+      {user.isEmailVerified ? (
+        <div className="flex w-fit items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-sm font-semibold text-green-900">
+          <CheckCircle2 size={16} /> Email Verified
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-brown-600">
+            <span className="font-medium text-green-950">{user.email}</span> hasn&apos;t been verified yet.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleVerify}
+            disabled={isSending || sent}
+            className="shrink-0"
+          >
+            {sent ? "Verification Email Sent" : isSending ? "Sending..." : "Verify Email"}
+          </Button>
+        </div>
+      )}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Read-only — only an Admin/Super Admin can set a staff member's NID (see
+ * `/admin/employees`'s Employee form). This just lets the staff member
+ * confirm what's on file for them.
+ */
+function NidInformationSection({ user }: { user: ApiUser }) {
+  if (!user.staffMeta) return null;
+  const { nidNumber, nidImage } = user.staffMeta;
+  if (!nidNumber && !nidImage) return null;
+
+  return (
+    <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <h2 className="mb-4 flex items-center gap-2 font-serif text-lg text-green-950">
+        <IdCard size={18} className="text-green-900" /> NID Information
+      </h2>
+      <div className="flex items-center gap-4">
+        {nidImage?.url && (
+          <span className="relative block h-16 w-24 shrink-0 overflow-hidden rounded border border-green-900/15 bg-cream-50">
+            <Image src={nidImage.url} alt="NID card" fill className="object-cover" />
+          </span>
+        )}
+        <p className="text-sm text-green-950">
+          NID Number: <span className="font-medium">{nidNumber ?? "Not on file"}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -239,6 +323,10 @@ export function ProfileSection({ user }: { user: ApiUser }) {
         <h2 className="mb-4 font-serif text-lg text-green-950">Personal Details</h2>
         <ProfileDetailsForm user={user} />
       </div>
+
+      <EmailVerificationSection user={user} />
+
+      <NidInformationSection user={user} />
 
       <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
         <h2 className="mb-4 font-serif text-lg text-green-950">Change Password</h2>

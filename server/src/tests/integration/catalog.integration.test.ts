@@ -30,8 +30,9 @@ describe("Catalog integration (categories/products against a real DB)", () => {
     expect(asCustomer.status).toBe(403);
   });
 
-  it("lets an admin create a category and a product, and serves both publicly", async () => {
+  it("lets an admin create a category directly, but a new product needs a Super Admin grant before it's public", async () => {
     const { token } = await createAuthedUser({ role: "admin", email: "admin@example.com" });
+    const { token: superToken } = await createAuthedUser({ role: "super_admin" });
 
     const categoryRes = await request(app)
       .post("/api/v1/categories")
@@ -53,13 +54,23 @@ describe("Catalog integration (categories/products against a real DB)", () => {
         "variants",
         JSON.stringify([{ label: "500g", priceBDT: 1200, stock: 20, lowStockThreshold: 5 }])
       );
-    expect(productRes.status).toBe(201);
-    expect(productRes.body.data.product.slug).toBeTruthy();
-    const slug = productRes.body.data.product.slug as string;
+    // An admin's new product is queued for Super Admin approval, not created.
+    expect(productRes.status).toBe(202);
+    expect(productRes.body.data.pendingActionId).toBeTruthy();
+
+    const beforeGrant = await request(app).get("/api/v1/products");
+    expect(beforeGrant.body.data.products).toHaveLength(0);
+
+    const grant = await request(app)
+      .patch(`/api/v1/pending-actions/${productRes.body.data.pendingActionId}/grant`)
+      .set(...authHeader(superToken))
+      .send({});
+    expect(grant.status).toBe(200);
 
     const publicList = await request(app).get("/api/v1/products");
     expect(publicList.status).toBe(200);
     expect(publicList.body.data.products).toHaveLength(1);
+    const slug = publicList.body.data.products[0].slug as string;
 
     const publicDetail = await request(app).get(`/api/v1/products/${slug}`);
     expect(publicDetail.status).toBe(200);

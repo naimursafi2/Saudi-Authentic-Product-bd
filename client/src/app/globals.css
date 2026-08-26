@@ -79,10 +79,25 @@
   --color-danger: #8a4a3f;
   --color-danger-strong: #6f3b32;
   --color-danger-soft: #fbeceb;
+  --color-danger-soft-hover: #f3d4d1;
   --color-danger-border: #f0c9c3;
   --color-gold-soft: #fcf8ee;
   --color-success-soft: #e9f3ee;
+  --color-success-soft-hover: #cfe8db;
   --color-warning-soft: #f8dac8;
+
+  /**
+   * Edit/update actions across the admin CRUD tables — a light blue that
+   * darkens on hover, paired the same way as `danger` above. Shares its base
+   * hue with the CONSTANT `action-call` blue (the product page's "Call for
+   * Order" button) for brand consistency, but stays its own theme-adaptive
+   * token since it needs to invert on a dark table row the way `action-call`
+   * (tied to one fixed-palette button) never has to.
+   */
+  --color-info: #29469b;
+  --color-info-strong: #1c3170;
+  --color-info-soft: #e8ecf7;
+  --color-info-soft-hover: #c9d6f0;
 
   /**
    * CONSTANT across themes, like the brand-deep family above.
@@ -239,10 +254,16 @@
   --color-danger: #f0a99c;
   --color-danger-strong: #f7c9c1;
   --color-danger-soft: #3b2420;
+  --color-danger-soft-hover: #4a2e28;
   --color-danger-border: #6b3f37;
   --color-gold-soft: #332a14;
   --color-success-soft: #16301f;
+  --color-success-soft-hover: #1f4029;
   --color-warning-soft: #3a2a1c;
+  --color-info: #8fb0e8;
+  --color-info-strong: #b8cdf0;
+  --color-info-soft: #1c2540;
+  --color-info-soft-hover: #2a3a5c;
 
   --color-hairline: rgba(190, 200, 195, 0.14);
 
@@ -380,4 +401,23 @@ body {
 
 .animate-slide-in-left {
   animation: slide-in-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Printable invoice (components/order/OrderInvoice.tsx): isolates
+   #invoice-print-area from the rest of the page — including the modal
+   chrome it's shown in — so `window.print()` only outputs the invoice
+   itself, not the app UI around it. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #invoice-print-area,
+  #invoice-print-area * {
+    visibility: visible;
+  }
+  #invoice-print-area {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
 }

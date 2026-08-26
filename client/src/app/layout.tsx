@@ -14,6 +14,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { ConfirmDialogProvider } from "@/context/ConfirmDialogContext";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { ImpersonationBanner } from "@/components/account/ImpersonationBanner";
 
@@ -54,9 +55,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <CartProvider>
               <WishlistProvider>
-                <ImpersonationBanner />
-                {children}
-                <CartDrawer />
+                <ConfirmDialogProvider>
+                  <ImpersonationBanner />
+                  {children}
+                  <CartDrawer />
+                </ConfirmDialogProvider>
               </WishlistProvider>
             </CartProvider>
           </AuthProvider>

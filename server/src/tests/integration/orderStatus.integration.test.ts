@@ -94,13 +94,24 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
       .send({ status: "out_for_delivery" });
     expect(outForDeliveryRes.status).toBe(200);
 
+    // Reaching out_for_delivery no longer sends an OTP by itself — the agent
+    // sends it explicitly once they've reached the customer.
+    const beforeSend = await OrderModel.findById(order._id).select("+otpCode");
+    expect(beforeSend?.otpCode).toBeUndefined();
+
+    const sendOtpRes = await request(app)
+      .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
+      .set(...authHeader(agentToken))
+      .send({});
+    expect(sendOtpRes.status).toBe(200);
+
     const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
-    expect(dbOrder?.otpCode).toMatch(/^\d{6}$/);
+    expect(dbOrder?.otpCode).toMatch(/^\d{4}$/);
 
     const wrongOtp = await request(app)
       .post(`/api/v1/orders/${order._id}/verify-otp`)
       .set(...authHeader(agentToken))
-      .send({ otp: "000000" });
+      .send({ otp: "0000" });
     expect(wrongOtp.status).toBe(400);
 
     const verifyRes = await request(app)
@@ -110,9 +121,13 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
     expect(verifyRes.status).toBe(200);
     expect(verifyRes.body.data.order.status).toBe("delivered");
     expect(verifyRes.body.data.order.isPaid).toBe(true);
+    expect(verifyRes.body.data.order.deliveryVerified).toBe(true);
+    expect(verifyRes.body.data.order.deliveredAt).toBeTruthy();
+    expect(verifyRes.body.data.order.deliveredBy).toBe(agent._id.toString());
 
     const finalOrder = await OrderModel.findById(order._id);
     expect(finalOrder?.otpCode).toBeUndefined();
+    expect(finalOrder?.otpAttempts).toBe(0);
     const history = finalOrder!.statusHistory;
     const deliveredEntry = history[history.length - 1];
     expect(deliveredEntry.status).toBe("delivered");
@@ -257,9 +272,13 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
       .patch(`/api/v1/orders/${order._id}/delivery-status`)
       .set(...authHeader(agentToken))
       .send({ status: "out_for_delivery" });
+    await request(app)
+      .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
+      .set(...authHeader(agentToken))
+      .send({});
 
     const ownerView = await request(app).get(`/api/v1/orders/${order._id}`).set(...authHeader(customerToken));
-    expect(ownerView.body.data.otp).toMatch(/^\d{6}$/);
+    expect(ownerView.body.data.otp).toMatch(/^\d{4}$/);
     expect(ownerView.body.data.order.otpCode).toBeUndefined();
 
     const staffView = await request(app).get(`/api/v1/orders/${order._id}`).set(...authHeader(managerToken));
@@ -269,7 +288,96 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
     const trackView = await request(app)
       .get("/api/v1/orders/track")
       .query({ orderNumber: order.orderNumber, email: shippingAddress.email });
-    expect(trackView.body.data.otp).toMatch(/^\d{6}$/);
+    expect(trackView.body.data.otp).toMatch(/^\d{4}$/);
+  });
+
+  it("invalidates the OTP after too many incorrect attempts, and never lets a delivery agent skip verification", async () => {
+    const { token: customerToken } = await createAuthedUser({ role: "customer" });
+    const { token: managerToken } = await createAuthedUser({ role: "order_manager" });
+    const { token: agentToken, user: agent } = await createAuthedUser({ role: "delivery_agent" });
+    const { product } = await seedProduct();
+    const variantId = product.variants[0]!._id!.toString();
+    const order = await createTestOrder(customerToken, product._id.toString(), variantId);
+
+    for (const status of ["confirmed", "processing", "packed", "ready_for_dispatch"]) {
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/status`)
+        .set(...authHeader(managerToken))
+        .send({ status });
+    }
+    await request(app)
+      .patch(`/api/v1/orders/${order._id}/assign-agent`)
+      .set(...authHeader(managerToken))
+      .send({ agentId: agent._id.toString() });
+    await request(app)
+      .patch(`/api/v1/orders/${order._id}/delivery-status`)
+      .set(...authHeader(agentToken))
+      .send({ status: "picked_up" });
+
+    // A delivery agent can never mark an order delivered directly — the
+    // generic status endpoint isn't reachable by this role at all.
+    const genericAttempt = await request(app)
+      .patch(`/api/v1/orders/${order._id}/status`)
+      .set(...authHeader(agentToken))
+      .send({ status: "delivered" });
+    expect(genericAttempt.status).toBe(403);
+
+    await request(app)
+      .patch(`/api/v1/orders/${order._id}/delivery-status`)
+      .set(...authHeader(agentToken))
+      .send({ status: "out_for_delivery" });
+
+    // Verifying before any OTP has been sent is rejected.
+    const tooEarly = await request(app)
+      .post(`/api/v1/orders/${order._id}/verify-otp`)
+      .set(...authHeader(agentToken))
+      .send({ otp: "1234" });
+    expect(tooEarly.status).toBe(400);
+
+    await request(app)
+      .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
+      .set(...authHeader(agentToken))
+      .send({});
+    const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
+    const realOtp = dbOrder!.otpCode!;
+    const wrongOtp = realOtp === "0000" ? "1111" : "0000";
+
+    for (let i = 0; i < 4; i += 1) {
+      const res = await request(app)
+        .post(`/api/v1/orders/${order._id}/verify-otp`)
+        .set(...authHeader(agentToken))
+        .send({ otp: wrongOtp });
+      expect(res.status).toBe(400);
+    }
+
+    // The 5th wrong attempt invalidates the code outright.
+    const lockedOut = await request(app)
+      .post(`/api/v1/orders/${order._id}/verify-otp`)
+      .set(...authHeader(agentToken))
+      .send({ otp: wrongOtp });
+    expect(lockedOut.status).toBe(400);
+    expect(lockedOut.body.message).toMatch(/too many/i);
+
+    // Even the correct code no longer works — it was cleared.
+    const staleCorrectAttempt = await request(app)
+      .post(`/api/v1/orders/${order._id}/verify-otp`)
+      .set(...authHeader(agentToken))
+      .send({ otp: realOtp });
+    expect(staleCorrectAttempt.status).toBe(400);
+
+    // A fresh send resets attempts and works again.
+    await request(app)
+      .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
+      .set(...authHeader(agentToken))
+      .send({});
+    const freshOrder = await OrderModel.findById(order._id).select("+otpCode");
+    const verifyRes = await request(app)
+      .post(`/api/v1/orders/${order._id}/verify-otp`)
+      .set(...authHeader(agentToken))
+      .send({ otp: freshOrder!.otpCode });
+    expect(verifyRes.status).toBe(200);
+    expect(verifyRes.body.data.order.status).toBe("delivered");
+    expect(verifyRes.body.data.order.deliveryVerified).toBe(true);
   });
 
   it("validates delivery-agent assignment (role and order-status guards)", async () => {

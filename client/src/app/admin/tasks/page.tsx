@@ -6,6 +6,7 @@ import { createTask, listTasks, updateTask, deleteTask } from "@/lib/api/tasks";
 import { listUsers } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -22,6 +23,7 @@ function personName(person: string | { name: string }): string {
 
 export default function AdminTasksPage() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const canDelete = user?.role === "admin" || user?.role === "super_admin";
 
   const [tasks, setTasks] = useState<ApiTask[]>([]);
@@ -88,7 +90,13 @@ export default function AdminTasksPage() {
   }
 
   async function handleDelete(task: ApiTask) {
-    if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Task",
+      message: `Delete "${task.title}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await deleteTask(task._id);
     load();
   }

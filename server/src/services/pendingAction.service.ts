@@ -21,6 +21,7 @@ export interface ApplyResult {
 }
 
 type ApplyHandler = (payload: Record<string, unknown>, reviewer: PendingActionActor) => Promise<ApplyResult>;
+type DenyHandler = (payload: Record<string, unknown>, reviewer: PendingActionActor) => Promise<void>;
 
 /**
  * Each gated action type registers its own "apply" function here instead of
@@ -33,9 +34,20 @@ type ApplyHandler = (payload: Record<string, unknown>, reviewer: PendingActionAc
  * server startup, all handlers are registered before any request is handled.
  */
 const handlers = new Map<PendingActionType, ApplyHandler>();
+/**
+ * Optional cleanup for an action type whose payload already did something
+ * with side effects (e.g. `product.create` uploads images to Cloudinary
+ * before the request is even reviewed) that needs undoing on denial. Most
+ * action types don't register one — their payload is inert until granted.
+ */
+const denyHandlers = new Map<PendingActionType, DenyHandler>();
 
 export function registerPendingActionHandler(actionType: PendingActionType, handler: ApplyHandler): void {
   handlers.set(actionType, handler);
+}
+
+export function registerPendingActionDenyHandler(actionType: PendingActionType, handler: DenyHandler): void {
+  denyHandlers.set(actionType, handler);
 }
 
 /**
@@ -236,6 +248,9 @@ export async function denyPendingAction(
   reviewNote?: string
 ): Promise<IPendingAction> {
   const action = await loadPendingAction(id);
+
+  const cleanup = denyHandlers.get(action.actionType);
+  if (cleanup) await cleanup(action.payload, reviewer);
 
   action.status = "denied";
   action.reviewedBy = reviewer.id as unknown as IPendingAction["reviewedBy"];

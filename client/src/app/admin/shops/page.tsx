@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Store, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Store, Users } from "lucide-react";
 import { assignShops, createShop, deleteShop, listShops, updateShop } from "@/lib/api/shops";
 import { listUsers } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -22,6 +23,7 @@ const ASSIGNABLE_ROLES = ["co_admin", "order_manager", "employee"] as const;
 
 export default function AdminShopsPage() {
   const { hasPermission } = useAuth();
+  const confirmDialog = useConfirm();
   const canManage = hasPermission("shops.manage");
 
   const [shops, setShops] = useState<ApiShop[]>([]);
@@ -48,7 +50,13 @@ export default function AdminShopsPage() {
   useEffect(load, []);
 
   async function handleDelete(shop: ApiShop) {
-    if (!confirm(`Delete "${shop.name}"? This only works while no purchases reference it.`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Shop",
+      message: `Delete "${shop.name}"? This only works while no purchases reference it.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     setActionError(null);
     try {
       await deleteShop(shop._id);
@@ -112,20 +120,18 @@ export default function AdminShopsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {canManage && (
-                      <div className="flex justify-end gap-3">
+                      <div className="flex justify-end gap-4">
                         <button
-                          aria-label="Edit"
                           onClick={() => setEditing(shop)}
-                          className="cursor-pointer text-brown-600 hover:text-green-950"
+                          className="inline-flex cursor-pointer items-center rounded-full bg-info-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-info transition-colors duration-150 hover:bg-info-soft-hover"
                         >
-                          <Pencil size={15} />
+                          Edit
                         </button>
                         <button
-                          aria-label="Delete"
                           onClick={() => handleDelete(shop)}
-                          className="cursor-pointer text-danger hover:text-danger-strong"
+                          className="inline-flex cursor-pointer items-center rounded-full bg-danger-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
                         >
-                          <Trash2 size={15} />
+                          Delete
                         </button>
                       </div>
                     )}

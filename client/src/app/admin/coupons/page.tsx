@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Tag } from "lucide-react";
 import { listCoupons, createCoupon, updateCoupon, deleteCoupon, type CouponPayload } from "@/lib/api/coupons";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -21,6 +22,7 @@ function formatDiscount(coupon: ApiCoupon): string {
 
 export default function AdminCouponsPage() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const canDelete = user?.role === "admin" || user?.role === "super_admin";
 
   const [coupons, setCoupons] = useState<ApiCoupon[]>([]);
@@ -82,7 +84,13 @@ export default function AdminCouponsPage() {
   }
 
   async function handleDelete(coupon: ApiCoupon) {
-    if (!confirm(`Delete coupon "${coupon.code}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Coupon",
+      message: `Delete coupon "${coupon.code}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await deleteCoupon(coupon._id);
     load();
   }

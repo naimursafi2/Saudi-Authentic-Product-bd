@@ -49,11 +49,12 @@ export async function getProductByIdForAdmin(id: string) {
   return api.get<{ product: ApiProduct }>(`/products/admin/${id}`);
 }
 
-/** Content applies immediately; `stockPendingActionId` comes back when the
- * submitted stock quantities were queued for Super Admin approval instead
- * (everyone but `super_admin` — see `/admin/approvals`). */
+/** `super_admin` creates directly (`product` comes back). Everyone else's
+ * submission is queued as a `product.create` pending action instead — the
+ * product does not exist until a Super Admin grants it (`pendingActionId`
+ * comes back, no `product`) — see `/admin/approvals`. */
 export async function createProduct(formData: FormData) {
-  return api.postForm<{ product: ApiProduct; stockPendingActionId?: string }>("/products", formData);
+  return api.postForm<{ product?: ApiProduct; pendingActionId?: string }>("/products", formData);
 }
 
 export async function updateProduct(id: string, formData: FormData) {

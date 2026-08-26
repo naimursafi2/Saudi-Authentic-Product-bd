@@ -64,7 +64,9 @@ export default function AdminLeavePage() {
   }
 
   async function handleReject(leave: ApiLeaveRequest) {
-    const note = window.prompt("Reason for rejection (optional):") ?? undefined;
+    const note = window.prompt("Reason for rejection (optional):");
+    // Cancelling the reason prompt must not reject the leave request anyway.
+    if (note === null) return;
     setActioningId(leave._id);
     try {
       await reviewLeaveRequest(leave._id, "rejected", note || undefined);

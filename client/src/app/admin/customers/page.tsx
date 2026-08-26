@@ -6,6 +6,7 @@ import { Users, Search } from "lucide-react";
 import { impersonateUser, listUsers, unlockUser, updateUserStatus } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { AdminPagination } from "@/components/admin/AdminPagination";
@@ -19,6 +20,7 @@ function isLocked(user: ApiUser): boolean {
 
 export default function AdminCustomersPage() {
   const { user, startImpersonation } = useAuth();
+  const confirmDialog = useConfirm();
   const router = useRouter();
   const canManageStatus = user?.role !== "co_admin";
   const canImpersonate = user?.role === "super_admin";
@@ -58,7 +60,13 @@ export default function AdminCustomersPage() {
 
   async function handleToggleStatus(customer: ApiUser) {
     const action = customer.isActive ? "deactivate" : "reactivate";
-    if (!confirm(`Are you sure you want to ${action} ${customer.name}'s account?`)) return;
+    const ok = await confirmDialog({
+      title: customer.isActive ? "Deactivate Account" : "Reactivate Account",
+      message: `Are you sure you want to ${action} ${customer.name}'s account?`,
+      confirmLabel: customer.isActive ? "Deactivate" : "Reactivate",
+      tone: customer.isActive ? "danger" : "primary",
+    });
+    if (!ok) return;
     setUpdatingId(customer._id);
     try {
       await updateUserStatus(customer._id, !customer.isActive);
@@ -82,7 +90,12 @@ export default function AdminCustomersPage() {
   }
 
   async function handleImpersonate(customer: ApiUser) {
-    if (!confirm(`Sign in as ${customer.name}? This is recorded in the audit log.`)) return;
+    const ok = await confirmDialog({
+      title: "Support Login",
+      message: `Sign in as ${customer.name}? This is recorded in the audit log.`,
+      confirmLabel: "Sign In",
+    });
+    if (!ok) return;
     setActionError(null);
     setUpdatingId(customer._id);
     try {
@@ -183,7 +196,7 @@ export default function AdminCustomersPage() {
                         )}
                         {canManageStatus && (
                           <Button
-                            variant="outline"
+                            variant={customer.isActive ? "danger" : "primary"}
                             size="sm"
                             disabled={updatingId === customer._id}
                             onClick={() => handleToggleStatus(customer)}

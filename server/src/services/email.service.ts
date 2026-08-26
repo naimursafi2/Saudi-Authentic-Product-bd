@@ -1,5 +1,6 @@
 import { env } from "../config/env";
 import { sendMail } from "../config/mailer";
+import { DELIVERY_OTP_TTL_MINUTES } from "../constants/security";
 
 const BRAND = {
   cream: "#fbf9f5",
@@ -121,7 +122,7 @@ export async function sendDeliveryOtpEmail(
      <p>Your order <strong>#${opts.orderNumber}</strong> is out for delivery. Share this code with the
      delivery agent once your order arrives to confirm receipt:</p>
      <p style="font-size:28px;font-weight:bold;letter-spacing:0.15em;color:${BRAND.green};margin:20px 0;">${opts.otp}</p>
-     <p style="font-size:13px;color:#705a4c;">This code expires in 60 minutes and is also visible on your order tracking page.</p>`
+     <p style="font-size:13px;color:#705a4c;">This code expires in ${DELIVERY_OTP_TTL_MINUTES} minutes and is also visible on your order tracking page.</p>`
   );
   await safeSend(to, `Delivery code — #${opts.orderNumber}`, html);
 }
@@ -260,24 +261,38 @@ export async function sendTaskAssignedEmail(
 export async function sendSalaryPaymentEmail(
   to: string,
   name: string,
-  opts: { month: number; year: number; amountBDT: number; status: "paid" | "pending"; note?: string }
+  opts: {
+    month: number;
+    year: number;
+    amountBDT: number;
+    dailyAllowanceBDT?: number;
+    status: "paid" | "pending";
+    note?: string;
+  }
 ): Promise<void> {
   const monthName = new Date(opts.year, opts.month - 1, 1).toLocaleString("en-US", { month: "long" });
-  const amount = new Intl.NumberFormat("en-IN").format(Math.round(opts.amountBDT));
+  const allowance = opts.dailyAllowanceBDT ?? 0;
+  const total = opts.amountBDT + allowance;
+  const format = (n: number) => new Intl.NumberFormat("en-IN").format(Math.round(n));
+  const breakdown =
+    allowance > 0
+      ? `<p>Base salary: ৳ ${format(opts.amountBDT)}<br/>Daily allowance: ৳ ${format(allowance)}</p>`
+      : "";
   const html =
     opts.status === "paid"
       ? layout(
           "Salary payment processed",
           `<p>Hi ${name},</p>
            <p>Your salary for <strong>${monthName} ${opts.year}</strong> has been processed.</p>
-           <p>Amount: <strong>৳ ${amount}</strong></p>
+           ${breakdown}
+           <p>Amount: <strong>৳ ${format(total)}</strong></p>
            ${opts.note ? `<p>Note: ${opts.note}</p>` : ""}
            ${button("View Payment History", `${FRONTEND_URL}/employee/salary`)}`
         )
       : layout(
           "Salary payment reminder",
           `<p>Hi ${name},</p>
-           <p>This is a reminder that your salary for <strong>${monthName} ${opts.year}</strong> (৳ ${amount}) is currently marked as pending.</p>`
+           <p>This is a reminder that your salary for <strong>${monthName} ${opts.year}</strong> (৳ ${format(total)}) is currently marked as pending.</p>`
         );
   await safeSend(
     to,

@@ -15,6 +15,7 @@ import { listShops } from "@/lib/api/shops";
 import { listProducts } from "@/lib/api/products";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT, formatBDTPrecise } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -24,6 +25,7 @@ import { AdminPagination } from "@/components/admin/AdminPagination";
 import { PurchaseCostEditor, CostItemForm } from "@/components/admin/PurchaseCostEditor";
 import { PurchaseSummary } from "@/components/admin/PurchaseSummary";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { ApiProduct, ApiPurchase, ApiShop, Pagination, PurchaseStatus } from "@/types/api";
 
 const fieldClasses =
@@ -44,6 +46,7 @@ function shopName(shop: ApiPurchase["shop"]): string {
 
 export default function AdminPurchasesPage() {
   const { hasPermission } = useAuth();
+  const confirmDialog = useConfirm();
   const canCreate = hasPermission("purchases.create");
   const canEdit = hasPermission("purchases.edit");
   const canDelete = hasPermission("purchases.delete");
@@ -118,7 +121,13 @@ export default function AdminPurchasesPage() {
   }
 
   async function handleCancel(purchase: ApiPurchase) {
-    if (!confirm(`Cancel purchase ${purchase.reference}?`)) return;
+    const ok = await confirmDialog({
+      title: "Cancel Purchase",
+      message: `Cancel purchase ${purchase.reference}?`,
+      confirmLabel: "Cancel Purchase",
+      tone: "danger",
+    });
+    if (!ok) return;
     setActionError(null);
     try {
       const { data } = await cancelPurchase(purchase._id);
@@ -130,7 +139,13 @@ export default function AdminPurchasesPage() {
   }
 
   async function handleDelete(purchase: ApiPurchase) {
-    if (!confirm(`Delete purchase ${purchase.reference} and its cost breakdown?`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Purchase",
+      message: `Delete purchase ${purchase.reference} and its cost breakdown?`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     setActionError(null);
     try {
       await deletePurchase(purchase._id);
@@ -304,7 +319,7 @@ export default function AdminPurchasesPage() {
                 </Button>
               )}
               {canDelete && detail.status !== "received" && (
-                <Button variant="outline" size="sm" onClick={() => handleDelete(detail)}>
+                <Button variant="danger" size="sm" onClick={() => handleDelete(detail)}>
                   <Trash2 size={14} /> Delete
                 </Button>
               )}
@@ -538,14 +553,16 @@ function PurchaseForm({
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-green-950">{formatBDT(item.amountBDT)}</span>
-                    <button
-                      type="button"
-                      aria-label="Remove cost"
-                      onClick={() => setCostItems((current) => current.filter((_, i) => i !== index))}
-                      className="cursor-pointer text-danger hover:text-danger-strong"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <Tooltip label="Remove cost">
+                      <button
+                        type="button"
+                        aria-label="Remove cost"
+                        onClick={() => setCostItems((current) => current.filter((_, i) => i !== index))}
+                        className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </Tooltip>
                   </div>
                 </li>
               ))}

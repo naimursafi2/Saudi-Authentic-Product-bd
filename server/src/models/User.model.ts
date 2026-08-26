@@ -18,6 +18,8 @@ export interface IStaffMeta {
   designation?: string;
   joinedAt?: Date;
   baseSalaryBDT?: number;
+  nidNumber?: string;
+  nidImage?: { url: string; publicId: string };
 }
 
 export interface IUser extends Document {
@@ -79,6 +81,11 @@ const staffMetaSchema = new Schema<IStaffMeta>(
     designation: { type: String, trim: true },
     joinedAt: { type: Date },
     baseSalaryBDT: { type: Number, min: 0 },
+    nidNumber: { type: String, trim: true },
+    nidImage: {
+      url: { type: String },
+      publicId: { type: String },
+    },
   },
   { _id: false }
 );

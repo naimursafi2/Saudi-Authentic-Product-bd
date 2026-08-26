@@ -11,6 +11,7 @@ import type { Role } from "../constants/roles";
 export const PENDING_ACTION_TYPES = [
   "coupon.create",
   "coupon.update",
+  "product.create",
   "product.delete",
   "product.stock.update",
   "inventory.adjust",

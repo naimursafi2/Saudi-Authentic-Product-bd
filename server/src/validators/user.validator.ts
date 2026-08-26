@@ -13,6 +13,9 @@ export const createStaffSchema = z.object({
       department: z.string().trim().optional(),
       designation: z.string().trim().optional(),
       baseSalaryBDT: z.number().nonnegative().optional(),
+      /** Defaults to today (see `user.service.ts#createStaffAccount`) when omitted. */
+      joinedAt: z.coerce.date().optional(),
+      nidNumber: z.string().trim().min(1).max(30).optional(),
     })
     .optional(),
 });
@@ -21,6 +24,8 @@ export const updateStaffMetaSchema = z.object({
   department: z.string().trim().optional(),
   designation: z.string().trim().optional(),
   baseSalaryBDT: z.number().nonnegative().optional(),
+  joinedAt: z.coerce.date().optional(),
+  nidNumber: z.string().trim().min(1).max(30).optional(),
 });
 
 export const updateUserRoleSchema = z.object({

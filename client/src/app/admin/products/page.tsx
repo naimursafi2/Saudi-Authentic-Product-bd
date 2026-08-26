@@ -6,6 +6,7 @@ import { Plus, Pencil, Trash2, Package } from "lucide-react";
 import { listProducts, createProduct, updateProduct, deleteProduct } from "@/lib/api/products";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -19,6 +20,7 @@ import type { Pagination } from "@/types/api";
 
 export default function AdminProductsPage() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const { categories } = useCategories();
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -70,13 +72,21 @@ export default function AdminProductsPage() {
       form.set("existingImages", JSON.stringify(values.existingImages));
       images.forEach((file) => form.append("images", file));
 
-      const { data } =
-        editing === "new" ? await createProduct(form) : await updateProduct(editing!._id, form);
-      setPendingNotice(
-        data.stockPendingActionId
-          ? `Saved. The stock quantities for "${values.name}" need Super Admin approval before they go live — see Approvals.`
-          : null
-      );
+      if (editing === "new") {
+        const { data } = await createProduct(form);
+        setPendingNotice(
+          data.pendingActionId
+            ? `"${values.name}" was submitted for Super Admin approval — it won't appear in the catalog until granted. See Approvals.`
+            : null
+        );
+      } else {
+        const { data } = await updateProduct(editing!._id, form);
+        setPendingNotice(
+          data.stockPendingActionId
+            ? `Saved. The stock quantities for "${values.name}" need Super Admin approval before they go live — see Approvals.`
+            : null
+        );
+      }
       setEditing(null);
       load();
     } catch (err) {
@@ -90,7 +100,13 @@ export default function AdminProductsPage() {
     const confirmMessage = canRequestDelete
       ? `Request deletion of "${product.name}"? This requires Super Admin approval.`
       : `Delete "${product.name}"? This cannot be undone.`;
-    if (!confirm(confirmMessage)) return;
+    const ok = await confirmDialog({
+      title: canRequestDelete ? "Request Deletion" : "Delete Product",
+      message: confirmMessage,
+      confirmLabel: canRequestDelete ? "Request Deletion" : "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     const { data } = await deleteProduct(product._id);
     if (data?.pendingActionId) {

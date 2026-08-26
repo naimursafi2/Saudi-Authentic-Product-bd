@@ -9,11 +9,13 @@ import {
   updateUserRole,
   updateUserStatus,
   updateStaffMeta,
+  uploadStaffNidImage,
   unlockUser,
   impersonateUser,
 } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -30,6 +32,7 @@ function isLocked(user: ApiUser): boolean {
 
 export default function AdminEmployeesPage() {
   const { user, startImpersonation } = useAuth();
+  const confirmDialog = useConfirm();
   const router = useRouter();
   const canManage = user?.role === "admin" || user?.role === "super_admin";
   const canImpersonate = user?.role === "super_admin";
@@ -45,6 +48,13 @@ export default function AdminEmployeesPage() {
   const [managingAccess, setManagingAccess] = useState<ApiUser | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  async function handleUploadNidImage(file: File) {
+    if (!editing || editing === "new") return;
+    const { data } = await uploadStaffNidImage(editing._id, file);
+    setEditing(data.user);
+    load();
+  }
+
   async function handleUnlock(person: ApiUser) {
     setActionError(null);
     setActingId(person._id);
@@ -59,7 +69,12 @@ export default function AdminEmployeesPage() {
   }
 
   async function handleImpersonate(person: ApiUser) {
-    if (!confirm(`Sign in as ${person.name}? This is recorded in the audit log.`)) return;
+    const ok = await confirmDialog({
+      title: "Support Login",
+      message: `Sign in as ${person.name}? This is recorded in the audit log.`,
+      confirmLabel: "Sign In",
+    });
+    if (!ok) return;
     setActionError(null);
     setActingId(person._id);
     try {
@@ -106,6 +121,8 @@ export default function AdminEmployeesPage() {
             department: values.department || undefined,
             designation: values.designation || undefined,
             baseSalaryBDT,
+            joinedAt: values.joinedAt || undefined,
+            nidNumber: values.nidNumber || undefined,
           },
         });
       } else if (editing) {
@@ -116,6 +133,8 @@ export default function AdminEmployeesPage() {
           department: values.department || undefined,
           designation: values.designation || undefined,
           baseSalaryBDT,
+          joinedAt: values.joinedAt || undefined,
+          nidNumber: values.nidNumber || undefined,
         });
       }
       setEditing(null);
@@ -234,7 +253,7 @@ export default function AdminEmployeesPage() {
                           </button>
                           <button
                             onClick={() => setEditing(person)}
-                            className="cursor-pointer text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
+                            className="inline-flex cursor-pointer items-center rounded-full bg-info-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-info transition-colors duration-150 hover:bg-info-soft-hover"
                           >
                             Edit
                           </button>
@@ -268,6 +287,7 @@ export default function AdminEmployeesPage() {
             isSubmitting={isSubmitting}
             onSubmit={handleSubmit}
             onCancel={() => setEditing(null)}
+            onUploadNidImage={editing !== "new" ? handleUploadNidImage : undefined}
           />
         </Modal>
       )}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarClock, Plus } from "lucide-react";
 import { createLeaveRequest, listMyLeaves, cancelLeaveRequest } from "@/lib/api/leaves";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -17,6 +18,7 @@ const fieldClasses =
 const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
 
 export default function EmployeeLeavePage() {
+  const confirmDialog = useConfirm();
   const [leaves, setLeaves] = useState<ApiLeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,13 @@ export default function EmployeeLeavePage() {
   }
 
   async function handleCancel(id: string) {
-    if (!confirm("Cancel this leave request?")) return;
+    const ok = await confirmDialog({
+      title: "Cancel Leave Request",
+      message: "Cancel this leave request?",
+      confirmLabel: "Cancel Request",
+      tone: "danger",
+    });
+    if (!ok) return;
     await cancelLeaveRequest(id);
     load();
   }

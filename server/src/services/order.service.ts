@@ -7,9 +7,11 @@ import { ApiError } from "../utils/ApiError";
 import { computeShippingFee } from "../constants/shipping";
 import { recordStockChange } from "./inventory.service";
 import { sendOrderConfirmationEmail, sendDeliveryOtpEmail } from "./email.service";
+import { sendSms } from "../config/sms";
 import { notifyNewOrder, notifyLowStock, notifyDeliveryFailed } from "./notification.service";
 import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
 import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
+import { DELIVERY_OTP_TTL_MINUTES, MAX_DELIVERY_OTP_ATTEMPTS } from "../constants/security";
 import type { Role } from "../constants/roles";
 import type { CreateOrderInput } from "../validators/order.validator";
 
@@ -17,8 +19,6 @@ export interface OrderActor {
   id: string;
   role: Role;
 }
-
-const OTP_TTL_MINUTES = 60;
 
 async function generateOrderNumber(): Promise<string> {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -33,7 +33,7 @@ async function generateOrderNumber(): Promise<string> {
 }
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(Math.floor(1000 + Math.random() * 9000));
 }
 
 /** Pushes a history entry, capturing the order's *current* status as `previousStatus`
@@ -353,25 +353,50 @@ export async function updateDeliveryStatus(
     return order;
   }
 
-  // out_for_delivery — also reachable again while already in this status, to
-  // regenerate/resend the OTP without creating a duplicate history entry.
-  if (order.status !== "picked_up" && order.status !== "out_for_delivery") {
+  // out_for_delivery is a pure dispatch signal — it no longer generates or
+  // sends an OTP itself. The agent sends that separately, once they've
+  // actually reached the customer (see `sendDeliveryOtp` below), not the
+  // moment they leave for the delivery run.
+  if (order.status !== "picked_up") {
     throw ApiError.badRequest(`Cannot mark out for delivery from "${order.status}"`);
   }
+  pushStatusHistory(order, "out_for_delivery", actor, note);
+  order.status = "out_for_delivery";
+  await order.save();
+  return order;
+}
+
+/**
+ * "Send Delivery OTP" — generates a fresh code and dispatches it to the
+ * customer (email always; SMS too once a gateway is configured, see
+ * `config/sms.ts`). Callable more than once while `out_for_delivery` (the
+ * delivery UI's "Resend OTP"), each call fully replacing the previous code
+ * and resetting the attempt counter, so a resent code can't be brute-forced
+ * using attempts spent against the old one.
+ */
+export async function sendDeliveryOtp(orderId: string, agentId: string) {
+  const order = await loadOrderAssignedTo(orderId, agentId);
+  if (order.status !== "out_for_delivery") {
+    throw ApiError.badRequest(`Cannot send a delivery OTP from "${order.status}"`);
+  }
+
   const otp = generateOtp();
   order.otpCode = otp;
   order.otpGeneratedAt = new Date();
-  order.otpExpiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
-  if (order.status !== "out_for_delivery") {
-    pushStatusHistory(order, "out_for_delivery", actor, note);
-    order.status = "out_for_delivery";
-  }
+  order.otpExpiresAt = new Date(Date.now() + DELIVERY_OTP_TTL_MINUTES * 60 * 1000);
+  order.otpAttempts = 0;
   await order.save();
 
-  void sendDeliveryOtpEmail(
-    order.shippingAddress.email,
-    `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`,
-    { orderNumber: order.orderNumber, otp }
+  const customerName = `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`;
+  void sendDeliveryOtpEmail(order.shippingAddress.email, customerName, {
+    orderNumber: order.orderNumber,
+    otp,
+  });
+  void sendSms(
+    order.shippingAddress.phone,
+    `Saudi Authentic Product\nHello ${customerName}, your delivery verification OTP is ${otp}.\n` +
+      "Please share this OTP with the delivery person only after receiving your product.\n" +
+      `This OTP will expire in ${DELIVERY_OTP_TTL_MINUTES} minutes.`
   );
 
   return order;
@@ -385,10 +410,25 @@ export async function verifyDeliveryOtp(orderId: string, agentId: string, otp: s
     throw ApiError.badRequest(`Cannot verify OTP from "${order.status}"`);
   }
   if (!order.otpCode || !order.otpExpiresAt || order.otpExpiresAt.getTime() < Date.now()) {
-    throw ApiError.badRequest("OTP expired — ask the customer for a fresh code, or resend it.");
+    throw ApiError.badRequest("OTP expired or not yet sent — send a new delivery OTP.");
   }
+
   if (otp.trim() !== order.otpCode) {
-    throw ApiError.badRequest("Incorrect OTP");
+    order.otpAttempts += 1;
+    if (order.otpAttempts >= MAX_DELIVERY_OTP_ATTEMPTS) {
+      order.otpCode = undefined;
+      order.otpGeneratedAt = undefined;
+      order.otpExpiresAt = undefined;
+      order.otpAttempts = 0;
+      await order.save();
+      throw ApiError.badRequest(
+        "Too many incorrect attempts — this OTP has been invalidated. Send a new one."
+      );
+    }
+    await order.save();
+    throw ApiError.badRequest(
+      `Incorrect OTP (${MAX_DELIVERY_OTP_ATTEMPTS - order.otpAttempts} attempt(s) remaining before it's invalidated)`
+    );
   }
 
   pushStatusHistory(order, "otp_verified", actor, note);
@@ -399,9 +439,16 @@ export async function verifyDeliveryOtp(orderId: string, agentId: string, otp: s
   order.status = "delivered";
   if (order.paymentMethod === "cod") order.isPaid = true;
 
+  // The only place these three fields are ever set — durable, directly
+  // queryable proof that this delivery went through real OTP verification.
+  order.deliveryVerified = true;
+  order.deliveredAt = new Date();
+  order.deliveredBy = new Types.ObjectId(agentId);
+
   order.otpCode = undefined;
   order.otpGeneratedAt = undefined;
   order.otpExpiresAt = undefined;
+  order.otpAttempts = 0;
 
   await order.save();
   return order;
@@ -422,6 +469,7 @@ export async function markDeliveryFailed(orderId: string, agentId: string, failu
   order.otpCode = undefined;
   order.otpGeneratedAt = undefined;
   order.otpExpiresAt = undefined;
+  order.otpAttempts = 0;
 
   await order.save();
 

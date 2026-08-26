@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2, MailWarning, XCircle } from "lucide-react";
 import { verifyEmail, resendVerification } from "@/lib/api/auth";
 import { ApiClientError } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import { Button, ButtonLink } from "@/components/ui/Button";
 
 type State = "verifying" | "verified" | "already-verified" | "expired" | "invalid" | "missing-token";
@@ -59,6 +60,7 @@ function VerifyEmailContent() {
   const token = searchParams.get("token") ?? "";
   const [state, setState] = useState<State>(token ? "verifying" : "missing-token");
   const ranOnce = useRef(false);
+  const { refreshUser } = useAuth();
 
   useEffect(() => {
     if (!token || ranOnce.current) return;
@@ -67,12 +69,17 @@ function VerifyEmailContent() {
     verifyEmail(token)
       .then(({ data }) => {
         setState(data.status === "already-verified" ? "already-verified" : "verified");
+        // In case the browser verifying the link is also signed in as this
+        // user (e.g. opened the email in the same session), refresh the
+        // cached user so the profile page's badge flips immediately instead
+        // of waiting for the next navigation.
+        void refreshUser();
       })
       .catch((err) => {
         const message = err instanceof ApiClientError ? err.message.toLowerCase() : "";
         setState(message.includes("expired") ? "expired" : "invalid");
       });
-  }, [token]);
+  }, [token, refreshUser]);
 
   const wrapperClasses = "mx-auto flex max-w-md flex-col items-center gap-4 px-6 py-24 text-center";
 

@@ -44,10 +44,10 @@ Register every new router in `routes/index.ts`.
 | Base path | Purpose | Role restrictions (beyond `authenticate`) |
 | --- | --- | --- |
 | `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification, plus 2FA (`POST /2fa/setup`, `/2fa/enable`, `/2fa/disable`, `/2fa/verify` — see "Security hardening" below). Login/register/google/refresh/forgot/reset/verify-email/resend-verification/`2fa/verify` are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password`, `/2fa/setup`, `/2fa/enable`, `/2fa/disable` require auth; `/2fa/verify` is public (it carries its own short-lived challenge token); `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
-| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates; `PATCH /:id/unlock` (clear a failed-login lockout); `POST /:id/impersonate` (support-login) | create/role/status/staff-meta/unlock: `admin`,`super_admin`; list/get: + `co_admin`; impersonate: `super_admin` only (and never onto another `super_admin`); all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
+| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates; `PATCH /:id/staff-meta/nid-image` (staff NID card photo upload); `PATCH /:id/unlock` (clear a failed-login lockout); `POST /:id/impersonate` (support-login) | create/role/status/staff-meta/nid-image/unlock: `admin`,`super_admin`; list/get: + `co_admin`; impersonate: `super_admin` only (and never onto another `super_admin`); all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`/`existingImages`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
-| `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
+| `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/send-delivery-otp`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
 | `/reviews` | public: recent reviews, reviews by product; customer creates one review per product; staff lists all/deletes | list-all/delete: `admin`,`super_admin`,`co_admin` |
 | `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
 | `/leaves` | employee creates/lists own/cancels; staff lists all + approves/rejects | review/list-all: `admin`,`super_admin`,`co_admin` |
@@ -149,26 +149,51 @@ has role `delivery_agent` and is active, and that the order is currently
 `ready_for_dispatch` or `delivery_failed`) sets `Order.assignedAgent` and
 transitions to `assigned_to_agent`. `PATCH /orders/:id/delivery-status`
 (`delivery_agent` only, self-scoped to `order.assignedAgent === req.user.id`)
-handles `picked_up` and `out_for_delivery`; transitioning into
-`out_for_delivery` generates a random 6-digit `otpCode` (`select: false` on
-the schema, plus a `toJSON` transform that always strips it — defense in
-depth), a 60-minute `otpExpiresAt`, and fire-and-forget emails it to the
-customer via a new `sendDeliveryOtpEmail` (`email.service.ts`); repeating
-the call while already `out_for_delivery` regenerates/resends the code
-("Resend code" in the delivery UI) without duplicating the history entry.
-Since this project has no SMS gateway, the OTP is also surfaced directly to
-the order owner — `order.controller.ts`'s `getOrder`/`trackOrder` add a
-top-level `otp` field to the response, but **only** when the requester is
-confirmed to be the order's owner and `status === "out_for_delivery"`; staff
-and the delivery agent's own endpoints never select or expose `otpCode` at
-all, so the agent must obtain the code verbally from the customer (real-world
-courier UX). `POST /orders/:id/verify-otp` checks the code, then records
-both `otp_verified` and `delivered` in the same call, clears the OTP fields,
-and — for `cod` orders — sets `isPaid = true`. `PATCH /orders/:id/delivery-failed`
-requires a `failureReason` and records `delivery_failed`. `restockOrderItems()`
-(shared helper) restocks and writes an `InventoryLog` entry (`reason:
-"order_cancelled"` or the new `"order_returned"`) for both `cancelled` and
-`returned` transitions.
+handles `picked_up` and `out_for_delivery` — this is a pure dispatch signal
+now and no longer generates or sends an OTP itself.
+
+**Delivery OTP verification** (`order.service.ts#sendDeliveryOtp`/
+`verifyDeliveryOtp`, `constants/security.ts`): sending the code is its own
+explicit step, separate from the dispatch transition, matching the real
+courier flow of confirming receipt only once the agent has actually reached
+the customer. `POST /orders/:id/send-delivery-otp` (`delivery_agent` only,
+self-scoped, requires `status === "out_for_delivery"`) generates a random
+**4-digit** `otpCode` (`select: false` on the schema, plus a `toJSON`
+transform that always strips it — defense in depth), a
+`DELIVERY_OTP_TTL_MINUTES`-minute (5) `otpExpiresAt`, resets `otpAttempts` to
+0, and fire-and-forget dispatches it to the customer via both
+`sendDeliveryOtpEmail` (`email.service.ts`) and `sendSms` (`config/sms.ts`).
+Calling it again while still `out_for_delivery` fully replaces the code and
+resets the attempt counter ("Resend OTP" in the delivery UI) — it does not
+touch `statusHistory`, since no status changes. Since no SMS gateway is
+actually wired up yet (see "No SMS gateway" below), the OTP is also surfaced
+directly to the order owner — `order.controller.ts`'s `getOrder`/`trackOrder`
+add a top-level `otp` field to the response, but **only** when the requester
+is confirmed to be the order's owner and `status === "out_for_delivery"`;
+staff and the delivery agent's own endpoints never select or expose
+`otpCode` at all, so the agent must obtain the code verbally from the
+customer (real-world courier UX) until a real SMS provider is connected.
+
+`POST /orders/:id/verify-otp` requires a live, unexpired `otpCode` (400s
+with a clear "send a new delivery OTP" message if none is outstanding or it
+expired) and enforces `MAX_DELIVERY_OTP_ATTEMPTS` (5): each wrong code
+increments `Order.otpAttempts` and 400s with the remaining-attempts count;
+the attempt that reaches the limit invalidates the code outright (cleared,
+forcing a fresh send) rather than leaving it guessable indefinitely — a
+delivery agent has no way to mark an order `delivered` other than through
+this endpoint succeeding, since `delivered` is a `DELIVERY_ONLY_STATUS` the
+generic `PATCH /orders/:id/status` endpoint can never reach and
+`delivery_agent` isn't even authorized on that route. On success it records
+both `otp_verified` and `delivered` in the same call, sets the durable
+`deliveryVerified: true`/`deliveredAt`/`deliveredBy` fields (the only place
+they're ever set — a query-friendly record alongside the same facts already
+in `statusHistory`'s `delivered` entry), clears the OTP fields and resets
+`otpAttempts` to 0, and — for `cod` orders — sets `isPaid = true`. `PATCH
+/orders/:id/delivery-failed` requires a `failureReason`, records
+`delivery_failed`, and also clears any outstanding OTP/attempts.
+`restockOrderItems()` (shared helper) restocks and writes an `InventoryLog`
+entry (`reason: "order_cancelled"` or the new `"order_returned"`) for both
+`cancelled` and `returned` transitions.
 
 Frontend: the enum/transition table is mirrored in
 `frontend/src/lib/orderStatus.ts` (`ORDER_TRANSITIONS`,
@@ -188,8 +213,11 @@ code with the delivery agent" prompt.
 **Delivery Portal** (`frontend/src/app/delivery`, `delivery_agent` only,
 modeled directly on the Employee Portal's shell): `/delivery` (dashboard —
 counts of assigned orders by status), `/delivery/orders` (assigned-orders
-list + a detail modal with Picked-Up/Out-for-Delivery buttons, an OTP-entry
-field, and a Delivery-Failed form), `/delivery/profile` (avatar/address,
+list + a detail modal with Picked-Up/Out-for-Delivery buttons; once
+`out_for_delivery`, a **Send Delivery OTP** button, then — once a code is
+outstanding (`order.otpExpiresAt` present) — an OTP-entry field, a **Verify
+& Confirm Delivery** button, a **Resend OTP** link, and a Delivery-Failed
+form), `/delivery/profile` (avatar/address,
 reusing the same `ProfileSection`/`AddressBook` components as everywhere
 else). `RoleGuard allowed={["delivery_agent"]}` in `app/delivery/layout.tsx`
 is the only role that can reach it; it is structurally excluded from
@@ -293,27 +321,34 @@ status changes).
 
 **`PendingAction`** (`models/PendingAction.model.ts`,
 `services/pendingAction.service.ts`): `actionType` (one of
-`coupon.create`/`coupon.update`/`product.delete`/`product.stock.update`/
-`inventory.adjust`/`refund.request`/
-`refund.approve`/`expense.confirm`), `payload` (the intended change, applied
-**verbatim** on grant — a Super Admin can never silently edit what was
-requested, only approve or deny it), `requestedBy`/`requestedByRole`,
-`status` (`pending`/`granted`/`denied`), `reviewedBy`/`reviewedAt`/
-`reviewNote`. Creating one (`createPendingAction()`) fires a fire-and-forget
-email (`sendPendingActionRequestedEmail`) to every active `super_admin`;
-granting/denying (`grantPendingAction()`/`denyPendingAction()`, both
-`super_admin`-only via `PATCH /pending-actions/:id/grant`|`/deny`) emails the
-original requester the outcome. Each gated action type registers its own
-"apply" function via `registerPendingActionHandler(actionType, handler)` at
-the bottom of its owning service (`coupon.service.ts`, `product.service.ts`,
-`inventory.service.ts`, `refund.service.ts`, `expense.service.ts`) rather than
-`pendingAction.service.ts` importing those services directly — the services
-import *this* module to request a grant, so the reverse import would be
-circular; since every route file (and therefore every service) is imported
-by `routes/index.ts` at server startup, all handlers are registered before
-any request is handled. `/admin/approvals` (super_admin only) is the review
-queue (grant/deny with an optional note) plus a form for the thresholds
-below.
+`coupon.create`/`coupon.update`/`product.create`/`product.delete`/
+`product.stock.update`/`inventory.adjust`/`refund.request`/
+`refund.approve`/`expense.confirm`/`purchase.receive`), `payload` (the
+intended change, applied **verbatim** on grant — a Super Admin can never
+silently edit what was requested, only approve or deny it), `requestedBy`/
+`requestedByRole`, `status` (`pending`/`granted`/`denied`), `reviewedBy`/
+`reviewedAt`/`reviewNote`. Creating one (`createPendingAction()`) fires a
+fire-and-forget email (`sendPendingActionRequestedEmail`) to every active
+`super_admin`; granting/denying (`grantPendingAction()`/
+`denyPendingAction()`, both `super_admin`-only via `PATCH
+/pending-actions/:id/grant`|`/deny`) emails the original requester the
+outcome. Each gated action type registers its own "apply" function via
+`registerPendingActionHandler(actionType, handler)` at the bottom of its
+owning service (`coupon.service.ts`, `product.service.ts`,
+`inventory.service.ts`, `refund.service.ts`, `expense.service.ts`,
+`purchase.service.ts`) rather than `pendingAction.service.ts` importing
+those services directly — the services import *this* module to request a
+grant, so the reverse import would be circular; since every route file (and
+therefore every service) is imported by `routes/index.ts` at server
+startup, all handlers are registered before any request is handled. An
+action type whose payload already had a side effect before review — only
+`product.create`, which uploads its images to Cloudinary up front so the
+Super Admin's review shows the real photos — may also register a cleanup
+function via `registerPendingActionDenyHandler(actionType, handler)`, run
+on denial to undo that side effect (deletes the uploaded images); most
+action types don't need one, since their payload is otherwise inert until
+granted. `/admin/approvals` (super_admin only) is the review queue
+(grant/deny with an optional note) plus a form for the thresholds below.
 
 **`ApprovalSettings`** (`models/ApprovalSettings.model.ts`,
 `services/approvalSettings.service.ts`): singleton (same lazily-created
@@ -323,6 +358,29 @@ pattern as `SiteSettings`), `super_admin`-only `GET`/`PATCH
 (default 5000), `expenseApprovalThresholdBDT` (default 2000). These numbers
 are checked live by `coupon.service.ts`, `expense.service.ts`, and
 `refund.service.ts` — never hardcoded, per the spec's explicit requirement.
+
+**Product creation approval gate** (`product.service.ts#createProduct`):
+**only `super_admin` publishes a new product directly. Every other role
+that can create a product — `admin` and `co_admin` alike — has the entire
+submission (content, images and requested stock together) queued as a
+`product.create` pending action, and no `Product` document exists at all
+until a Super Admin grants it.** `POST /products` responds `202
+{pendingActionId}` for a gated caller, with no `product` in the body — the
+frontend shows a "submitted for Super Admin approval" notice rather than
+the created record. Images are uploaded to Cloudinary up front (so the
+review shows the real photos and validation still happens immediately) and
+recorded in the payload; the grant handler re-validates the slug and
+categories are still available (a slug can be taken, or a category deleted,
+while the request sat in the queue) before creating the product, and audits
+the creation with a `note: "Applied via approval grant"`. A denied request's
+uploaded images are cleaned up via the deny-handler mechanism above rather
+than left orphaned in Cloudinary. This supersedes the narrower stock-only
+gating a new product used to get — the whole product goes live in one step
+alongside its stock, not separately. `/admin/approvals` renders it like any
+other pending action (`ACTION_LABELS`/`PayloadSummary` in
+`app/admin/approvals/page.tsx` know its payload shape), so there's no
+separate "product requests" page — the existing generic review queue,
+filterable by status, is where a Super Admin sees and grants/denies these.
 
 **Product deletion** (`product.service.ts#deleteProduct`): `super_admin`
 deletes directly; `co_admin` may only *request* deletion — `DELETE
@@ -348,7 +406,10 @@ points funnel into two action types:
   request waited are still accounted for. `adjustStock()` pre-validates that
   the delta wouldn't go negative before queuing, so an obviously-invalid
   request fails fast rather than at grant time.
-- `product.stock.update` — the stock fields inside `POST`/`PATCH /products`.
+- `product.stock.update` — the stock fields inside `PATCH /products/:id`
+  (an *existing* product's edit; a brand-new product is gated wholesale by
+  `product.create` instead — see "Product creation approval gate" above,
+  which supersedes this entry point for a product that doesn't exist yet).
   The product form submits content and stock together, so `updateProduct`
   **splits them**: the live stock is carried over onto the incoming variants
   (matched by variant id, falling back to array position — see "Variant
@@ -356,10 +417,8 @@ points funnel into two action types:
   untouched, while the submitted quantities go to the queue. One submit can
   therefore ship a description edit instantly and hold its stock change —
   the response carries `stockPendingActionId` when that happened, which
-  `/admin/products` surfaces as a notice. `createProduct` does the same: a
-  non-Super-Admin's new product is saved with **0 stock** and the requested
-  quantities queued, so nothing goes live unapproved. No pending action is
-  created when the submitted stock matches what's already stored, so a plain
+  `/admin/products` surfaces as a notice. No pending action is created when
+  the submitted stock matches what's already stored, so a plain
   title/description edit never produces an empty approval request.
 
 Both handlers are registered at the bottom of `inventory.service.ts` (not
@@ -607,6 +666,50 @@ there as well would double-count anything a user also recorded as an expense.
 Purchase costs are landed-cost accounting for a batch, and the finance summary
 is operational spend — joining them is a decision for whoever owns the
 finance model, not a side effect of this module.
+
+#### Staff HR additions (NID, editable joining date, daily allowance)
+
+Three small, independent additions to the existing staff-management and
+salary surfaces:
+
+- **NID number + card image** (`User.model.ts#IStaffMeta.nidNumber`/
+  `nidImage`): `nidNumber` is a plain string set at staff creation
+  (`createStaffSchema.staffMeta.nidNumber`, optional) or corrected later via
+  `PATCH /users/:id/staff-meta` (`updateStaffMetaSchema`) — same
+  admin/super_admin-only `employees.manage` gate as the rest of staff-meta,
+  no extra protection beyond that (same treatment as `department`/
+  `baseSalaryBDT`, not a `select: false` secret). The photo goes through a
+  dedicated `PATCH /users/:id/staff-meta/nid-image` (multipart, one file)
+  handled by `user.service.ts#updateStaffNidImage` — identical pattern to
+  `updateMyAvatar`: deletes the old Cloudinary image (folder
+  `saudi-authentic-product/staff-nid`) before uploading the new one.
+  `/admin/employees`'s Employee form shows both fields (edit mode only for
+  the image — a brand-new employee has no id to attach it to yet); the
+  shared `components/account/ProfileSection.tsx` renders a read-only "NID
+  Information" card for the staff member themselves whenever
+  `user.staffMeta` has either field set — they can see what's on file, only
+  an admin/super_admin can change it.
+- **Editable `staffMeta.joinedAt`**: previously hardcoded to `new Date()` at
+  creation with no way to correct it afterward. `createStaffSchema` now
+  accepts an optional `joinedAt` (defaults to today when omitted, unchanged
+  behavior for existing callers) and `updateStaffMetaSchema` accepts it too,
+  so `PATCH /users/:id/staff-meta` can fix a wrong joining date after the
+  fact. The Employee form's "Joined Date" field round-trips
+  `staffMeta.joinedAt` (falling back to `user.createdAt` display-only when
+  unset) via a plain `<input type="date">`.
+- **`SalaryPayment.dailyAllowanceBDT`** (`models/SalaryPayment.model.ts`):
+  an optional line item (default 0) alongside the existing `amountBDT`,
+  entered manually at creation the same way `amountBDT` itself is — there is
+  still no automatic attendance-based computation of anything salary-related.
+  `amountBDT`'s meaning is unchanged ("base salary"); the payable total
+  everywhere it's shown (admin `/admin/salary` table, `/employee/salary`
+  history, the employee dashboard's "Latest Salary" card,
+  `sendSalaryPaymentEmail`) is `amountBDT + dailyAllowanceBDT`, computed at
+  render/send time, never stored as a combined figure. No new route — it
+  rides along in the existing `POST /salary-payments` body
+  (`createSalaryPaymentSchema.dailyAllowanceBDT`, optional). Tested in
+  `server/src/tests/integration/staffHr.integration.test.ts` alongside the
+  NID additions above.
 
 #### Homepage content management (not a general CMS)
 
@@ -888,24 +991,51 @@ token vs. a valid-but-already-verified account (`data.status:
 "already-verified"`, not an error — a harmless re-click of an old email).
 `POST /auth/resend-verification` mirrors `forgot-password`'s
 existence-hiding pattern: always responds success, silently no-ops for an
-unknown email or an already-verified account. `requireEmailVerified`
-(applied after `authenticate`) blocks the two customer-only write actions —
-`POST /orders` and `POST /reviews/product/:productId` — for a `customer`
-whose `isEmailVerified` is still `false`; staff roles are always exempt.
-Staff accounts (`user.service.ts#createStaffAccount`), Google Sign-In
-accounts (Google already verified the email), and every seeded account
-(`seed/seed.ts`) are created with `isEmailVerified: true` — the gate only
-ever applies to the self-service storefront registration flow.
-`GET /auth/me`'s `user.isEmailVerified` drives the frontend: `/account`
-shows a persistent `EmailVerificationBanner` (with a resend button) above
-the dashboard for an unverified customer, and `/checkout`
+unknown email or an already-verified account — this is also what powers the
+self-service "Verify Email" button described below, since it only needs the
+viewer's own (already-known) email. `requireEmailVerified` (applied after
+`authenticate`) blocks the two customer-only write actions — `POST /orders`
+and `POST /reviews/product/:productId` — for a `customer` whose
+`isEmailVerified` is still `false`; staff roles are always exempt from this
+specific write-blocking gate. That exemption is narrow and gate-specific,
+not a blanket "staff skip verification" — see below.
+
+**Every role verifies its email, not just customers.**
+`user.service.ts#createStaffAccount` creates a new staff account (however
+its role) with `isEmailVerified: false` and fires the same verification
+email `registerCustomer` does — an admin typing in a new hire's address
+doesn't guarantee that inbox is actually reachable by the new hire, so the
+same link-based proof applies. Two exceptions, both because the email is
+already known-good by construction rather than merely asserted: **Google
+Sign-In** accounts (`auth.service.ts#googleAuth`) stay `isEmailVerified:
+true` since Google already verified ownership of that address, and every
+**seeded** account (`seed/seed.ts`, `npm run seed`) stays pre-verified as a
+local-dev/bootstrap convenience — there's no inbox to click through in a
+fresh seed, and an unverified seeded Super Admin would otherwise nag itself
+on every login with nobody able to resolve it. Being unverified never blocks
+a staff member from using their portal (`requireEmailVerified` only ever
+gates the two customer-only actions above) — it's a nag to resolve, not a
+lockout.
+
+`GET /auth/me`'s `user.isEmailVerified` drives the frontend, for every role:
+**`components/account/ProfileSection.tsx`** (shared by the customer account
+portal's Manage Profile tab, `/admin/profile`, `/employee/profile`, and
+`/delivery/profile` — one component, no per-portal duplication) renders an
+"Email Verification" card — a green **Email Verified** badge once
+`isEmailVerified` is `true`, otherwise a **Verify Email** button that calls
+`resendVerification(user.email)` and flips to "Verification Email Sent".
+Separately, `/account`'s `EmailVerificationBanner` (customer-only, resend
+button) still nags above the dashboard, and `/checkout`
 (`CheckoutClient.tsx`) shows the same banner instead of the order form —
-both disappear automatically once `AuthContext` re-fetches `/auth/me` with
+both disappear once `AuthContext` re-fetches `/auth/me` with
 `isEmailVerified: true`. `frontend/src/app/(site)/account/verify-email/page.tsx`
-handles the link itself, distinguishing verified / already-verified /
-expired / invalid / missing-token states, with a resend form (plain email
-input, works whether or not the visitor is logged in) on the two error
-states.
+handles the link itself (role-agnostic — it works for any account, not just
+customers), distinguishing verified / already-verified / expired / invalid /
+missing-token states, with a resend form (plain email input, works whether
+or not the visitor is logged in) on the two error states; on a successful
+verify it also calls `AuthContext#refreshUser()`, so if the browser that
+clicked the link is also signed in as that user, the profile page's badge
+flips immediately instead of waiting for the next navigation.
 
 **Forgot / reset password** (`auth.service.ts#forgotPassword`/`resetPassword`,
 `utils/jwt.ts#signPasswordResetToken`) works identically for **every role**
@@ -1055,20 +1185,27 @@ locking in the `order_manager`/`delivery_agent` role strings), plus
 HTTP-through-Mongoose integration specs (`auth`, `emailVerification`,
 `catalog`, `order`, `orderStatus`, `task`, `coupon`, `approvalGate`,
 `stockApproval`, `finance`, `security`, `notification`, `siteSettings`,
-`heroSlide`, `permissions`, `purchase`) run against an
+`heroSlide`, `permissions`, `purchase`, `staffHr`) run against an
 actual in-memory MongoDB via `mongodb-memory-server`
 (`tests/integration/setup.ts` starts/stops it and wipes collections between
 tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
 bearer token for it, bypassing `authLimiter` so RBAC-focused tests aren't
 rate-limited). They exercise `createApp()` with `supertest` end-to-end:
-register/login/`me`/logout, category+product RBAC and creation, order
+register/login/`me`/logout, category+product RBAC and creation (including
+`catalog.integration.test.ts`'s admin-submits/Super-Admin-grants/then-public
+walk through the `product.create` approval gate), order
 creation/stock-decrement/tracking/ownership, `orderStatus.integration.test.ts`
-(full pending→delivered pipeline walk with actor/role history assertions,
-invalid-transition/terminal-status rejection, admin's
-actor-gate-bypass-but-not-adjacency-table override, `order_manager`/
+(full pending→delivered pipeline walk with actor/role history assertions —
+now sending the delivery OTP as its own explicit step, separate from the
+`out_for_delivery` transition — invalid-transition/terminal-status rejection,
+admin's actor-gate-bypass-but-not-adjacency-table override, `order_manager`/
 `delivery_agent` RBAC against unrelated resources, delivery-agent
-self-scoping between two different agents, and the OTP flow's owner-only/
-staff-hidden visibility), `task.integration.test.ts` (required `type` field,
+self-scoping between two different agents, the OTP flow's owner-only/
+staff-hidden visibility, that a delivery agent can never reach `delivered`
+through the generic status endpoint, and OTP-attempt-limiting — repeated
+wrong codes 400 with a remaining-attempts count, the limit-reaching attempt
+invalidates the code outright (the previously-correct code no longer works
+either), and a fresh send resets attempts and works), `task.integration.test.ts` (required `type` field,
 `type` query filtering), `coupon.integration.test.ts` (discount-size gating
 — auto-approve/pending/forbidden thresholds for `co_admin`, plus a
 super_admin grant materializing the original payload),
@@ -1080,9 +1217,12 @@ that live stock and `InventoryLog` stay untouched until a grant, that a deny
 leaves them untouched permanently, that `admin` is gated too, that a queued
 delta is re-evaluated against stock that moved while it waited, that one
 product submit ships its description immediately while holding its stock,
-that a new product starts at 0 until approved, that an unchanged stock value
-creates no request, and that `employee` can read `GET /inventory/stock` but
-gets 403 on `POST /inventory/adjust`; variant-identity cases — an `_id`
+that an unchanged stock value creates no request, and that `employee` can
+read `GET /inventory/stock` but gets 403 on `POST /inventory/adjust`; new-
+product-creation cases — that a `co_admin`'s (and an `admin`'s) whole new
+product is queued rather than created, that nothing exists in the catalog
+until a Super Admin grants it, that a denied request leaves nothing behind,
+and that `super_admin` still publishes directly with real stock; variant-identity cases — an `_id`
 survives an unrelated edit, a newly added variant gets a fresh one, a foreign
 id is ignored, and reordering variants doesn't scramble which stock belongs
 to which; overlapping-request cases — symmetric conflict flagging, no false
@@ -1098,7 +1238,12 @@ history with a weighted average unit cost, the receipt path through the stock
 approval gate for both `super_admin` and `admin`, an unlinked batch receiving
 without touching stock, a received batch refusing further cost edits, shop
 scoping including a scoped viewer failing closed with no assignment and being
-unable to widen scope with a `?shop=` filter, and the RBAC matrix), and
+unable to widen scope with a `?shop=` filter, and the RBAC matrix),
+`staffHr.integration.test.ts` (an NID number set at creation and corrected
+via `staff-meta`, an NID image upload replacing — and deleting — the
+previous one, a non-HR role 403ing on both, and a salary payment's
+`dailyAllowanceBDT` defaulting to 0 when omitted, being visible in the
+employee's own payment history, and adding to `amountBDT` correctly), and
 `finance.integration.test.ts` (investment RBAC, co_admin expense submission
 + threshold-gated confirmation, a full refund walk from request through
 Order-Manager review to Admin approval — including the above-threshold
@@ -1223,8 +1368,10 @@ modal forms via `Modal.tsx`, `PageHeader`, `StatusBadge`,
 
 `/admin` (dashboard: revenue/orders/customers/active-products/low-stock/
 pending-leaves stat cards, today's attendance, top products), `/admin/products`
-(delete button is role-aware — hidden for `admin`, "Request deletion" for
-`co_admin`, "Delete" for `super_admin`, see "Approval-gate system" above),
+(a new product from `admin`/`co_admin` submits for Super Admin approval
+instead of publishing — see "Product creation approval gate" above; delete
+button is role-aware — hidden for `admin`, "Request deletion" for
+`co_admin`, "Delete" for `super_admin`, see "Product deletion" above),
 `/admin/categories`, `/admin/orders` (includes an "Assign Delivery Agent"
 picker on orders that are `ready_for_dispatch`/`delivery_failed` — see
 "Order status pipeline & delivery" above), `/admin/refunds` (Order Manager
@@ -1865,14 +2012,75 @@ hand-rolled with `useState`/`useEffect` + the custom `lib/api` client — no
 react-hook-form, no SWR/React Query, no Redux/Zustand. Match this pattern for
 new forms/pages rather than introducing a new library.
 
+**Printable order invoice** (`components/order/OrderInvoice.tsx`): a
+`PrintInvoiceButton` component — drop `<PrintInvoiceButton order={order} />`
+next to any order's other actions — that opens a `Modal` containing a
+plain black-on-white `InvoiceDocument` (company logo/name from the public
+`GET /site-settings`, fetched lazily on first open; customer/shipping
+details; itemized product table; subtotal/shipping/discount/total;
+payment method and paid/unpaid status) plus a "Print" button that calls
+`window.print()`. Print isolation is pure CSS: the document carries
+`id="invoice-print-area"`, and a `@media print` rule in `globals.css`
+hides everything else on the page (`visibility: hidden` on `body *`,
+`visibility: visible` again on the invoice subtree, which is then
+absolutely positioned to fill the page) — this works regardless of the
+invoice being nested inside another modal (e.g. the admin order-detail
+modal), since the rule targets the id globally rather than relying on DOM
+position. Used by `/admin/orders`'s order-detail modal and the customer
+account portal's `OrderHistory.tsx`. No PDF library — printing to PDF is
+just the browser's own "Save as PDF" print-destination option.
+
+**Reusable Confirm Dialog** (`context/ConfirmDialogContext.tsx`): replaces
+every raw `window.confirm()` in the app (delete, reject, deny, deactivate,
+cancel, support-login, and the stock-conflict warning on
+`/admin/approvals`) with a styled, promise-based dialog consistent with the
+rest of the admin UI — `window.confirm()`'s blocking, unstyled browser
+prompt is also the thing that caused the refund-rejection bug below. Mounted
+once as `<ConfirmDialogProvider>` in the root `app/layout.tsx`; any
+component calls `const confirmDialog = useConfirm();` then
+`const ok = await confirmDialog({ title, message, confirmLabel?,
+cancelLabel?, tone? })` — `tone: "danger"` renders a warning icon and a
+solid red confirm button (`Button`'s `danger` variant), anything else
+renders a plain primary button. **Do not reintroduce `window.confirm()` or
+`window.prompt()`-then-proceed-unconditionally** — the latter was a real bug
+on `/admin/refunds`' Reject action (and, identically, on `/admin/approvals`'
+Grant/Deny, `/admin/expenses`' Reject, and `/employee/leave`'s Cancel):
+`prompt()` returns `null` on Cancel and `""` on an empty-but-confirmed
+input, and code that did `prompt(...) ?? undefined` treated both the same,
+so cancelling the "reason" prompt still rejected/denied/cancelled the
+underlying record. Every `prompt()`-for-an-optional-note call site in the
+codebase now explicitly checks `=== null` before proceeding.
+
+**Consistent CRUD action colors**: `globals.css` defines a role-based
+(not literal-hex) color system for row-level actions, mirroring the
+existing `danger`/`success-soft` pattern — `--color-info`/`-strong`/`-soft`/
+`-soft-hover` (blue, new) for Edit/Update, `--color-danger`/`-soft`/
+`-soft-hover` (red, pre-existing) for Delete/Reject/Deny, and the
+pre-existing `green-900`/`success-soft`/`-soft-hover` (green) for
+Approve/Grant/Confirm. Every one of these is a **pill-shaped chip with a
+visible background at rest** — `inline-flex items-center rounded-full px-3
+py-1 ... bg-<color>-soft text-<color> hover:bg-<color>-soft-hover
+transition-colors duration-150 cursor-pointer` for a text-label action, or
+the same with `justify-center p-1.5` in place of `px-3 py-1` for an
+icon-only one — never bare colored text with no background. `Button.tsx`
+also gained a `danger` variant (`bg-danger-solid text-white
+hover:brightness-90`) for full-size buttons (the Confirm Dialog's destructive
+button, "Delete" on `/admin/purchases`, "Deactivate"/"Reject" on
+`/admin/customers`/`/admin/refunds`). Icon-only action buttons are also
+wrapped in `components/ui/Tooltip.tsx` (`<Tooltip label="Edit">...`) — a
+pure-CSS hover/focus-reveal label that sits alongside, not instead of, the
+button's own `aria-label`.
+
 **Testing**: Vitest + React Testing Library (`vitest.config.mts`,
 `vitest.setup.ts` — jsdom environment, `@/*` alias resolved to `src/`,
 `@testing-library/jest-dom` matchers). `npm test` runs `vitest run`,
 `npm run test:watch` for the interactive watcher. Coverage is intentionally
 basic, not exhaustive: pure-logic unit tests (`lib/utils.test.ts`,
-`lib/passwordStrength.test.ts`, `lib/mappers.test.ts`), a component test
-(`components/ui/PasswordStrengthMeter.test.tsx`), a permission-filtering test
-for the admin sidebar (`components/admin/AdminNav.test.tsx` — mocks
+`lib/passwordStrength.test.ts`, `lib/mappers.test.ts`), component tests
+(`components/ui/PasswordStrengthMeter.test.tsx`,
+`components/order/OrderInvoice.test.tsx` — mocks `lib/api/siteSettings` and
+asserts the opened invoice shows the order's items, address and totals), a
+permission-filtering test for the admin sidebar (`components/admin/AdminNav.test.tsx` — mocks
 `AuthContext` to assert that an Order Manager's menu is byte-identical to what
 the old hardcoded role lists produced, that a custom marketing role gets its
 own menu with no role name involved, and that a permission-less account sees
@@ -2072,9 +2280,9 @@ catch-all rewrite here.
   at checkout" as UI-only until a real gateway (e.g. bKash/SSLCommerz) is
   integrated.
 - **The approval-gate system covers a fixed, spec-defined list of actions**
-  (`coupon.create`/`.update`, `product.delete`, `product.stock.update`,
-  `inventory.adjust`, `refund.request`/`.approve`, `expense.confirm`,
-  `purchase.receive`) — role
+  (`coupon.create`/`.update`, `product.create`, `product.delete`,
+  `product.stock.update`, `inventory.adjust`, `refund.request`/`.approve`,
+  `expense.confirm`, `purchase.receive`) — role
   changes, settings changes, product content edits, and other sensitive
   actions are audit-*logged* (see "Approval-gate system & audit logging"
   above) but are **not** routed through the Grant-Based Approval Workflow;
@@ -2128,14 +2336,18 @@ catch-all rewrite here.
   frontend's "Continue with Google" button doesn't render. See "Google
   Sign-In" above for the exact setup steps; nothing else needs to change once
   a Client ID is added to both `.env` files.
-- **No SMS gateway anywhere in this project** — registration collects an
-  optional `phone` field (validated + checked for duplicates) but there is no
-  phone-OTP signup flow or phone-based login; email remains the only login
-  identifier. The delivery-agent OTP flow (see "Order status pipeline &
-  delivery" above) works around this by emailing the code and also
-  surfacing it directly on the order owner's own tracking/account page —
-  it is not texted to the customer, and the delivery agent must obtain it
-  verbally.
+- **No SMS gateway is actually connected to a real provider** —
+  `config/sms.ts#sendSms` exists as a generic, gateway-ready abstraction
+  (`isSmsConfigured`, same graceful-degrade pattern as Cloudinary/SMTP/
+  Google) gated on `SMS_API_URL`/`SMS_API_KEY`/`SMS_SENDER_ID`, but no
+  provider has been chosen or provisioned, so those are blank and every call
+  is a logged no-op. Registration collects an optional `phone` field
+  (validated + checked for duplicates) but there is still no phone-OTP
+  signup flow or phone-based login; email remains the only login identifier.
+  The delivery-agent OTP flow (see "Order status pipeline & delivery" above)
+  works around the missing SMS by emailing the code and also surfacing it
+  directly on the order owner's own tracking/account page — until a real
+  provider is wired up, the delivery agent must obtain it verbally.
 - **Still no arbitrary page/route creation** — `/about`, `/contact`, and
   `/shipping-policy`'s body copy is admin-editable via the fixed-type
   `StaticPage` system (see "Static page content management"), same as the

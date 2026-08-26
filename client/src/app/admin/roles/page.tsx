@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/roles";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -21,6 +22,7 @@ import type { ApiPermissionGroup, ApiRole } from "@/types/api";
 
 export default function AdminRolesPage() {
   const { user, permissions, hasPermission } = useAuth();
+  const confirmDialog = useConfirm();
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [groups, setGroups] = useState<ApiPermissionGroup[]>([]);
   const [sensitive, setSensitive] = useState<string[]>([]);
@@ -91,7 +93,13 @@ export default function AdminRolesPage() {
       role.assignedUserCount && role.assignedUserCount > 0
         ? `${role.assignedUserCount} user(s) still have this role and must be reassigned first.`
         : "This cannot be undone.";
-    if (!confirm(`Delete the ${role.name} role? ${warning}`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Role",
+      message: `Delete the ${role.name} role? ${warning}`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteRole(role._id);
       load();

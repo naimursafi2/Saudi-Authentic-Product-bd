@@ -5,7 +5,11 @@ import { ReviewModel } from "../models/Review.model";
 import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import { slugify } from "../utils/slugify";
-import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
+import {
+  createPendingAction,
+  registerPendingActionHandler,
+  registerPendingActionDenyHandler,
+} from "./pendingAction.service";
 import { recordAuditLog } from "./auditLog.service";
 import { requestVariantStockUpdate, type DesiredVariantStock, type StockActor } from "./inventory.service";
 import type {
@@ -141,16 +145,20 @@ function diffProductFields(before: IProduct, input: UpdateProductInput) {
   return changes;
 }
 
-export type CreateProductResult = {
-  product: IProduct;
-  /** Set when the submitted stock levels were queued for Super Admin approval. */
-  stockPendingActionId?: string;
-};
+export type CreateProductResult =
+  | { kind: "created"; product: IProduct }
+  | { kind: "pending"; pendingActionId: string };
 
 /**
- * A new product's variants always start at **0 stock** for a non-super_admin
- * author — the submitted quantities are queued for approval instead, so a
- * product can never go live with stock nobody signed off on.
+ * A new product from anyone but `super_admin` never touches the live
+ * catalog. The whole submission — content, images and stock together — is
+ * queued as a `product.create` pending action and the `Product` document is
+ * only actually created once a Super Admin grants it, per the
+ * product-approval requirement (co_admin **and** admin are both gated —
+ * `super_admin` is the only role that publishes directly, same convention
+ * as the stock-change gate). Images are uploaded to Cloudinary up front so
+ * validation and the Super Admin's review both see the real photos; if the
+ * request is later denied they're cleaned up (see the deny handler below).
  */
 export async function createProduct(
   input: CreateProductInput,
@@ -166,17 +174,19 @@ export async function createProduct(
     throw ApiError.badRequest("One or more categories are invalid");
   }
 
-  const gateStock = actor.role !== "super_admin";
-  const product = new ProductModel({
-    ...input,
-    slug,
-    variants: input.variants.map((v) => ({ ...v, stock: gateStock ? 0 : v.stock })),
-  });
+  const uploadedImages = images && images.length > 0 ? await uploadProductImages(images) : [];
 
-  if (images && images.length > 0) {
-    product.images = await uploadProductImages(images);
+  if (actor.role !== "super_admin") {
+    const action = await createPendingAction(
+      "product.create",
+      { ...input, slug, images: uploadedImages },
+      actor,
+      `New product "${input.name}" submitted for approval`
+    );
+    return { kind: "pending", pendingActionId: action._id.toString() };
   }
 
+  const product = new ProductModel({ ...input, slug, images: uploadedImages });
   await product.save();
 
   await recordAuditLog({
@@ -188,28 +198,62 @@ export async function createProduct(
     newValue: { name: product.name, slug: product.slug },
   });
 
-  let stockPendingActionId: string | undefined;
-  if (gateStock) {
-    // Only the variants that actually asked for stock — a product created
-    // with all-zero stock needs no approval request.
-    const stocks: DesiredVariantStock[] = product.variants
-      .map((variant, index) => ({
-        variantId: variant._id!.toString(),
-        label: variant.label,
-        stock: input.variants[index]!.stock,
-      }))
-      .filter((s) => s.stock > 0);
+  return { kind: "created", product };
+}
 
-    const result = await requestVariantStockUpdate(
-      actor,
-      { productId: product._id.toString(), productName: product.name, stocks },
-      "Initial stock for a newly created product"
+/** The shape a `product.create` pending action's payload always carries. */
+type ProductCreatePayload = Omit<CreateProductInput, "existingImages"> & {
+  images: { url: string; publicId: string; isPrimary?: boolean }[];
+};
+
+registerPendingActionHandler("product.create", async (payload, reviewer) => {
+  const data = payload as unknown as ProductCreatePayload;
+
+  const existing = await ProductModel.findOne({ slug: data.slug });
+  if (existing) {
+    throw ApiError.conflict(
+      `Cannot grant: a product with slug "${data.slug}" was created while this request was pending`
     );
-    if (result?.kind === "pending") stockPendingActionId = result.pendingActionId;
+  }
+  const categories = await CategoryModel.find({ _id: { $in: data.categories } });
+  if (categories.length !== data.categories.length) {
+    throw ApiError.badRequest("Cannot grant: one or more categories no longer exist");
   }
 
-  return { product, stockPendingActionId };
-}
+  const product = new ProductModel({
+    name: data.name,
+    slug: data.slug,
+    tagline: data.tagline,
+    description: data.description,
+    origin: data.origin,
+    categories: data.categories,
+    badge: data.badge,
+    variants: data.variants,
+    highlights: data.highlights,
+    storageInstructions: data.storageInstructions,
+    isBestSeller: data.isBestSeller,
+    isFeatured: data.isFeatured,
+    images: data.images,
+  });
+  await product.save();
+
+  await recordAuditLog({
+    actor: reviewer.id,
+    actorRole: reviewer.role,
+    action: "product.create",
+    resource: "Product",
+    resourceId: product._id.toString(),
+    newValue: { name: product.name, slug: product.slug },
+    note: "Applied via approval grant",
+  });
+
+  return { resource: "Product", resourceId: product._id.toString() };
+});
+
+registerPendingActionDenyHandler("product.create", async (payload) => {
+  const images = ((payload as unknown as ProductCreatePayload).images ?? []) as { publicId: string }[];
+  await Promise.all(images.map((img) => deleteCloudinaryImage(img.publicId)));
+});
 
 export type UpdateProductResult = {
   product: IProduct;

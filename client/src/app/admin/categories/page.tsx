@@ -6,6 +6,7 @@ import { Plus, Pencil, Trash2, FolderTree } from "lucide-react";
 import { listCategories, createCategory, updateCategory, deleteCategory } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -16,6 +17,7 @@ import type { ApiCategory } from "@/types/api";
 
 export default function AdminCategoriesPage() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const canDelete = user?.role === "admin" || user?.role === "super_admin";
 
   const [categories, setCategories] = useState<ApiCategory[]>([]);
@@ -66,7 +68,13 @@ export default function AdminCategoriesPage() {
   }
 
   async function handleDelete(category: ApiCategory) {
-    if (!confirm(`Delete "${category.name}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Category",
+      message: `Delete "${category.name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await deleteCategory(category._id);
     load();
   }

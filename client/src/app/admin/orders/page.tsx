@@ -13,6 +13,7 @@ import { Modal } from "@/components/admin/Modal";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { PrintInvoiceButton } from "@/components/order/OrderInvoice";
 import type { ApiOrder, ApiUser, OrderStatus, Pagination } from "@/types/api";
 
 const STATUS_OPTIONS = ORDER_STATUSES;
@@ -215,7 +216,10 @@ function OrderDetailModal({
               <p className="text-xs uppercase tracking-wide text-brown-500">Placed</p>
               <p className="text-sm text-green-950">{new Date(order.createdAt).toLocaleString()}</p>
             </div>
-            <StatusBadge status={order.status} />
+            <div className="flex items-center gap-4">
+              <PrintInvoiceButton order={order} />
+              <StatusBadge status={order.status} />
+            </div>
           </div>
 
           <section>
