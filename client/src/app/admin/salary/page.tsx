@@ -66,6 +66,7 @@ export default function AdminSalaryPage() {
         month: values.month,
         year: values.year,
         amountBDT: Number(values.amountBDT),
+        dailyAllowanceBDT: values.dailyAllowanceBDT ? Number(values.dailyAllowanceBDT) : undefined,
         note: values.note || undefined,
       });
       setIsCreating(false);
@@ -138,7 +139,14 @@ export default function AdminSalaryPage() {
                   <td className="px-4 py-3 text-brown-600">
                     {MONTH_NAMES[payment.month - 1]} {payment.year}
                   </td>
-                  <td className="px-4 py-3 text-brown-600">{formatBDT(payment.amountBDT)}</td>
+                  <td className="px-4 py-3 text-brown-600">
+                    {formatBDT(payment.amountBDT + payment.dailyAllowanceBDT)}
+                    {payment.dailyAllowanceBDT > 0 && (
+                      <span className="block text-xs text-brown-500">
+                        {formatBDT(payment.amountBDT)} base + {formatBDT(payment.dailyAllowanceBDT)} allowance
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={payment.status} />
                   </td>

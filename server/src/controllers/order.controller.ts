@@ -95,6 +95,11 @@ export const updateDeliveryStatus = catchAsync(async (req: Request, res: Respons
   sendSuccess(res, 200, "Delivery status updated", { order });
 });
 
+export const sendDeliveryOtp = catchAsync(async (req: Request, res: Response) => {
+  const order = await orderService.sendDeliveryOtp(paramStr(req.params.id), req.user!.id);
+  sendSuccess(res, 200, "Delivery OTP sent to the customer", { order });
+});
+
 export const verifyDeliveryOtp = catchAsync(async (req: Request, res: Response) => {
   const order = await orderService.verifyDeliveryOtp(paramStr(req.params.id), req.user!.id, req.body.otp, req.body.note);
   sendSuccess(res, 200, "Delivery confirmed", { order });

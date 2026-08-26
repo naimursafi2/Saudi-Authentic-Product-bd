@@ -76,6 +76,7 @@ export interface ApiSalaryPayment {
   month: number;
   year: number;
   amountBDT: number;
+  dailyAllowanceBDT: number;
   status: SalaryPaymentStatus;
   paidAt?: string;
   note?: string;

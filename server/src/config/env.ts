@@ -34,6 +34,12 @@ const envSchema = z.object({
 
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
 
+  // No specific SMS provider is chosen yet — these are generic enough to fit
+  // most REST SMS gateways (Twilio, SSL Wireless, etc.). See config/sms.ts.
+  SMS_API_URL: z.string().optional().default(""),
+  SMS_API_KEY: z.string().optional().default(""),
+  SMS_SENDER_ID: z.string().optional().default(""),
+
   SEED_SUPER_ADMIN_NAME: z.string().default("Super Admin"),
   SEED_SUPER_ADMIN_EMAIL: z
     .string()
@@ -78,6 +84,8 @@ export const isSmtpConfigured = Boolean(
 );
 
 export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);
+
+export const isSmsConfigured = Boolean(env.SMS_API_URL && env.SMS_API_KEY && env.SMS_SENDER_ID);
 
 /**
  * `CLIENT_ORIGIN` may be a single origin or a comma-separated list (e.g. a

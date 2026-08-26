@@ -141,7 +141,9 @@ export default function EmployeeDashboardPage() {
       href: "/employee/salary",
       icon: Wallet,
       label: "Latest Salary",
-      value: dashboard.latestSalaryPayment ? formatBDT(dashboard.latestSalaryPayment.amountBDT) : "—",
+      value: dashboard.latestSalaryPayment
+        ? formatBDT(dashboard.latestSalaryPayment.amountBDT + dashboard.latestSalaryPayment.dailyAllowanceBDT)
+        : "—",
     },
     {
       href: "/employee/performance",
@@ -322,7 +324,7 @@ export default function EmployeeDashboardPage() {
           {dashboard.latestSalaryPayment ? (
             <div className="flex flex-1 flex-col justify-center gap-1">
               <p className="text-3xl font-semibold text-green-950">
-                {formatBDT(dashboard.latestSalaryPayment.amountBDT)}
+                {formatBDT(dashboard.latestSalaryPayment.amountBDT + dashboard.latestSalaryPayment.dailyAllowanceBDT)}
               </p>
               <p className="text-sm text-brown-500">
                 {new Date(

@@ -52,7 +52,7 @@ export const deliveryStatusSchema = z.object({
 });
 
 export const verifyOtpSchema = z.object({
-  otp: z.string().trim().length(6),
+  otp: z.string().trim().length(4),
   note: z.string().trim().max(300).optional(),
 });
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Trash2, Star } from "lucide-react";
 import { listAllReviews, deleteReview } from "@/lib/api/reviews";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { AdminPagination } from "@/components/admin/AdminPagination";
@@ -10,6 +11,7 @@ import { StarRating } from "@/components/ui/StarRating";
 import type { ApiReview, Pagination } from "@/types/api";
 
 export default function AdminReviewsPage() {
+  const confirmDialog = useConfirm();
   const [reviews, setReviews] = useState<ApiReview[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
@@ -32,7 +34,13 @@ export default function AdminReviewsPage() {
   useEffect(load, [page]);
 
   async function handleDelete(review: ApiReview) {
-    if (!confirm("Delete this review? This cannot be undone.")) return;
+    const ok = await confirmDialog({
+      title: "Delete Review",
+      message: "Delete this review? This cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await deleteReview(review._id);
     load();
   }

@@ -80,6 +80,7 @@ export async function updateSalaryStatus(id: string, input: UpdateSalaryStatusIn
       month: payment.month,
       year: payment.year,
       amountBDT: payment.amountBDT,
+      dailyAllowanceBDT: payment.dailyAllowanceBDT,
       status: payment.status,
       note: payment.note,
     });
@@ -96,10 +97,11 @@ export async function notifySalaryPayment(id: string) {
   const employee = await UserModel.findById(payment.employee);
   if (!employee) throw ApiError.notFound("Employee not found");
 
-  await sendSalaryPaymentEmail(employee.email, employee.name, {
+  void sendSalaryPaymentEmail(employee.email, employee.name, {
     month: payment.month,
     year: payment.year,
     amountBDT: payment.amountBDT,
+    dailyAllowanceBDT: payment.dailyAllowanceBDT,
     status: payment.status,
     note: payment.note,
   });

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Package, Search, Undo2 } from "lucide-react";
 import { listMyOrders } from "@/lib/api/orders";
 import { createRefund, listRefunds } from "@/lib/api/finance";
+import { PrintInvoiceButton } from "@/components/order/OrderInvoice";
 import { ApiClientError } from "@/lib/api/client";
 import { formatBDT, cn } from "@/lib/utils";
 import { ButtonLink, Button } from "@/components/ui/Button";
@@ -206,12 +207,15 @@ export function OrderHistory() {
             <OrderStatusTimeline status={order.status} statusHistory={order.statusHistory} />
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link
-                href={`/track-order?orderNumber=${encodeURIComponent(order.orderNumber)}`}
-                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
-              >
-                <Search size={12} /> Track Order
-              </Link>
+              <div className="flex items-center gap-4">
+                <Link
+                  href={`/track-order?orderNumber=${encodeURIComponent(order.orderNumber)}`}
+                  className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
+                >
+                  <Search size={12} /> Track Order
+                </Link>
+                <PrintInvoiceButton order={order} />
+              </div>
               <span className="text-base font-semibold text-green-950">{formatBDT(order.totalBDT)}</span>
             </div>
 

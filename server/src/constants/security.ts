@@ -30,3 +30,9 @@ export const IMPERSONATION_TOKEN_TTL = "30m";
 
 /** Number of single-use recovery codes issued when 2FA is enabled. */
 export const TWO_FACTOR_RECOVERY_CODE_COUNT = 8;
+
+/** How long a delivery verification OTP stays valid before it must be resent. */
+export const DELIVERY_OTP_TTL_MINUTES = 5;
+
+/** Incorrect delivery-OTP attempts tolerated before the code is invalidated and must be resent. */
+export const MAX_DELIVERY_OTP_ATTEMPTS = 5;

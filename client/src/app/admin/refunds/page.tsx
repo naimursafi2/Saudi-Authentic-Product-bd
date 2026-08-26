@@ -125,7 +125,11 @@ export default function AdminRefundsPage() {
   }
 
   async function handleReject(refund: ApiRefund) {
-    const reason = prompt("Reason for rejecting (optional):") ?? undefined;
+    const reason = prompt("Reason for rejecting (optional):");
+    // `prompt()` returns null only when the user cancels — an empty string
+    // means they clicked OK with no text entered, which should still reject.
+    // Treating both the same way used to reject the refund even on Cancel.
+    if (reason === null) return;
     setActionError(null);
     setActingId(refund._id);
     try {
@@ -207,7 +211,7 @@ export default function AdminRefundsPage() {
                       {canReview && refund.status === "pending_review" && (
                         <>
                           <Button
-                            variant="outline"
+                            variant="primary"
                             size="xs"
                             disabled={actingId === refund._id}
                             onClick={() => handleReview(refund, "approve")}
@@ -215,7 +219,7 @@ export default function AdminRefundsPage() {
                             Review OK
                           </Button>
                           <Button
-                            variant="ghost"
+                            variant="danger"
                             size="xs"
                             disabled={actingId === refund._id}
                             onClick={() => handleReject(refund)}
@@ -235,7 +239,7 @@ export default function AdminRefundsPage() {
                             Approve
                           </Button>
                           <Button
-                            variant="ghost"
+                            variant="danger"
                             size="xs"
                             disabled={actingId === refund._id}
                             onClick={() => handleReject(refund)}

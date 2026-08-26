@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/homepageSections";
 import { listCategories } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -73,6 +74,7 @@ function sectionFormData(values: HomepageSectionFormValues, image: File | null):
 }
 
 export default function AdminHomepagePage() {
+  const confirmDialog = useConfirm();
   const [slides, setSlides] = useState<ApiHeroSlide[]>([]);
   const [sections, setSections] = useState<ApiHomepageSection[]>([]);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
@@ -126,7 +128,13 @@ export default function AdminHomepagePage() {
   }
 
   async function handleDeleteSlide(slide: ApiHeroSlide) {
-    if (!confirm("Delete this hero slide? This cannot be undone.")) return;
+    const ok = await confirmDialog({
+      title: "Delete Hero Slide",
+      message: "Delete this hero slide? This cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteHeroSlide(slide._id);
       load();
@@ -182,7 +190,13 @@ export default function AdminHomepagePage() {
   }
 
   async function handleDeleteSection(section: ApiHomepageSection) {
-    if (!confirm(`Delete this ${SECTION_LABELS[section.type].toLowerCase()}? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Section",
+      message: `Delete this ${SECTION_LABELS[section.type].toLowerCase()}? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteHomepageSection(section._id);
       load();

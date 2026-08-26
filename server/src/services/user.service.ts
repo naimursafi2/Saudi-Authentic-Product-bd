@@ -1,9 +1,9 @@
 import { UserModel } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
-import { sendStaffWelcomeEmail } from "./email.service";
+import { sendStaffWelcomeEmail, sendVerificationEmail } from "./email.service";
 import { recordAuditLog } from "./auditLog.service";
-import { signImpersonationToken } from "../utils/jwt";
+import { signImpersonationToken, signEmailVerificationToken } from "../utils/jwt";
 import type {
   AddAddressInput,
   CreateStaffInput,
@@ -23,10 +23,14 @@ export async function createStaffAccount(input: CreateStaffInput) {
     password: input.password,
     phone: input.phone,
     role: input.role,
-    // Staff accounts are provisioned directly by an admin who already knows
-    // the email is correct — no self-registration email-verification loop.
-    isEmailVerified: true,
-    staffMeta: input.staffMeta ? { ...input.staffMeta, joinedAt: new Date() } : undefined,
+    // Every role verifies its own email now, staff included — an admin
+    // entering the address doesn't guarantee the new hire actually has
+    // access to that inbox, so the same link-based flow customer
+    // registration uses applies here too.
+    isEmailVerified: false,
+    staffMeta: input.staffMeta
+      ? { ...input.staffMeta, joinedAt: input.staffMeta.joinedAt ?? new Date() }
+      : undefined,
   });
 
   void sendStaffWelcomeEmail(user.email, user.name, {
@@ -34,6 +38,8 @@ export async function createStaffAccount(input: CreateStaffInput) {
     employeeId: user.staffMeta?.employeeId,
     temporaryPassword: input.password,
   });
+  const verificationToken = signEmailVerificationToken(user._id.toString());
+  void sendVerificationEmail(user.email, user.name, verificationToken);
 
   return user;
 }
@@ -44,6 +50,23 @@ export async function updateStaffMeta(id: string, input: UpdateStaffMetaInput) {
   if (!user.staffMeta) throw ApiError.badRequest("This user is not a staff account");
 
   Object.assign(user.staffMeta, input);
+  await user.save();
+  return user;
+}
+
+/** Uploads/replaces a staff member's NID card photo — same pattern as `updateMyAvatar`. */
+export async function updateStaffNidImage(id: string, file: Express.Multer.File) {
+  const user = await UserModel.findById(id);
+  if (!user) throw ApiError.notFound("User not found");
+  if (!user.staffMeta) throw ApiError.badRequest("This user is not a staff account");
+
+  if (user.staffMeta.nidImage?.publicId) {
+    await deleteCloudinaryImage(user.staffMeta.nidImage.publicId);
+  }
+  const uploaded = await uploadBufferToCloudinary(file.buffer, {
+    folder: "saudi-authentic-product/staff-nid",
+  });
+  user.staffMeta.nidImage = { url: uploaded.url, publicId: uploaded.publicId };
   await user.save();
   return user;
 }

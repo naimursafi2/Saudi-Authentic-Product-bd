@@ -47,6 +47,12 @@ export const updateStaffMeta = catchAsync(async (req: Request, res: Response) =>
   sendSuccess(res, 200, "Staff details updated", { user });
 });
 
+export const uploadStaffNidImage = catchAsync(async (req: Request, res: Response) => {
+  if (!req.file) throw ApiError.badRequest("An NID card image is required");
+  const user = await userService.updateStaffNidImage(paramStr(req.params.id), req.file);
+  sendSuccess(res, 200, "NID card image updated", { user });
+});
+
 export const unlockAccount = catchAsync(async (req: Request, res: Response) => {
   const user = await userService.unlockUserAccount(paramStr(req.params.id), {
     id: req.user!.id,

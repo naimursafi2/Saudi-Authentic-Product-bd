@@ -54,7 +54,14 @@ export default function EmployeeSalaryPage() {
                   <td className="px-5 py-3.5 font-medium text-green-950">
                     {new Date(p.year, p.month - 1).toLocaleString("en-US", { month: "long", year: "numeric" })}
                   </td>
-                  <td className="px-5 py-3.5 font-semibold text-green-950">{formatBDT(p.amountBDT)}</td>
+                  <td className="px-5 py-3.5 font-semibold text-green-950">
+                    {formatBDT(p.amountBDT + p.dailyAllowanceBDT)}
+                    {p.dailyAllowanceBDT > 0 && (
+                      <span className="block text-xs font-normal text-brown-500">
+                        {formatBDT(p.amountBDT)} base + {formatBDT(p.dailyAllowanceBDT)} allowance
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5">
                     <StatusBadge status={p.status} />
                   </td>

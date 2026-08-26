@@ -70,6 +70,13 @@ router.patch(
   userController.updateStaffMeta
 );
 router.patch(
+  "/:id/staff-meta/nid-image",
+  requirePermission("employees.manage"),
+  upload.single("nidImage"),
+  validate({ params: mongoIdParamSchema }),
+  userController.uploadStaffNidImage
+);
+router.patch(
   "/:id/unlock",
   requirePermission("employees.manage"),
   validate({ params: mongoIdParamSchema }),

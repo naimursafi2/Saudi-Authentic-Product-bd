@@ -28,6 +28,7 @@ export interface SalaryPaymentFormValues {
   month: number;
   year: number;
   amountBDT: string;
+  dailyAllowanceBDT: string;
   note: string;
 }
 
@@ -50,6 +51,7 @@ export function SalaryPaymentForm({
     month: now.getMonth() + 1,
     year: now.getFullYear(),
     amountBDT: "",
+    dailyAllowanceBDT: "",
     note: "",
   });
 
@@ -107,16 +109,29 @@ export function SalaryPaymentForm({
           />
         </div>
       </div>
-      <div>
-        <label className={labelClasses}>Amount (BDT) *</label>
-        <input
-          required
-          type="number"
-          min={0}
-          value={values.amountBDT}
-          onChange={(e) => update("amountBDT", e.target.value)}
-          className={fieldClasses}
-        />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelClasses}>Base Salary (BDT) *</label>
+          <input
+            required
+            type="number"
+            min={0}
+            value={values.amountBDT}
+            onChange={(e) => update("amountBDT", e.target.value)}
+            className={fieldClasses}
+          />
+        </div>
+        <div>
+          <label className={labelClasses}>Daily Allowance (BDT)</label>
+          <input
+            type="number"
+            min={0}
+            placeholder="0"
+            value={values.dailyAllowanceBDT}
+            onChange={(e) => update("dailyAllowanceBDT", e.target.value)}
+            className={fieldClasses}
+          />
+        </div>
       </div>
       <div>
         <label className={labelClasses}>Note</label>

@@ -81,10 +81,13 @@ form or state-management library — forms/data fetching are hand-rolled with
   characters, upper + lower case, a digit) with a live strength meter and a
   required confirm-password match, checks both email *and* phone for
   duplicates, and can save an optional first delivery address in the same
-  request. A newly-registered customer must verify their email (a timed link
-  emailed on signup, `/account/verify-email`, with resend) before placing
-  orders or posting reviews — staff and Google Sign-In accounts are exempt.
-  A single Sign In / Register / Forgot Password form (`/account`) serves
+  request. Every account verifies its email (a timed link emailed on
+  signup/staff-creation, `/account/verify-email`, with resend — plus a
+  "Verify Email"/"Email Verified" indicator on every role's profile page);
+  only Google Sign-In and seeded/bootstrap accounts are exempt (already
+  verified by construction). Being unverified only blocks a `customer` from
+  placing orders or posting reviews — staff are never locked out of their
+  portal by it. A single Sign In / Register / Forgot Password form (`/account`) serves
   every role — there's no separate staff login page. Forgot/reset password
   is one flow that works identically for all seven roles: a time-limited,
   single-use emailed link that invalidates itself (and every other active
@@ -94,8 +97,10 @@ form or state-management library — forms/data fetching are hand-rolled with
   until a `GOOGLE_CLIENT_ID` is configured (see Environment variables).
 - **Admin / Co-Admin / Super Admin / Order Manager portal**
   (`client/src/app/admin`, fully built): dashboard (live stats), products
-  (deletion is Super-Admin-direct / Co-Admin-request-only — Admin has no
-  product-deletion access at all), categories, orders (including assigning
+  (a whole new product from Admin or Co-Admin is queued for Super Admin
+  approval and doesn't exist until granted — only Super Admin publishes
+  directly; deletion is Super-Admin-direct / Co-Admin-request-only — Admin
+  has no product-deletion access at all), categories, orders (including assigning
   a delivery agent once an order is ready for dispatch), refunds (Order
   Manager review, then Admin/Super Admin financial approval), coupons
   (percentage/fixed discounts, scheduling window, minimum order amount,
@@ -148,19 +153,22 @@ form or state-management library — forms/data fetching are hand-rolled with
   and pages a user can't use, but that is presentation only: the backend
   re-checks every permission on every request.
 - **Approval-gate system (Grant-Based Approval Workflow)** — a single
-  reusable `PendingAction` queue gates eight sensitive action types (coupon
-  create/update above a configurable discount size, product deletion by
-  co_admin, **every stock change by anyone other than a Super Admin** — both
+  reusable `PendingAction` queue gates nine sensitive action types (**a whole
+  new product created by anyone other than a Super Admin** — the product
+  doesn't exist at all until granted, coupon create/update above a
+  configurable discount size, product deletion by co_admin, **every stock
+  change to an existing product by anyone other than a Super Admin** — both
   the manual inventory adjustment and the stock fields on the product form,
   refund requests by co_admin, refund approvals above a
-  configurable amount by admin, and expense confirmation above a
-  configurable amount by co_admin): the initiating request returns
-  `202 {pendingActionId}` instead of applying immediately, a super_admin
-  reviews it at `/admin/approvals` and grants (applies the original payload
-  verbatim) or denies it, and both the requester and every super_admin get
-  emailed at the relevant step. The four thresholds that decide what gets
-  auto-approved vs. gated are stored in a single `ApprovalSettings`
-  singleton, editable only by super_admin — never hardcoded.
+  configurable amount by admin, expense confirmation above a
+  configurable amount by co_admin, and receiving a purchase batch that moves
+  stock): the initiating request returns `202 {pendingActionId}` instead of
+  applying immediately, a super_admin reviews it at `/admin/approvals` and
+  grants (applies the original payload verbatim) or denies it, and both the
+  requester and every super_admin get emailed at the relevant step. The four
+  thresholds that decide what gets auto-approved vs. gated are stored in a
+  single `ApprovalSettings` singleton, editable only by super_admin — never
+  hardcoded.
 - **Stock control** — stock lives in exactly one place (`Product.variants[].stock`)
   and every surface reads it live: the storefront, product listings, the
   admin portal, and a read-only Stock Levels page in the employee portal for
@@ -180,7 +188,8 @@ form or state-management library — forms/data fetching are hand-rolled with
   warns before granting, and the grant is recorded in the audit log as having
   raced another request.
 - **General audit logging** — every sensitive mutation (role/status changes,
-  coupon create/update/delete, product creation/deletion, **product content
+  coupon create/update/delete, a Super Admin's direct product
+  creation/deletion plus every grant of a gated one, **product content
   edits such as title and description — these apply immediately and are
   logged rather than approval-gated**, approval-settings edits,
   and every approval-gate grant/deny) writes an append-only `AuditLog`
@@ -196,9 +205,10 @@ form or state-management library — forms/data fetching are hand-rolled with
 - **Delivery portal** (`client/src/app/delivery`, fully built, `delivery_agent`
   role only — structurally excluded from `/admin`): a dashboard of assigned-
   order counts, an assigned-orders list with a detail view for marking an
-  order picked up / out for delivery, entering the customer's OTP to confirm
-  delivery, or recording a failed-delivery reason, plus the same profile
-  page as Employee.
+  order picked up / out for delivery, a **Send Delivery OTP** button once
+  out for delivery, an OTP-entry field with a **Verify & Confirm Delivery**
+  button and a **Resend OTP** link once a code is outstanding, or recording
+  a failed-delivery reason, plus the same profile page as Employee.
 - **Order & delivery workflow** — a 14-status pipeline (`pending` →
   `confirmed` → `processing` → `packed` → `ready_for_dispatch` →
   `assigned_to_agent` → `picked_up` → `out_for_delivery` → `otp_verified` →
@@ -208,11 +218,17 @@ form or state-management library — forms/data fetching are hand-rolled with
   drive the pre-dispatch steps and assignment; only the assigned Delivery
   Agent can drive pickup through delivery; refunds are Admin/Super-Admin
   only); every status change records who made it, their role, the previous
-  status, and an optional note. Out-for-delivery generates a one-time 6-digit
-  code emailed to the customer and also shown on their own order-tracking/
-  account page (there's no SMS gateway in this project); the delivery agent
-  never sees the code in their own portal and must collect it from the
-  customer to confirm delivery.
+  status, and an optional note. Reaching out-for-delivery no longer sends an
+  OTP by itself — the agent sends one explicitly, once they've actually
+  reached the customer, via its own endpoint. Each send/resend generates a
+  fresh one-time **4-digit** code (5-minute expiry, invalidated after 5
+  wrong attempts) emailed to the customer, SMS-ready once a gateway is
+  configured (see Known limitations), and also shown on their own
+  order-tracking/account page in the meantime; the delivery agent never sees
+  the code in their own portal and must collect it from the customer to
+  confirm delivery — there is no way to mark an order delivered other than
+  through a successful OTP verification, which also stamps
+  `deliveryVerified`/`deliveredAt`/`deliveredBy` on the order.
 - **Finance module (Investment, Expense, Refund, Profit/Loss)** — an
   append-only `Investment` ledger; an `Expense` log (12 categories,
   auto-confirmed for admin/super_admin, pending confirmation for co_admin
@@ -503,6 +519,7 @@ missing/malformed):
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | image uploads; blank → upload endpoints return 503, rest of the app still works |
 | `SMTP_SERVICE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | staff/customer email notifications; blank → sends become a silent logged no-op |
 | `GOOGLE_CLIENT_ID` | Google Sign-In OAuth Client ID; blank → `/auth/google` returns 503 and the frontend button stays hidden. Not a secret — see `server/.env.example` for how to obtain one |
+| `SMS_API_URL` / `SMS_API_KEY` / `SMS_SENDER_ID` | delivery-agent OTP SMS gateway (`src/config/sms.ts`); blank (the default — no provider is integrated) → sends become a logged no-op, the OTP still reaches the customer by email and the tracking/account page |
 | `SEED_SUPER_ADMIN_NAME` / `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` | bootstrap super-admin account used by `npm run seed` |
 
 **Frontend** (`client/.env.example`):
@@ -523,10 +540,10 @@ missing/malformed):
   `Order.isPaid` for them; only a `cod` order that reaches `delivered` gets
   marked paid. Treat non-COD checkout as UI-only until a real gateway is
   wired up.
-- The approval-gate system covers a fixed, spec-defined list of nine action
-  types (coupon create/update, product deletion, product stock update,
-  inventory adjustment, refund request/approval, expense confirmation,
-  purchase receipt) —
+- The approval-gate system covers a fixed, spec-defined list of ten action
+  types (coupon create/update, product creation, product deletion, product
+  stock update, inventory adjustment, refund request/approval, expense
+  confirmation, purchase receipt) —
   role changes, settings changes, product content edits, and other
   sensitive actions are audit-logged but do not go through the
   grant/deny `PendingAction` queue.
@@ -582,9 +599,18 @@ missing/malformed):
 - No `client/src/middleware.ts` — admin/employee route protection is
   client-side only (`RoleGuard`); the backend's `requirePermission(...)` is
   the real authorization boundary.
-- Storefront registration requires email verification for placing orders
-  and posting reviews (`isEmailVerified`); staff and Google Sign-In accounts
-  are exempt.
+- Every account verifies its email (`isEmailVerified`) — customer
+  registration and staff-account creation both fire the same verification
+  link, and a "Verify Email"/"Email Verified" indicator lives on every
+  role's profile page. Google Sign-In accounts and seeded/bootstrap accounts
+  are exempt (already verified by construction). Being unverified only
+  blocks a `customer` from placing orders or posting reviews — staff are
+  never locked out of their portal by it.
+- No SMS gateway is actually connected — `sendSms` (`server/src/config/sms.ts`)
+  is a gateway-ready abstraction gated on `SMS_API_URL`/`SMS_API_KEY`/
+  `SMS_SENDER_ID`, but with no provider chosen those are blank and every
+  call is a logged no-op. The delivery OTP still reaches the customer via
+  email and the order tracking/account page in the meantime.
 - The homepage content system (hero slides + homepage sections), navigation
   (header nav links), footer (link columns + social links), and now
   `/about`/`/contact`/`/shipping-policy` (via `/admin/pages`) are all

@@ -20,15 +20,17 @@ export const getProduct = catchAsync(async (req: Request, res: Response) => {
 export const createProduct = catchAsync(async (req: Request, res: Response) => {
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
   const actor = { id: req.user!.id, role: req.user!.role };
-  const { product, stockPendingActionId } = await productService.createProduct(req.body, actor, files);
-  sendSuccess(
-    res,
-    201,
-    stockPendingActionId
-      ? "Product created — its stock quantities need Super Admin approval before going live"
-      : "Product created",
-    { product, stockPendingActionId }
-  );
+  const result = await productService.createProduct(req.body, actor, files);
+  if (result.kind === "pending") {
+    sendSuccess(
+      res,
+      202,
+      "Product submitted for Super Admin approval — it will not appear in the catalog until granted",
+      { pendingActionId: result.pendingActionId }
+    );
+    return;
+  }
+  sendSuccess(res, 201, "Product created", { product: result.product });
 });
 
 export const updateProduct = catchAsync(async (req: Request, res: Response) => {

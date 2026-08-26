@@ -4,8 +4,10 @@ import { useState } from "react";
 import { Plus, Trash2, Paperclip, Pencil, X } from "lucide-react";
 import { addCostItem, removeCostItem, updateCostItem, type CostItemPayload } from "@/lib/api/purchases";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { ApiPurchase, ApiPurchaseCostItem } from "@/types/api";
 
 const fieldClasses =
@@ -30,13 +32,20 @@ export function PurchaseCostEditor({
   editable: boolean;
   onChange: (purchase: ApiPurchase) => void;
 }) {
+  const confirmDialog = useConfirm();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleRemove(item: ApiPurchaseCostItem) {
-    if (!confirm(`Remove the "${item.name}" cost from this purchase?`)) return;
+    const ok = await confirmDialog({
+      title: "Remove Cost Item",
+      message: `Remove the "${item.name}" cost from this purchase?`,
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (!ok) return;
     setError(null);
     setBusyId(item._id);
     try {
@@ -104,21 +113,25 @@ export function PurchaseCostEditor({
                   <span className="text-sm font-semibold text-green-950">{formatBDT(item.amountBDT)}</span>
                   {editable && (
                     <>
-                      <button
-                        aria-label="Edit cost"
-                        onClick={() => setEditingId(item._id)}
-                        className="cursor-pointer text-brown-600 hover:text-green-950"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        aria-label="Remove cost"
-                        disabled={busyId === item._id}
-                        onClick={() => handleRemove(item)}
-                        className="cursor-pointer text-danger hover:text-danger-strong disabled:opacity-50"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <Tooltip label="Edit cost">
+                        <button
+                          aria-label="Edit cost"
+                          onClick={() => setEditingId(item._id)}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Remove cost">
+                        <button
+                          aria-label="Remove cost"
+                          disabled={busyId === item._id}
+                          onClick={() => handleRemove(item)}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-50"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </Tooltip>
                     </>
                   )}
                 </div>

@@ -54,6 +54,8 @@ export interface CreateStaffPayload {
     department?: string;
     designation?: string;
     baseSalaryBDT?: number;
+    joinedAt?: string;
+    nidNumber?: string;
   };
 }
 
@@ -85,9 +87,21 @@ export async function updateUserStatus(id: string, isActive: boolean) {
 
 export async function updateStaffMeta(
   id: string,
-  payload: { department?: string; designation?: string; baseSalaryBDT?: number }
+  payload: {
+    department?: string;
+    designation?: string;
+    baseSalaryBDT?: number;
+    joinedAt?: string;
+    nidNumber?: string;
+  }
 ) {
   return api.patch<{ user: ApiUser }>(`/users/${id}/staff-meta`, payload);
+}
+
+export async function uploadStaffNidImage(id: string, file: File) {
+  const form = new FormData();
+  form.set("nidImage", file);
+  return api.patchForm<{ user: ApiUser }>(`/users/${id}/staff-meta/nid-image`, form);
 }
 
 export async function unlockUser(id: string) {

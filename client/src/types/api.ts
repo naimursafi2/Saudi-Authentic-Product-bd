@@ -44,6 +44,8 @@ export interface ApiStaffMeta {
   designation?: string;
   joinedAt?: string;
   baseSalaryBDT?: number;
+  nidNumber?: string;
+  nidImage?: { url: string; publicId: string };
 }
 
 export interface ApiUser {
@@ -375,6 +377,15 @@ export interface ApiOrder {
     changedByRole?: Role;
   }[];
   assignedAgent?: string | { _id: string; name: string; email: string };
+  /** Present whenever an OTP is currently outstanding (never the code itself —
+   * that's owner-only, see `otp` on the API response). Used to tell whether
+   * "Send Delivery OTP" or the code-entry form should render. */
+  otpGeneratedAt?: string;
+  otpExpiresAt?: string;
+  /** True only once a `delivered` transition went through real OTP verification. */
+  deliveryVerified?: boolean;
+  deliveredAt?: string;
+  deliveredBy?: string | { _id: string; name: string; email: string };
   deliveryNotes?: string;
   failureReason?: string;
   createdAt: string;
@@ -406,6 +417,7 @@ export interface ApiCoupon {
 export type PendingActionType =
   | "coupon.create"
   | "coupon.update"
+  | "product.create"
   | "product.delete"
   | "product.stock.update"
   | "inventory.adjust"

@@ -69,6 +69,3 @@ export const GENERIC_STATUS_ACTOR_ROLES: Partial<Record<OrderStatus, Role[]>> = 
   delivered: ["order_manager", "co_admin"],
   delivery_failed: ["order_manager", "co_admin"],
 };
-
-/** Roles allowed to call the dedicated assign-agent endpoint. */
-export const ASSIGN_AGENT_ROLES: Role[] = ["order_manager", "co_admin", "admin", "super_admin"];

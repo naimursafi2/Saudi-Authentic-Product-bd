@@ -46,6 +46,12 @@ router.patch(
   orderController.updateDeliveryStatus
 );
 router.post(
+  "/:id/send-delivery-otp",
+  requirePermission("orders.deliver"),
+  validate({ params: mongoIdParamSchema }),
+  orderController.sendDeliveryOtp
+);
+router.post(
   "/:id/verify-otp",
   requirePermission("orders.deliver"),
   validate({ params: mongoIdParamSchema, body: verifyOtpSchema }),

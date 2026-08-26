@@ -58,6 +58,13 @@ export async function updateDeliveryStatus(
   return api.patch<{ order: ApiOrder }>(`/orders/${id}/delivery-status`, { status, note });
 }
 
+/** Generates and sends a fresh delivery OTP (email + SMS once a gateway is
+ * configured) — call again to resend. Requires the order to already be
+ * `out_for_delivery`. */
+export async function sendDeliveryOtp(id: string) {
+  return api.post<{ order: ApiOrder }>(`/orders/${id}/send-delivery-otp`, {});
+}
+
 export async function verifyDeliveryOtp(id: string, otp: string, note?: string) {
   return api.post<{ order: ApiOrder }>(`/orders/${id}/verify-otp`, { otp, note });
 }

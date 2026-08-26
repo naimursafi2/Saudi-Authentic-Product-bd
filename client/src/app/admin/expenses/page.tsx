@@ -108,7 +108,9 @@ export default function AdminExpensesPage() {
   }
 
   async function handleReject(expense: ApiExpense) {
-    const note = prompt("Reason for rejecting this expense (optional):") ?? undefined;
+    const note = prompt("Reason for rejecting this expense (optional):");
+    // Cancelling the reason prompt must not reject the expense anyway.
+    if (note === null) return;
     setActionError(null);
     setActingId(expense._id);
     try {

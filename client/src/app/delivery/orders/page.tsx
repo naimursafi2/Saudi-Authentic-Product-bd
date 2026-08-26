@@ -6,6 +6,7 @@ import {
   listAssignedOrders,
   getOrder,
   updateDeliveryStatus,
+  sendDeliveryOtp,
   verifyDeliveryOtp,
   markDeliveryFailed,
 } from "@/lib/api/orders";
@@ -139,6 +140,11 @@ function DeliveryOrderModal({
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(loadOrder, [orderId]);
 
+  // Whether an OTP is currently outstanding for this order. Actual expiry is
+  // still enforced server-side on verify — if a shown code has gone stale,
+  // "Verify" simply fails with a clear error and "Resend OTP" is right there.
+  const otpActive = Boolean(order?.otpExpiresAt);
+
   async function handlePickedUp() {
     if (!order) return;
     setActionError(null);
@@ -166,6 +172,20 @@ function DeliveryOrderModal({
       onUpdated();
     } catch (err) {
       setActionError(err instanceof ApiClientError ? err.message : "Could not update status.");
+    } finally {
+      setIsActing(false);
+    }
+  }
+
+  async function handleSendOtp() {
+    if (!order) return;
+    setActionError(null);
+    setIsActing(true);
+    try {
+      const { data } = await sendDeliveryOtp(order._id);
+      setOrder(data.order);
+    } catch (err) {
+      setActionError(err instanceof ApiClientError ? err.message : "Could not send the delivery OTP.");
     } finally {
       setIsActing(false);
     }
@@ -290,31 +310,48 @@ function DeliveryOrderModal({
 
             {order.status === "out_for_delivery" && (
               <div className="flex flex-col gap-4">
-                <div className="rounded-lg border border-gold-500/40 bg-gold-soft p-4">
-                  <p className="mb-2 text-sm text-gold-700">
-                    Ask the customer for their delivery verification code and enter it below to confirm receipt.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                      placeholder="6-digit code"
-                      maxLength={6}
-                      className="h-9 w-32 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
-                    />
-                    <Button variant="primary" size="sm" disabled={isActing || otp.trim().length !== 6} onClick={handleVerifyOtp}>
-                      {isActing ? "Verifying..." : "Verify & Complete Delivery"}
+                {!otpActive ? (
+                  <div className="rounded-lg border border-gold-500/40 bg-gold-soft p-4">
+                    <p className="mb-2 text-sm text-gold-700">
+                      Once you&apos;ve reached the customer, send them a delivery verification OTP.
+                    </p>
+                    <Button variant="primary" size="sm" disabled={isActing} onClick={handleSendOtp}>
+                      {isActing ? "Sending..." : "Send Delivery OTP"}
                     </Button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={isActing}
-                    onClick={handleOutForDelivery}
-                    className="mt-2 cursor-pointer text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950 disabled:opacity-50"
-                  >
-                    Resend code
-                  </button>
-                </div>
+                ) : (
+                  <div className="rounded-lg border border-gold-500/40 bg-gold-soft p-4">
+                    <p className="mb-2 text-sm text-gold-700">
+                      Ask the customer for their delivery verification code and enter it below to confirm receipt.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                        placeholder="4-digit code"
+                        inputMode="numeric"
+                        maxLength={4}
+                        className="h-9 w-32 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                      />
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={isActing || otp.trim().length !== 4}
+                        onClick={handleVerifyOtp}
+                      >
+                        {isActing ? "Verifying..." : "Verify & Confirm Delivery"}
+                      </Button>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isActing}
+                      onClick={handleSendOtp}
+                      className="mt-2 cursor-pointer text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950 disabled:opacity-50"
+                    >
+                      Resend OTP
+                    </button>
+                  </div>
+                )}
 
                 {!showFailureForm ? (
                   <button

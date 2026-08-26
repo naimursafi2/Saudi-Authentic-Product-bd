@@ -6,6 +6,7 @@ export async function createSalaryPayment(payload: {
   month: number;
   year: number;
   amountBDT: number;
+  dailyAllowanceBDT?: number;
   note?: string;
 }) {
   return api.post<{ payment: ApiSalaryPayment }>("/salary-payments", payload);

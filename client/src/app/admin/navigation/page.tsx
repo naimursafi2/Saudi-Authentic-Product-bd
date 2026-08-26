@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/navLinks";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -21,6 +22,7 @@ import type { ApiNavLink } from "@/types/api";
 
 export default function AdminNavigationPage() {
   const { hasPermission } = useAuth();
+  const confirmDialog = useConfirm();
   const isRestricted = !hasPermission("content.navigation.manage");
 
   const [links, setLinks] = useState<ApiNavLink[]>([]);
@@ -64,7 +66,13 @@ export default function AdminNavigationPage() {
   }
 
   async function handleDelete(link: ApiNavLink) {
-    if (!confirm(`Delete "${link.label}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: "Delete Nav Link",
+      message: `Delete "${link.label}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
     await deleteNavLink(link._id);
     load();
   }

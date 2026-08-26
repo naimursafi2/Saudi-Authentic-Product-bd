@@ -8,6 +8,11 @@ export interface ISalaryPayment extends Document {
   month: number; // 1-12
   year: number;
   amountBDT: number;
+  /** Daily allowance (TA/DA-style) paid alongside base salary for this month —
+   * a manually-entered line item, same convention as `amountBDT` itself
+   * (there is no automatic attendance-based computation). Total payable is
+   * `amountBDT + dailyAllowanceBDT`, computed wherever the payment is shown. */
+  dailyAllowanceBDT: number;
   status: SalaryPaymentStatus;
   paidAt?: Date;
   note?: string;
@@ -22,6 +27,7 @@ const salaryPaymentSchema = new Schema<ISalaryPayment>(
     month: { type: Number, required: true, min: 1, max: 12 },
     year: { type: Number, required: true, min: 2000 },
     amountBDT: { type: Number, required: true, min: 0 },
+    dailyAllowanceBDT: { type: Number, default: 0, min: 0 },
     status: { type: String, enum: ["pending", "paid"], default: "pending", index: true },
     paidAt: { type: Date },
     note: { type: String, trim: true, maxlength: 500 },

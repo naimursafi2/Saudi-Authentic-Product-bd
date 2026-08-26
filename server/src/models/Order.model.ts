@@ -59,6 +59,16 @@ export interface IOrder extends Document {
   otpGeneratedAt?: Date;
   otpExpiresAt?: Date;
   otpVerifiedAt?: Date;
+  /** Incorrect `verify-otp` attempts against the *current* code — reset to 0 whenever
+   * a fresh code is generated/resent, and once more on a successful verify. */
+  otpAttempts: number;
+  /** True only once a `delivered` transition has gone through real OTP verification
+   * (never set any other way) — a durable, directly-queryable record alongside the
+   * `otp_verified`/`delivered` pair already in `statusHistory`. */
+  deliveryVerified: boolean;
+  deliveredAt?: Date;
+  /** The `delivery_agent` who completed OTP verification for this order. */
+  deliveredBy?: Types.ObjectId;
   /** Set by the delivery agent on `delivered`/`delivery_failed`. */
   deliveryNotes?: string;
   /** Set by the delivery agent on `delivery_failed`. */
@@ -137,6 +147,10 @@ const orderSchema = new Schema<IOrder>(
     otpGeneratedAt: { type: Date },
     otpExpiresAt: { type: Date },
     otpVerifiedAt: { type: Date },
+    otpAttempts: { type: Number, default: 0, min: 0 },
+    deliveryVerified: { type: Boolean, default: false },
+    deliveredAt: { type: Date },
+    deliveredBy: { type: Schema.Types.ObjectId, ref: "User" },
     deliveryNotes: { type: String, trim: true, maxlength: 1000 },
     failureReason: { type: String, trim: true, maxlength: 500 },
   },
