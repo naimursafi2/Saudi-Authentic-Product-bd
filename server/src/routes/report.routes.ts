@@ -31,6 +31,12 @@ router.get(
   reportController.salesTimeSeries
 );
 router.get(
+  "/sales-timeseries/pdf",
+  requirePermission("reports.view"),
+  validate({ query: salesTimeSeriesQuerySchema }),
+  reportController.salesTimeSeriesPdf
+);
+router.get(
   "/delivery-performance",
   requirePermission("reports.view"),
   reportController.deliveryPerformance

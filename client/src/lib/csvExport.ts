@@ -10,10 +10,12 @@ function escapeCsvCell(value: unknown): string {
   return str;
 }
 
-export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
-  const lines = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(","));
-  const csv = lines.join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+/** Triggers a browser download of an already-fetched/generated Blob via a
+ * synthetic `<a download>` click — the filename is fully controlled here,
+ * client-side, regardless of what content-type the blob is. Shared by
+ * `downloadCsv` below and any other "download this file" action (e.g. a
+ * server-generated PDF) so there's one implementation of the boilerplate. */
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -22,4 +24,10 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
+  const lines = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(","));
+  const csv = lines.join("\r\n");
+  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8;" }));
 }

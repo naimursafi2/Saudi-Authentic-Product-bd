@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, ListFilter, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
-import { getDeliveryAgentPerformance, getSalesSummary, getSalesTimeSeries } from "@/lib/api/reports";
+import { Download, FileDown, ListFilter, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
+import { getDeliveryAgentPerformance, getSalesReportPdf, getSalesSummary, getSalesTimeSeries } from "@/lib/api/reports";
 import { getSiteSettings } from "@/lib/api/siteSettings";
 import { formatBDT } from "@/lib/utils";
-import { downloadCsv } from "@/lib/csvExport";
+import { downloadBlob, downloadCsv } from "@/lib/csvExport";
+import { ApiClientError } from "@/lib/api/client";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -36,6 +37,8 @@ export default function AdminReportsPage() {
   const [timeSeries, setTimeSeries] = useState<SalesTimeSeriesPoint[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(true);
   const [siteSettings, setSiteSettings] = useState<ApiSiteSettings | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   function load(fromDate?: string, toDate?: string) {
     setIsLoading(true);
@@ -89,19 +92,29 @@ export default function AdminReportsPage() {
   }
 
   /**
-   * Chrome's "Save as PDF" print destination suggests `document.title` as
-   * the filename — there's no other web API for this. Generated fresh at
-   * the moment Print is clicked (never hardcoded), local time, filesystem-
-   * safe (digits/hyphens/underscores only). `window.print()` blocks until
-   * the dialog closes, so restoring the title right after is reliable.
+   * Generates a real PDF server-side and downloads it directly — no
+   * `window.print()`, no browser print dialog, no dependency on the OS's
+   * "Microsoft Print to PDF" driver (whose own save dialog no webpage can
+   * reach or pre-fill; `document.title` only ever affected Chrome's own
+   * built-in "Save as PDF" destination, a different flow entirely). The
+   * filename is generated here, from the browser's local clock at the
+   * exact moment Export is clicked, and applied directly via the download
+   * trigger (`downloadBlob`) — a real file download's name is fully
+   * client-controlled, unlike a print dialog's suggested filename.
    */
-  function handlePrint() {
-    const originalTitle = document.title;
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    document.title = `Report_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
-    window.print();
-    document.title = originalTitle;
+  async function handleExportPdf() {
+    setPdfError(null);
+    setIsExportingPdf(true);
+    try {
+      const blob = await getSalesReportPdf(groupBy, from || undefined, to || undefined);
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      downloadBlob(`${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}.pdf`, blob);
+    } catch (err) {
+      setPdfError(err instanceof ApiClientError ? err.message : "Could not generate the PDF.");
+    } finally {
+      setIsExportingPdf(false);
+    }
   }
 
   return (
@@ -182,11 +195,17 @@ export default function AdminReportsPage() {
                 <Button variant="outline" size="xs" onClick={handleExportCsv} disabled={timeSeries.length === 0}>
                   <Download size={13} /> CSV
                 </Button>
-                <Button variant="outline" size="xs" onClick={handlePrint} disabled={timeSeries.length === 0}>
-                  <Printer size={13} /> Print / Save as PDF
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={handleExportPdf}
+                  disabled={timeSeries.length === 0 || isExportingPdf}
+                >
+                  <FileDown size={13} /> {isExportingPdf ? "Generating..." : "Export PDF"}
                 </Button>
               </div>
             </div>
+            {pdfError && <p className="mb-2 text-xs text-danger print:hidden">{pdfError}</p>}
             <p className="mb-3 text-xs text-brown-500">
               Period: {from || "Earliest order"} &ndash; {to || "Latest order"}
             </p>

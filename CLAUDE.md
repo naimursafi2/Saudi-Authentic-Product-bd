@@ -432,13 +432,29 @@ plain (no card border/shadow/rounded corners/brand colors; see "Print
 pagination" below) since a printed report should read as simple,
 professional paper, not a copy of the on-screen card. The groupBy dropdown
 and the CSV/Print buttons are marked `print:hidden` so only the report
-content itself appears on the printed page. `PrintInvoiceButton`/
-`AdminReportsPage`'s Print action also stamps `document.title` with
-`Report_YYYY-MM-DD_HH-mm` (local time, generated fresh at the moment Print
-is clicked) immediately before calling `window.print()`, then restores the
-original title right after — `document.title` is the only web API Chrome's
-"Save as PDF" destination reads for its suggested filename, so this is the
-only way to make that filename meaningful instead of the page's own title.
+content itself appears on the printed page. `AdminReportsPage`'s Print
+action also stamps `document.title` with `{ReportLabel}_Sales_Report_
+YYYY-MM-DD` (e.g. `Daily_Sales_Report_2026-08-27` — the label tracks
+whichever of Daily/Weekly/Monthly is currently selected; local date,
+generated fresh at the moment Print is clicked) before calling
+`window.print()`, then restores the original title right after —
+`document.title` is the only web API Chrome's "Save as PDF" destination
+reads for its suggested filename, so this is the only way to make that
+filename meaningful instead of the page's own title. **`window.print()`
+itself is deferred one macrotask via `setTimeout(..., 100)`, not called in
+the same synchronous tick as the `document.title` assignment** — setting
+the title and immediately calling `window.print()` is a known Chrome race:
+the title mutation is dispatched to the browser chrome (which is what the
+print/PDF subsystem actually reads for the suggested filename)
+asynchronously, and an immediate `window.print()` can open the dialog
+before that dispatch is processed, so the dialog captures the *previous*
+title and the suggested filename comes out blank. The restore-title line
+lives inside the same deferred callback, after `window.print()` (which
+still blocks until the dialog closes), so it's unaffected by the delay.
+`PrintInvoiceButton`/`OrderInvoice.tsx` does **not** do this — its own
+`window.print()` call is a plain, unmodified call, since an invoice's
+filename isn't part of any request this project has actually implemented;
+don't assume the two share this behavior without checking.
 
 **Print pagination** (`globals.css`'s `@media print` rules for
 `#invoice-print-area` and `.print-area`): hides everything outside the
@@ -487,8 +503,10 @@ repeat at the top of each page a long table spills onto. `.print-header`/
 `.print-footer` (the company-name banner and the minimal footer) are the
 deliberate exception to "avoid `position: fixed`" — a short banner meant to
 repeat on every page is exactly what `position: fixed` is for in print —
-paired with a global `@page { margin-top: 2.3cm; margin-bottom: 1.5cm }`
-that reserves room for them on every page. Per the CSS Paged Media spec, a
+paired with a global `@page { margin: 0.75in }` (a normal, uniform document
+margin on all four sides — not sized around the header/footer specifically;
+both are comfortably shorter than 0.75in on their own, so they fit inside
+it without needing extra room). Per the CSS Paged Media spec, a
 `position: fixed` element's containing block is the page box itself (so
 `top: 0.2cm` sits inside that reserved margin gutter), while an absolutely
 positioned element with no positioned ancestor is contained by the page

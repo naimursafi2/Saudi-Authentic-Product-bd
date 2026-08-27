@@ -438,9 +438,11 @@ body {
    (below): short banners meant to repeat on every physical page, which is
    the one case where `position: fixed` in print is actually correct —
    everything else below deliberately avoids it. Hidden on screen; the
-   print blocks further down reveal them. The matching `@page` top/bottom
-   margins reserve room on every page so flowing content never renders
-   under either one. */
+   print blocks further down reveal them. The matching `@page` margin
+   (0.75in on all four sides, a normal document margin — not something
+   sized around the header/footer) reserves enough room on every page that
+   neither one collides with the report content, since both banners are
+   comfortably shorter than 0.75in on their own. */
 .print-header,
 .print-footer {
   display: none;
@@ -465,8 +467,7 @@ body {
 }
 
 @page {
-  margin-top: 2.3cm;
-  margin-bottom: 1.5cm;
+  margin: 0.75in;
 }
 
 /* Printable invoice (components/order/OrderInvoice.tsx): isolates
