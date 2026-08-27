@@ -186,6 +186,54 @@ export async function sendDeliveryFailedAlertEmail(
   await safeSend(to, `Delivery failed — #${opts.orderNumber}`, html);
 }
 
+/**
+ * Renders a campaign email's HTML without sending it — deliberately NOT
+ * wrapped in `safeSend()` the way every other email in this file is.
+ * `campaign.service.ts#dispatchCampaign` sends this itself via `sendMail()`
+ * directly, one recipient at a time inside `Promise.allSettled`, because it
+ * needs to know per-recipient success/failure to build the campaign's
+ * delivery stats — `safeSend()` swallowing the error is exactly what every
+ * *other* call site in this file wants (an incidental notification must
+ * never fail the request that triggered it), but it would make bulk-send
+ * results indistinguishable from real deliveries.
+ */
+export function renderCampaignEmailHtml(opts: { title: string; message: string; imageUrl?: string }): string {
+  return layout(
+    opts.title,
+    `${opts.imageUrl ? `<img src="${opts.imageUrl}" alt="" style="max-width:100%;border-radius:6px;margin-bottom:16px;" />` : ""}
+     <div>${opts.message.replace(/\n/g, "<br/>")}</div>`
+  );
+}
+
+export async function sendCampaignSubmittedEmail(
+  to: string,
+  name: string,
+  opts: { campaignTitle: string; submittedByName: string }
+): Promise<void> {
+  const html = layout(
+    "Campaign submitted for approval",
+    `<p>Hi ${name},</p>
+     <p><strong>${opts.submittedByName}</strong> submitted the campaign <strong>"${opts.campaignTitle}"</strong> for your approval.</p>
+     ${button("Review Campaign", `${FRONTEND_URL}/admin/campaigns`)}`
+  );
+  await safeSend(to, "Campaign submitted for approval — Saudi Authentic Product", html);
+}
+
+export async function sendCampaignReviewedEmail(
+  to: string,
+  name: string,
+  opts: { campaignTitle: string; status: "approved" | "rejected"; reviewNote?: string }
+): Promise<void> {
+  const html = layout(
+    `Your campaign was ${opts.status}`,
+    `<p>Hi ${name},</p>
+     <p>Your campaign <strong>"${opts.campaignTitle}"</strong> has been <strong>${opts.status}</strong>.</p>
+     ${opts.reviewNote ? `<p>Note: ${opts.reviewNote}</p>` : ""}
+     ${button("Open Campaigns", `${FRONTEND_URL}/admin/campaigns`)}`
+  );
+  await safeSend(to, `Campaign ${opts.status} — "${opts.campaignTitle}"`, html);
+}
+
 const PENDING_ACTION_LABELS: Record<string, string> = {
   "coupon.create": "a new coupon",
   "coupon.update": "a coupon update",

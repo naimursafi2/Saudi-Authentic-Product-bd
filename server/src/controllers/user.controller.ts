@@ -21,6 +21,11 @@ export const listUsers = catchAsync(async (req: Request, res: Response) => {
   sendSuccess(res, 200, "Users fetched", { users }, { pagination });
 });
 
+export const getCustomerStats = catchAsync(async (_req: Request, res: Response) => {
+  const stats = await userService.getCustomerStats();
+  sendSuccess(res, 200, "Customer stats fetched", stats);
+});
+
 export const getUser = catchAsync(async (req: Request, res: Response) => {
   const user = await userService.getUserById(paramStr(req.params.id));
   sendSuccess(res, 200, "User fetched", { user });

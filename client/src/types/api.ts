@@ -620,3 +620,107 @@ export interface ApiUserShopAssignment {
   role: Role;
   assignedShops: ApiShop[];
 }
+
+// -- Customer Messaging / Campaign Management --
+
+export type CampaignStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "scheduled"
+  | "sending"
+  | "sent"
+  | "paused"
+  | "rejected"
+  | "failed";
+
+export type CampaignScheduleType = "now" | "weekly" | "monthly" | "custom";
+export type CampaignChannel = "email" | "sms" | "website";
+export type CampaignAudienceType = "all" | "selected" | "specific";
+
+export interface ApiCampaignSchedule {
+  type: CampaignScheduleType;
+  sendAt?: string;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  hour?: number;
+  minute?: number;
+}
+
+export interface ApiCampaignTargetAudience {
+  type: CampaignAudienceType;
+  customerIds: string[];
+}
+
+export interface ApiCampaignChannelResult {
+  channel: CampaignChannel;
+  status: "sent" | "failed" | "skipped";
+  recipientCount: number;
+  successCount: number;
+  failureCount: number;
+  skippedReason?: string;
+  failures: { recipient: string; reason: string }[];
+}
+
+export interface ApiCampaignDelivery {
+  _id: string;
+  triggeredAt: string;
+  triggeredBy?: string;
+  trigger: "scheduled" | "manual";
+  recipientCount: number;
+  channelResults: ApiCampaignChannelResult[];
+}
+
+export interface ApiCampaign {
+  _id: string;
+  title: string;
+  message: string;
+  image?: { url: string; publicId: string };
+  targetAudience: ApiCampaignTargetAudience;
+  channels: CampaignChannel[];
+  schedule: ApiCampaignSchedule;
+  status: CampaignStatus;
+  approvalStatus: "not_required" | "pending" | "approved" | "rejected";
+  createdBy: string | { _id: string; name: string; email: string };
+  createdByRole: Role;
+  reviewedBy?: string | { _id: string; name: string; email: string };
+  reviewedAt?: string;
+  reviewNote?: string;
+  nextRunAt?: string;
+  lastSentAt?: string;
+  sendCount: number;
+  deliveries: ApiCampaignDelivery[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignChannelStatus {
+  email: boolean;
+  sms: boolean;
+  website: boolean;
+}
+
+export interface CampaignAudiencePreview {
+  total: number;
+  withEmail: number;
+  withPhone: number;
+}
+
+export interface CustomerStats {
+  total: number;
+  verified: number;
+  unverified: number;
+  active: number;
+  inactive: number;
+}
+
+export interface ApiNotification {
+  _id: string;
+  campaign?: string;
+  title: string;
+  message: string;
+  image?: { url: string; publicId: string };
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

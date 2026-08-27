@@ -45,6 +45,9 @@ router.get(
   validate({ query: listUsersQuerySchema }),
   userController.listUsers
 );
+// Must be registered before "/:id" — otherwise "customer-stats" would be
+// parsed as an :id and 400 the mongoId validator.
+router.get("/customer-stats", requirePermission("employees.view"), userController.getCustomerStats);
 router.get(
   "/:id",
   requirePermission("employees.view"),

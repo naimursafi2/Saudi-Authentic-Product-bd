@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { env } from "./config/env";
 import { connectDatabase } from "./config/db";
 import { ensureSystemRoles } from "./services/role.service";
+import { startCampaignScheduler } from "./services/scheduler.service";
 
 
 async function main() {
@@ -11,6 +12,9 @@ async function main() {
   // resolvePermissions() falls back to the compiled-in defaults if this
   // hasn't run, so a cold start is never unauthorized by accident.
   await ensureSystemRoles();
+  // Drives weekly/monthly/custom campaign sends from the server itself, so
+  // a scheduled campaign fires whether or not any browser is open.
+  startCampaignScheduler();
 
   const app = createApp();
 

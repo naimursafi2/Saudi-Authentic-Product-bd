@@ -12,11 +12,17 @@ export { isSmsConfigured };
  * graceful-degrade pattern as `isCloudinaryConfigured`/`isSmtpConfigured`/
  * `isGoogleConfigured`. Never throws — SMS delivery is best-effort and must
  * not fail the caller's request.
+ *
+ * Returns whether the send actually went out (`false` when not configured,
+ * or when the request itself failed) — added for the Campaign system's
+ * per-channel delivery stats (`campaignDispatch.service.ts`), which needs to
+ * know success/failure per recipient. The original fire-and-forget callers
+ * (`void sendSms(...)`) are unaffected: they already ignore the return value.
  */
-export async function sendSms(to: string, message: string): Promise<void> {
+export async function sendSms(to: string, message: string): Promise<boolean> {
   if (!isSmsConfigured) {
     console.warn(`[sms] SMS gateway not configured — would send to ${to}: ${message}`);
-    return;
+    return false;
   }
 
   try {
@@ -30,7 +36,9 @@ export async function sendSms(to: string, message: string): Promise<void> {
       },
       body: JSON.stringify({ to, from: env.SMS_SENDER_ID, message }),
     });
+    return true;
   } catch (err) {
     console.error(`[sms] failed to send to ${to}:`, (err as Error).message);
+    return false;
   }
 }

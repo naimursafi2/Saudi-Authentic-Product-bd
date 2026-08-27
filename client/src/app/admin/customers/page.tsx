@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Search } from "lucide-react";
-import { impersonateUser, listUsers, unlockUser, updateUserStatus } from "@/lib/api/users";
+import { Users, Search, BadgeCheck, BadgeAlert, UserCheck, UserX } from "lucide-react";
+import { getCustomerStats, impersonateUser, listUsers, unlockUser, updateUserStatus } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { useConfirm } from "@/context/ConfirmDialogContext";
@@ -12,10 +12,37 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import type { ApiUser, Pagination } from "@/types/api";
+import type { ApiUser, CustomerStats, Pagination } from "@/types/api";
 
 function isLocked(user: ApiUser): boolean {
   return Boolean(user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now());
+}
+
+/** Live counts, never hardcoded — see `user.service.ts#getCustomerStats`. */
+function CustomerStatCards({ stats }: { stats: CustomerStats | null }) {
+  const cards = [
+    { key: "total", label: "Total Customers", value: stats?.total, icon: Users },
+    { key: "verified", label: "Verified", value: stats?.verified, icon: BadgeCheck },
+    { key: "unverified", label: "Unverified", value: stats?.unverified, icon: BadgeAlert },
+    { key: "active", label: "Active", value: stats?.active, icon: UserCheck },
+    { key: "inactive", label: "Inactive", value: stats?.inactive, icon: UserX },
+  ] as const;
+
+  return (
+    <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      {cards.map((card) => (
+        <div key={card.key} className="flex items-center gap-3 rounded-lg border border-brown-600/10 bg-surface p-4">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
+            <card.icon size={16} />
+          </span>
+          <span>
+            <span className="block text-lg font-semibold text-green-950">{card.value ?? "—"}</span>
+            <span className="block text-xs text-brown-500">{card.label}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function AdminCustomersPage() {
@@ -34,6 +61,13 @@ export default function AdminCustomersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [stats, setStats] = useState<CustomerStats | null>(null);
+
+  useEffect(() => {
+    getCustomerStats()
+      .then(({ data }) => setStats(data))
+      .catch(() => setStats(null));
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -112,6 +146,8 @@ export default function AdminCustomersPage() {
   return (
     <div>
       <PageHeader title="Customers" description="Browse registered customers and manage account access." />
+
+      <CustomerStatCards stats={stats} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-xs">

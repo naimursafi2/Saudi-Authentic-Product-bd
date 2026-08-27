@@ -25,6 +25,7 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
 import { SearchOverlay } from "./SearchOverlay";
 import { HeaderSearchBar } from "./HeaderSearchBar";
+import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { SocialIcon } from "@/components/ui/SocialIcon";
@@ -260,6 +261,10 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
               </span>
               <span className={ACTION_LABEL_CLASS}>Wishlist</span>
             </Link>
+
+            {isAuthenticated && user!.role === "customer" && (
+              <NotificationBell actionClassName={ACTION_CLASS} labelClassName={ACTION_LABEL_CLASS} badgeClassName={BADGE_CLASS} />
+            )}
 
             <button aria-label="Open cart" onClick={openDrawer} className={ACTION_CLASS}>
               <span className="relative">

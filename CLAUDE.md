@@ -1410,7 +1410,18 @@ nothing when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is unset).
 
 Guarded as a group by `RoleGuard
 allowed={["co_admin","order_manager","admin","super_admin"]}` in
-`app/admin/layout.tsx`. Every page below does real CRUD against the live
+`app/admin/layout.tsx`. Its shell (`AdminShell`) now follows the same
+sidebar pattern as the Employee and Delivery portals (see below): the
+desktop `<aside>` is its own `sticky top-0 h-screen overflow-y-auto` scroll
+container, independent of the page content's scroll — without this, the
+whole layout scrolled as one document and Next's default navigate-to-top
+behavior reset the sidebar's scroll position on every click, which is why
+clicking a nav item near the bottom used to jump the sidebar back to the
+top. Below `lg`, the sidebar collapses into a hamburger-triggered slide-in
+drawer (`mobileOpen` state, backdrop button, `animate-slide-in-left`) —
+`AdminNav` takes an optional `onNavigate` prop (mirroring
+`EmployeeNav`/`DeliveryNav`) that the drawer wires to close itself on link
+click. Every page below does real CRUD against the live
 API (loading/empty/error states via `EmptyState`/`TableSkeleton`/`ErrorState`,
 modal forms via `Modal.tsx`, `PageHeader`, `StatusBadge`,
 `AdminPagination`) — none are placeholders:
@@ -1433,7 +1444,12 @@ of an immediate save), `/admin/customers`, `/admin/reviews`,
 `/admin/inventory`, `/admin/purchases` (purchase batches + their fully
 custom cost breakdowns — see "Purchasing: shops, batches & flexible landed
 costs" above), `/admin/shops` (shops + per-staff shop assignment; the
-assignment picker needs `shops.manage`), `/admin/reports`, `/admin/finance` (revenue/expense/
+assignment picker needs `shops.manage` — **not linked from `AdminNav`**,
+since the project has no offline/physical shops in use beyond the one
+seeded default; the page, route and API are unchanged and still reachable
+directly by a `shops.manage`/`shops.view` holder, and the link can be
+restored with no other change once multiple shops are actually in use),
+`/admin/reports`, `/admin/finance` (revenue/expense/
 investment/profit-loss summary, nav-hidden from co_admin),
 `/admin/investments` (nav-hidden from co_admin), `/admin/expenses`
 (reachable by co_admin — scoped to their own submissions), `/admin/approvals`

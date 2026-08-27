@@ -17,6 +17,8 @@ const PALETTE: Record<string, string> = {
   half_day: "bg-gold-soft text-gold-700",
   pending_approval: "bg-gold-soft text-gold-700",
   awaiting_stock_approval: "bg-gold-soft text-gold-700",
+  sending: "bg-gold-soft text-gold-700",
+  paused: "bg-cream-300 text-brown-600",
   // positive / complete
   delivered: "bg-brand-deep-2 text-white",
   done: "bg-brand-deep-2 text-white",
@@ -24,6 +26,7 @@ const PALETTE: Record<string, string> = {
   approved: "bg-brand-deep-2 text-white",
   granted: "bg-brand-deep-2 text-white",
   received: "bg-brand-deep-2 text-white",
+  sent: "bg-brand-deep-2 text-white",
   present: "bg-success-soft text-green-900",
   shipped: "bg-success-soft text-green-900",
   active: "bg-success-soft text-green-900",
@@ -43,6 +46,7 @@ const PALETTE: Record<string, string> = {
   delivery_failed: "bg-danger-soft text-danger",
   returned: "bg-danger-soft text-danger",
   refunded: "bg-danger-soft text-danger",
+  failed: "bg-danger-soft text-danger",
 };
 
 export function StatusBadge({ status }: { status: string }) {

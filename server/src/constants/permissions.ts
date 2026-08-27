@@ -104,6 +104,14 @@ export const PERMISSIONS = [
   "refunds.review",
   "refunds.approve",
 
+  // -- Customer messaging / campaigns --
+  "campaigns.view",
+  "campaigns.create",
+  "campaigns.edit",
+  "campaigns.delete",
+  "campaigns.approve",
+  "campaigns.send",
+
   // -- Governance --
   "approvals.manage",
   "auditLogs.view",
@@ -232,6 +240,17 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
     ],
   },
   {
+    group: "Customer Messaging",
+    permissions: [
+      { key: "campaigns.view", label: "View campaigns & delivery history" },
+      { key: "campaigns.create", label: "Create campaigns" },
+      { key: "campaigns.edit", label: "Edit campaigns" },
+      { key: "campaigns.delete", label: "Delete campaigns" },
+      { key: "campaigns.approve", label: "Approve or reject submitted campaigns" },
+      { key: "campaigns.send", label: "Send campaigns directly, pause & resume" },
+    ],
+  },
+  {
     group: "Governance",
     permissions: [
       { key: "approvals.manage", label: "Grant or deny pending approvals" },
@@ -332,6 +351,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "refunds.request",
     "auditLogs.view",
     "roles.view",
+    // Co-Admin creates and edits its own campaigns and submits them for
+    // Super Admin approval — no direct send/approve/pause/resume/delete,
+    // matching the spec's Admin/Co-Admin split exactly.
+    "campaigns.view",
+    "campaigns.create",
+    "campaigns.edit",
   ],
 
   admin: [
@@ -392,6 +417,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "auditLogs.view",
     "roles.view",
     "roles.manage",
+    // Same as Co-Admin: Admin creates, edits and submits campaigns for
+    // approval, but only Super Admin approves/rejects/sends/pauses/deletes.
+    "campaigns.view",
+    "campaigns.create",
+    "campaigns.edit",
   ],
 };
 

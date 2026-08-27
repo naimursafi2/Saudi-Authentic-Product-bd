@@ -98,6 +98,29 @@ export async function listUsers(filter: { role?: Role; search?: string; page: nu
   };
 }
 
+/**
+ * Backs the Customer Management page and the Campaign dashboard's "how many
+ * customers do I actually have" stat cards — every number here is a live
+ * `countDocuments` against the real `User` collection, never hardcoded or
+ * cached, so it updates the moment a customer registers, verifies their
+ * email, or is (de)activated.
+ */
+export async function getCustomerStats() {
+  const [total, verified, active] = await Promise.all([
+    UserModel.countDocuments({ role: "customer" }),
+    UserModel.countDocuments({ role: "customer", isEmailVerified: true }),
+    UserModel.countDocuments({ role: "customer", isActive: true }),
+  ]);
+
+  return {
+    total,
+    verified,
+    unverified: total - verified,
+    active,
+    inactive: total - active,
+  };
+}
+
 export async function getUserById(id: string) {
   const user = await UserModel.findById(id);
   if (!user) throw ApiError.notFound("User not found");

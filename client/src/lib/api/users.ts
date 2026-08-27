@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ApiAddress, ApiUser, Role } from "@/types/api";
+import type { ApiAddress, ApiUser, CustomerStats, Role } from "@/types/api";
 
 export interface AddAddressPayload {
   label: string;
@@ -71,6 +71,11 @@ export async function listUsers(params: { role?: Role; search?: string; page?: n
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();
   return api.get<{ users: ApiUser[] }>(`/users${qs ? `?${qs}` : ""}`);
+}
+
+/** Live, never-hardcoded counts backing the Customer Management page and the Campaign dashboard's audience stats. */
+export async function getCustomerStats() {
+  return api.get<CustomerStats>("/users/customer-stats");
 }
 
 export async function getUser(id: string) {

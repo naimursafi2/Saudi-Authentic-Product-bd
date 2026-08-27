@@ -29,10 +29,10 @@ import {
   Undo2,
   ShieldCheck,
   ScrollText,
-  Store,
   Truck,
   CircleUser,
   KeyRound,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -71,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag, permissions: ["orders.view"] },
   { href: "/admin/refunds", label: "Refunds", icon: Undo2, permissions: ["refunds.view"] },
   { href: "/admin/coupons", label: "Coupons", icon: Tag, permissions: ["marketing.view"] },
+  { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone, permissions: ["campaigns.view"] },
   { href: "/admin/customers", label: "Customers", icon: Users, permissions: ["employees.view"] },
   { href: "/admin/reviews", label: "Reviews", icon: Star, permissions: ["reviews.view"] },
   { href: "/admin/employees", label: "Employees", icon: UserCog, permissions: ["employees.view"] },
@@ -87,7 +88,12 @@ const NAV_ITEMS: NavItem[] = [
     permissions: ["inventory.logs.view", "inventory.manage"],
   },
   { href: "/admin/purchases", label: "Purchases", icon: Truck, permissions: ["purchases.view"] },
-  { href: "/admin/shops", label: "Shops", icon: Store, permissions: ["shops.view"] },
+  // "Shops" is intentionally hidden from the nav: the project has no offline/
+  // physical shops in use today (just the one seeded default shop), so the
+  // link is unused clutter. The route, page and API are untouched — a
+  // `shops.manage` user can still reach /admin/shops directly, and it can be
+  // re-added here with no other change once multiple shops are actually
+  // configured.
   { href: "/admin/reports", label: "Reports", icon: BarChart3, permissions: ["reports.view"] },
   { href: "/admin/finance", label: "Finance", icon: Landmark, permissions: ["finance.view"] },
   { href: "/admin/investments", label: "Investments", icon: PiggyBank, permissions: ["investments.view"] },
@@ -122,7 +128,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/profile", label: "Profile", icon: CircleUser },
 ];
 
-export function AdminNav() {
+export function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { hasPermission } = useAuth();
 
@@ -134,6 +140,7 @@ export function AdminNav() {
           <Link
             key={item.href}
             href={item.href}
+            onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 rounded px-3 py-2 text-sm font-medium transition-colors",
               active ? "bg-brand-deep-2 text-white" : "text-on-brand/80 hover:bg-white/10"

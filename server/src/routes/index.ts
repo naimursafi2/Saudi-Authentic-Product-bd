@@ -29,6 +29,8 @@ import financeRoutes from "./finance.routes";
 import roleRoutes from "./role.routes";
 import shopRoutes from "./shop.routes";
 import purchaseRoutes from "./purchase.routes";
+import campaignRoutes from "./campaign.routes";
+import notificationRoutes from "./notification.routes";
 
 const router = Router();
 
@@ -62,5 +64,7 @@ router.use("/finance", financeRoutes);
 router.use("/roles", roleRoutes);
 router.use("/shops", shopRoutes);
 router.use("/purchases", purchaseRoutes);
+router.use("/campaigns", campaignRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;
