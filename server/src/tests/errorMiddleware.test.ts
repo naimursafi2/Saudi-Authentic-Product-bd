@@ -59,6 +59,15 @@ describe("errorHandler", () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
+  it("translates a Multer file-size error into a 400, not the generic 500", () => {
+    const res = mockRes();
+    errorHandler({ name: "MulterError", code: "LIMIT_FILE_SIZE" }, {} as Request, res, jest.fn());
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining("2MB") })
+    );
+  });
+
   it("falls back to a 500 for unknown errors", () => {
     const res = mockRes();
     errorHandler(new Error("boom"), {} as Request, res, jest.fn());

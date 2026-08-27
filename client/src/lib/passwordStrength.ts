@@ -1,7 +1,7 @@
-// Mirrors backend/src/validators/auth.validator.ts's PASSWORD_REGEX — at
-// least one lowercase letter, one uppercase letter and one digit, 8+ chars.
+// Mirrors backend/src/validators/auth.validator.ts's passwordField — the
+// only requirement is a minimum length of 8 characters.
 export function meetsPasswordRequirements(password: string): boolean {
-  return password.length >= 8 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+  return password.length >= 8;
 }
 
 export type PasswordStrengthLabel = "Too short" | "Weak" | "Fair" | "Strong";

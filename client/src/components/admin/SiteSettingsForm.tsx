@@ -215,7 +215,7 @@ export function SiteSettingsForm({
                   type="button"
                   aria-label="Remove social link"
                   onClick={() => removeSocialLink(i)}
-                  className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                  className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-delete p-1.5 text-white transition-colors duration-200 ease-in-out hover:bg-delete-hover"
                 >
                   <Trash2 size={15} />
                 </button>

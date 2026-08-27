@@ -1,5 +1,6 @@
 import { ReviewModel } from "../models/Review.model";
 import { ProductModel } from "../models/Product.model";
+import { OrderModel } from "../models/Order.model";
 import { ApiError } from "../utils/ApiError";
 import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { recomputeProductRating } from "./product.service";
@@ -63,6 +64,17 @@ export async function createReview(
     throw ApiError.conflict("You have already reviewed this product");
   }
 
+  // Only a customer who has actually received this product may review it —
+  // a review is a claim about the product itself, not just an opinion.
+  const verifiedOrder = await OrderModel.exists({
+    customer: customerId,
+    status: "delivered",
+    "items.product": productId,
+  });
+  if (!verifiedOrder) {
+    throw ApiError.forbidden("You can only review products you have purchased and received.");
+  }
+
   const uploadedImages =
     images && images.length > 0
       ? await Promise.all(
@@ -78,6 +90,7 @@ export async function createReview(
     rating: input.rating,
     comment: input.comment,
     images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
+    isVerifiedPurchase: true,
   });
 
   await recomputeProductRating(productId);
@@ -90,4 +103,20 @@ export async function deleteReview(reviewId: string) {
   const productId = review.product.toString();
   await review.deleteOne();
   await recomputeProductRating(productId);
+}
+
+/**
+ * Hide/unhide a review without deleting it — `listReviewsForProduct`'s
+ * `isApproved: true` filter (and `recomputeProductRating`'s own matching
+ * aggregation) already exclude anything not approved, so flipping this
+ * field is enough to pull a review off the public product page while
+ * leaving it intact for admin review/restoration later.
+ */
+export async function setReviewVisibility(reviewId: string, isApproved: boolean) {
+  const review = await ReviewModel.findById(reviewId);
+  if (!review) throw ApiError.notFound("Review not found");
+  review.isApproved = isApproved;
+  await review.save();
+  await recomputeProductRating(review.product.toString());
+  return review;
 }

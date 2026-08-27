@@ -1,3 +1,18 @@
+/**
+ * Cloudinary is stubbed rather than configured — same reasoning as
+ * heroSlide/productFeatures integration tests: uploads are guarded by
+ * `isCloudinaryConfigured`, so the real module would reject an expense's
+ * cash-memo photo with a 503 in the test environment.
+ */
+const uploadBufferToCloudinary = jest
+  .fn()
+  .mockResolvedValue({ url: "https://cdn.test/cash-memo.jpg", publicId: "expense-cash-memos/photo" });
+
+jest.mock("../../config/cloudinary", () => ({
+  uploadBufferToCloudinary: (...args: unknown[]) => uploadBufferToCloudinary(...args),
+  deleteCloudinaryImage: jest.fn().mockResolvedValue(undefined),
+}));
+
 import request from "supertest";
 import { createApp } from "../../app";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
@@ -127,6 +142,62 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     expect(coAdminList.status).toBe(403);
   });
 
+  it("requires a reason, and requires otherCategoryDetail only for the Other category", async () => {
+    const { token: adminToken } = await createAuthedUser({ role: "admin" });
+
+    const missingReason = await request(app)
+      .post("/api/v1/expenses")
+      .set(...authHeader(adminToken))
+      .send({ category: "packaging", amountBDT: 500 });
+    expect(missingReason.status).toBe(400);
+
+    const otherWithoutDetail = await request(app)
+      .post("/api/v1/expenses")
+      .set(...authHeader(adminToken))
+      .send({ category: "other", amountBDT: 500, reason: "Miscellaneous" });
+    expect(otherWithoutDetail.status).toBe(400);
+
+    const otherWithDetail = await request(app)
+      .post("/api/v1/expenses")
+      .set(...authHeader(adminToken))
+      .send({
+        category: "other",
+        amountBDT: 500,
+        reason: "Miscellaneous",
+        otherCategoryDetail: "Office plants",
+      });
+    expect(otherWithDetail.status).toBe(201);
+    expect(otherWithDetail.body.data.expense.otherCategoryDetail).toBe("Office plants");
+
+    const nonOtherCategory = await request(app)
+      .post("/api/v1/expenses")
+      .set(...authHeader(adminToken))
+      .send({ category: "packaging", amountBDT: 500, reason: "Boxes" });
+    expect(nonOtherCategory.status).toBe(201);
+  });
+
+  it("uploads an optional cash-memo photo to Cloudinary and shows who requested the expense", async () => {
+    const { token: coAdminToken, user: coAdmin } = await createAuthedUser({ role: "co_admin" });
+    const { token: adminToken } = await createAuthedUser({ role: "admin" });
+
+    const created = await request(app)
+      .post("/api/v1/expenses")
+      .set(...authHeader(coAdminToken))
+      .field("category", "delivery")
+      .field("amountBDT", "1200")
+      .field("reason", "Courier fee for bulk shipment")
+      .attach("cashMemo", Buffer.from("fake-memo-bytes"), "memo.png");
+
+    expect(created.status).toBe(201);
+    expect(created.body.data.expense.cashMemo.url).toBe("https://cdn.test/cash-memo.jpg");
+    expect(uploadBufferToCloudinary).toHaveBeenCalledTimes(1);
+
+    const list = await request(app).get("/api/v1/expenses").set(...authHeader(adminToken));
+    const listed = list.body.data.expenses.find((e: { _id: string }) => e._id === created.body.data.expense._id);
+    expect(listed.recordedBy.name).toBe(coAdmin.name);
+    expect(listed.cashMemo.url).toBe("https://cdn.test/cash-memo.jpg");
+  });
+
   it("auto-confirms admin/super_admin expenses but leaves co_admin submissions pending", async () => {
     const { token: adminToken } = await createAuthedUser({ role: "admin" });
     const { token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
@@ -134,14 +205,14 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     const asAdmin = await request(app)
       .post("/api/v1/expenses")
       .set(...authHeader(adminToken))
-      .send({ category: "packaging", amountBDT: 1500 });
+      .send({ category: "packaging", amountBDT: 1500, reason: "Boxes for Q1 shipments" });
     expect(asAdmin.status).toBe(201);
     expect(asAdmin.body.data.expense.status).toBe("confirmed");
 
     const asCoAdmin = await request(app)
       .post("/api/v1/expenses")
       .set(...authHeader(coAdminToken))
-      .send({ category: "packaging", amountBDT: 1500 });
+      .send({ category: "packaging", amountBDT: 1500, reason: "Boxes for Q1 shipments" });
     expect(asCoAdmin.status).toBe(201);
     expect(asCoAdmin.body.data.expense.status).toBe("pending");
   });
@@ -154,7 +225,7 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     const submitted = await request(app)
       .post("/api/v1/expenses")
       .set(...authHeader(coAdminToken))
-      .send({ category: "marketing", amountBDT: 5000 }); // above the 2000 default threshold
+      .send({ category: "marketing", amountBDT: 5000, reason: "Eid campaign ads" }); // above the 2000 default threshold
     expect(submitted.status).toBe(201);
     const expenseId = submitted.body.data.expense._id;
 
@@ -262,7 +333,7 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     const res = await request(app)
       .post("/api/v1/refunds")
       .set(...authHeader(coAdminToken))
-      .send({ orderId, reasonCategory: "other", requestedAmountBDT: 500 });
+      .send({ orderId, reasonCategory: "other", requestedAmountBDT: 500, note: "Customer changed their mind" });
     expect(res.status).toBe(202);
 
     const grant = await request(app)
@@ -309,7 +380,7 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     await request(app)
       .post("/api/v1/expenses")
       .set(...authHeader(superAdminToken))
-      .send({ category: "software", amountBDT: 2000 });
+      .send({ category: "software", amountBDT: 2000, reason: "Annual subscription renewal" });
 
     const blocked = await request(app).get("/api/v1/finance/summary").set(...authHeader(coAdminToken));
     expect(blocked.status).toBe(403);

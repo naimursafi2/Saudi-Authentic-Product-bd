@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, ListFilter, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
 import { getDeliveryAgentPerformance, getSalesSummary, getSalesTimeSeries } from "@/lib/api/reports";
+import { getSiteSettings } from "@/lib/api/siteSettings";
 import { formatBDT } from "@/lib/utils";
 import { downloadCsv } from "@/lib/csvExport";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -11,7 +12,7 @@ import { ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import type { SalesSummary, SalesTimeSeriesPoint } from "@/types/hr";
-import type { ApiDeliveryAgentPerformance } from "@/types/api";
+import type { ApiDeliveryAgentPerformance, ApiSiteSettings } from "@/types/api";
 
 type GroupBy = "day" | "week" | "month";
 const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -34,6 +35,7 @@ export default function AdminReportsPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("day");
   const [timeSeries, setTimeSeries] = useState<SalesTimeSeriesPoint[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(true);
+  const [siteSettings, setSiteSettings] = useState<ApiSiteSettings | null>(null);
 
   function load(fromDate?: string, toDate?: string) {
     setIsLoading(true);
@@ -66,6 +68,12 @@ export default function AdminReportsPage() {
       .catch(() => setAgents([]));
   }, []);
 
+  useEffect(() => {
+    getSiteSettings()
+      .then(({ data }) => setSiteSettings(data.settings))
+      .catch(() => setSiteSettings(null));
+  }, []);
+
   function handleApply(e: React.FormEvent) {
     e.preventDefault();
     load(from, to);
@@ -80,13 +88,31 @@ export default function AdminReportsPage() {
     );
   }
 
+  /**
+   * Chrome's "Save as PDF" print destination suggests `document.title` as
+   * the filename — there's no other web API for this. Generated fresh at
+   * the moment Print is clicked (never hardcoded), local time, filesystem-
+   * safe (digits/hyphens/underscores only). `window.print()` blocks until
+   * the dialog closes, so restoring the title right after is reliable.
+   */
+  function handlePrint() {
+    const originalTitle = document.title;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    document.title = `Report_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    window.print();
+    document.title = originalTitle;
+  }
+
   return (
     <div>
-      <PageHeader title="Reports" description="Deeper, date-range-filterable sales insight." />
+      <div className="print:hidden">
+        <PageHeader title="Reports" description="Deeper, date-range-filterable sales insight." />
+      </div>
 
       <form
         onSubmit={handleApply}
-        className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-brown-600/10 bg-surface p-4"
+        className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-brown-600/10 bg-surface p-4 print:hidden"
       >
         <div>
           <label className={labelClasses}>From</label>
@@ -112,7 +138,7 @@ export default function AdminReportsPage() {
         <ErrorState message={error} />
       ) : summary ? (
         <>
-          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 print:hidden">
             <StatTile icon={TrendingUp} label="Total Revenue" value={formatBDT(summary.totalRevenueBDT)} />
             <StatTile icon={ShoppingBag} label="Total Orders" value={String(summary.totalOrders)} />
             <StatTile
@@ -122,12 +148,26 @@ export default function AdminReportsPage() {
             />
           </div>
 
+          <div className="print-header">
+            <strong>{siteSettings?.siteName ?? "Saudi Authentic Product"}</strong>
+            <br />
+            Report date: {new Date().toLocaleDateString()}
+          </div>
+          <p className="print-footer">
+            {siteSettings?.siteName ?? "Saudi Authentic Product"}
+            {siteSettings?.contactEmail
+              ? ` · ${siteSettings.contactEmail}`
+              : siteSettings?.contactPhone
+                ? ` · ${siteSettings.contactPhone}`
+                : ""}
+          </p>
+
           <div className="print-area mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-serif text-lg text-green-950">
                 {GROUP_BY_OPTIONS.find((o) => o.value === groupBy)?.label} Sales Report
               </h2>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
                 <select
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value as GroupBy)}
@@ -142,11 +182,14 @@ export default function AdminReportsPage() {
                 <Button variant="outline" size="xs" onClick={handleExportCsv} disabled={timeSeries.length === 0}>
                   <Download size={13} /> CSV
                 </Button>
-                <Button variant="outline" size="xs" onClick={() => window.print()} disabled={timeSeries.length === 0}>
+                <Button variant="outline" size="xs" onClick={handlePrint} disabled={timeSeries.length === 0}>
                   <Printer size={13} /> Print / Save as PDF
                 </Button>
               </div>
             </div>
+            <p className="mb-3 text-xs text-brown-500">
+              Period: {from || "Earliest order"} &ndash; {to || "Latest order"}
+            </p>
             {isTimeSeriesLoading ? (
               <div className="h-32 animate-pulse rounded-lg bg-cream-200" />
             ) : timeSeries.length === 0 ? (
@@ -173,7 +216,7 @@ export default function AdminReportsPage() {
             )}
           </div>
 
-          <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
+          <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5 print:hidden">
             <h2 className="mb-3 font-serif text-lg text-green-950">Orders by Status</h2>
             <p className="mb-3 text-xs text-brown-500">Click a status to view those orders.</p>
             {Object.keys(summary.ordersByStatus).length === 0 ? (
@@ -194,7 +237,7 @@ export default function AdminReportsPage() {
             )}
           </div>
 
-          <div className="rounded-lg border border-brown-600/10 bg-surface p-5">
+          <div className="rounded-lg border border-brown-600/10 bg-surface p-5 print:hidden">
             <h2 className="mb-3 font-serif text-lg text-green-950">Top Products</h2>
             {summary.topProducts.length === 0 ? (
               <p className="text-sm text-brown-500">No product sales in this range.</p>
@@ -222,7 +265,7 @@ export default function AdminReportsPage() {
         </>
       ) : null}
 
-      <div className="mt-8 rounded-lg border border-brown-600/10 bg-surface p-5">
+      <div className="mt-8 rounded-lg border border-brown-600/10 bg-surface p-5 print:hidden">
         <h2 className="mb-1 font-serif text-lg text-green-950">Delivery Agent Performance</h2>
         <p className="mb-3 text-xs text-brown-500">
           Live counts derived from assigned orders — not a separate tracked number.

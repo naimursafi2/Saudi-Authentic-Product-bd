@@ -38,11 +38,25 @@ export interface CreateExpensePayload {
   category: ExpenseCategory;
   amountBDT: number;
   incurredAt?: string;
+  reason: string;
+  otherCategoryDetail?: string;
   note?: string;
+  /** A pasted link, offered client-side when the chosen cash-memo photo exceeds the 2MB upload limit. */
+  cashMemoUrl?: string;
 }
 
-export async function createExpense(payload: CreateExpensePayload) {
-  return api.post<{ expense: ApiExpense }>("/expenses", payload);
+/** `cashMemoFile` is optional — an expense can be submitted with no receipt,
+ * one uploaded to Cloudinary, or (see `payload.cashMemoUrl`) a pasted link. */
+export async function createExpense(payload: CreateExpensePayload, cashMemoFile?: File) {
+  if (!cashMemoFile) {
+    return api.post<{ expense: ApiExpense }>("/expenses", payload);
+  }
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(payload)) {
+    if (value !== undefined) formData.append(key, String(value));
+  }
+  formData.append("cashMemo", cashMemoFile);
+  return api.postForm<{ expense: ApiExpense }>("/expenses", formData);
 }
 
 export async function listExpenses(

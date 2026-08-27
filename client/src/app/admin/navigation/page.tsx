@@ -18,6 +18,7 @@ import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { NavLinkForm, type NavLinkFormValues } from "@/components/admin/NavLinkForm";
 import type { ApiNavLink } from "@/types/api";
 
@@ -189,24 +190,16 @@ export default function AdminNavigationPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Tooltip label="Edit">
-                      <button
-                        aria-label="Edit"
-                        onClick={() => setEditing(link)}
-                        className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip label="Delete">
-                      <button
-                        aria-label="Delete"
-                        onClick={() => handleDelete(link)}
-                        className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </Tooltip>
+                    <ActionButtonGroup>
+                      <ActionButton tone="info" onClick={() => setEditing(link)}>
+                        <Pencil size={13} />
+                        Edit
+                      </ActionButton>
+                      <ActionButton tone="danger" onClick={() => handleDelete(link)}>
+                        <Trash2 size={13} />
+                        Delete
+                      </ActionButton>
+                    </ActionButtonGroup>
                   </td>
                 </tr>
               ))}

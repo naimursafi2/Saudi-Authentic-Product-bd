@@ -25,7 +25,7 @@ import { AdminPagination } from "@/components/admin/AdminPagination";
 import { PurchaseCostEditor, CostItemForm } from "@/components/admin/PurchaseCostEditor";
 import { PurchaseSummary } from "@/components/admin/PurchaseSummary";
 import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton } from "@/components/ui/ActionButton";
 import type { ApiProduct, ApiPurchase, ApiShop, Pagination, PurchaseStatus } from "@/types/api";
 
 const fieldClasses =
@@ -553,16 +553,13 @@ function PurchaseForm({
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-green-950">{formatBDT(item.amountBDT)}</span>
-                    <Tooltip label="Remove cost">
-                      <button
-                        type="button"
-                        aria-label="Remove cost"
-                        onClick={() => setCostItems((current) => current.filter((_, i) => i !== index))}
-                        className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </Tooltip>
+                    <ActionButton
+                      tone="danger"
+                      onClick={() => setCostItems((current) => current.filter((_, i) => i !== index))}
+                    >
+                      <Trash2 size={13} />
+                      Remove
+                    </ActionButton>
                   </div>
                 </li>
               ))}

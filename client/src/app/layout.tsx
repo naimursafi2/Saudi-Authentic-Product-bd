@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import "@fontsource/eb-garamond/400.css";
-import "@fontsource/eb-garamond/500.css";
-import "@fontsource/eb-garamond/600.css";
-import "@fontsource/eb-garamond/700.css";
+import "@fontsource/poppins/400.css";
+import "@fontsource/poppins/500.css";
+import "@fontsource/poppins/600.css";
+import "@fontsource/poppins/700.css";
 import "@fontsource/plus-jakarta-sans/400.css";
 import "@fontsource/plus-jakarta-sans/500.css";
 import "@fontsource/plus-jakarta-sans/600.css";
@@ -13,6 +13,9 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
+import { RecentlyViewedProvider } from "@/context/RecentlyViewedContext";
+import { CompareProvider } from "@/context/CompareContext";
+import { CompareBar } from "@/components/product/CompareBar";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ConfirmDialogProvider } from "@/context/ConfirmDialogContext";
 import { CartDrawer } from "@/components/layout/CartDrawer";
@@ -55,11 +58,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <CartProvider>
               <WishlistProvider>
-                <ConfirmDialogProvider>
-                  <ImpersonationBanner />
-                  {children}
-                  <CartDrawer />
-                </ConfirmDialogProvider>
+                <RecentlyViewedProvider>
+                  <CompareProvider>
+                    <ConfirmDialogProvider>
+                      <ImpersonationBanner />
+                      {children}
+                      <CartDrawer />
+                      <CompareBar />
+                    </ConfirmDialogProvider>
+                  </CompareProvider>
+                </RecentlyViewedProvider>
               </WishlistProvider>
             </CartProvider>
           </AuthProvider>

@@ -6,7 +6,11 @@ import * as expenseService from "../services/expense.service";
 import type { ListExpensesQuery } from "../validators/expense.validator";
 
 export const createExpense = catchAsync(async (req: Request, res: Response) => {
-  const expense = await expenseService.createExpense(req.body, { id: req.user!.id, role: req.user!.role });
+  const expense = await expenseService.createExpense(
+    req.body,
+    { id: req.user!.id, role: req.user!.role },
+    req.file as Express.Multer.File | undefined
+  );
   sendSuccess(res, 201, "Expense recorded", { expense });
 });
 

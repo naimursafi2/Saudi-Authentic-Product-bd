@@ -1,7 +1,7 @@
 import multer from "multer";
 import { ApiError } from "../utils/ApiError";
 
-const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE_MB = 2;
 
 const storage = multer.memoryStorage();
 

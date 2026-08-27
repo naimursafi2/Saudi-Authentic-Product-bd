@@ -310,7 +310,9 @@ export interface ApiReview {
   customer: string | { _id: string; name: string; email?: string };
   rating: number;
   comment: string;
+  images: { url: string; publicId: string }[];
   isApproved: boolean;
+  isVerifiedPurchase: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -508,7 +510,10 @@ export interface ApiExpense {
   category: ExpenseCategory;
   amountBDT: number;
   incurredAt: string;
+  reason: string;
+  otherCategoryDetail?: string;
   note?: string;
+  cashMemo?: { url: string; publicId?: string };
   status: ExpenseStatus;
   recordedBy: string | { _id: string; name: string; email: string };
   recordedByRole: Role;

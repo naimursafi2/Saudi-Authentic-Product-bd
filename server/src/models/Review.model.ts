@@ -13,6 +13,7 @@ export interface IReview extends Document {
   comment: string;
   images: IReviewImage[];
   isApproved: boolean;
+  isVerifiedPurchase: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +34,12 @@ const reviewSchema = new Schema<IReview>(
     comment: { type: String, required: true, trim: true, maxlength: 1000 },
     images: { type: [reviewImageSchema], default: [] },
     isApproved: { type: Boolean, default: true },
+    // Set at creation time by `review.service.ts#createReview`, which only
+    // ever creates a review once it has confirmed a delivered order for
+    // this customer/product — so every review created going forward is
+    // `true`. Left `false` for any pre-existing review created before this
+    // gate existed, which genuinely wasn't checked against a real purchase.
+    isVerifiedPurchase: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

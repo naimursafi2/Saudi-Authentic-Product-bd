@@ -12,6 +12,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import type { ApiShop, ApiUser } from "@/types/api";
 
 const fieldClasses =
@@ -120,20 +121,14 @@ export default function AdminShopsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {canManage && (
-                      <div className="flex justify-end gap-4">
-                        <button
-                          onClick={() => setEditing(shop)}
-                          className="inline-flex cursor-pointer items-center rounded-full bg-info-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                        >
+                      <ActionButtonGroup>
+                        <ActionButton tone="info" onClick={() => setEditing(shop)}>
                           Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(shop)}
-                          className="inline-flex cursor-pointer items-center rounded-full bg-danger-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                        >
+                        </ActionButton>
+                        <ActionButton tone="danger" onClick={() => handleDelete(shop)}>
                           Delete
-                        </button>
-                      </div>
+                        </ActionButton>
+                      </ActionButtonGroup>
                     )}
                   </td>
                 </tr>

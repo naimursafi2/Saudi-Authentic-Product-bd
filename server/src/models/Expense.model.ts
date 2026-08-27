@@ -26,12 +26,23 @@ export type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
  * Super Admin grant — see `finance.service.ts`). A `confirmed` expense is
  * immutable — there is no update/delete route once confirmed.
  */
+export interface IExpenseCashMemo {
+  url: string;
+  /** Absent when `url` is a pasted external link rather than a Cloudinary upload
+   * (offered when the chosen file exceeds the 2MB upload limit). */
+  publicId?: string;
+}
+
 export interface IExpense extends Document {
   _id: Types.ObjectId;
   category: ExpenseCategory;
   amountBDT: number;
   incurredAt: Date;
+  reason: string;
+  /** Required only when `category === "other"` — what the expense actually was. */
+  otherCategoryDetail?: string;
   note?: string;
+  cashMemo?: IExpenseCashMemo;
   status: ExpenseStatus;
   recordedBy: Types.ObjectId;
   recordedByRole: string;
@@ -44,12 +55,28 @@ export interface IExpense extends Document {
   updatedAt: Date;
 }
 
+const expenseCashMemoSchema = new Schema<IExpenseCashMemo>(
+  {
+    url: { type: String, required: true },
+    publicId: { type: String },
+  },
+  { _id: false }
+);
+
 const expenseSchema = new Schema<IExpense>(
   {
     category: { type: String, required: true, enum: EXPENSE_CATEGORIES, index: true },
     amountBDT: { type: Number, required: true, min: 0 },
     incurredAt: { type: Date, required: true, default: Date.now },
+    // Required — why the expense was made, distinct from `note` (optional,
+    // freeform extra context added at submission time).
+    reason: { type: String, required: true, trim: true, maxlength: 500 },
+    otherCategoryDetail: { type: String, trim: true, maxlength: 200 },
     note: { type: String, trim: true, maxlength: 500 },
+    // Optional receipt/cash-memo photo, uploaded to Cloudinary the same way
+    // every other single-image upload in this project is (see
+    // `expense.service.ts#createExpense`).
+    cashMemo: { type: expenseCashMemoSchema },
     status: { type: String, enum: EXPENSE_STATUSES, default: "pending", index: true },
     recordedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     recordedByRole: { type: String, required: true },

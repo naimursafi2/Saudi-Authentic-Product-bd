@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { getPasswordStrength, meetsPasswordRequirements } from "./passwordStrength";
 
 describe("meetsPasswordRequirements", () => {
-  it("requires 8+ chars with lower, upper and a digit", () => {
-    expect(meetsPasswordRequirements("Password1")).toBe(true);
-    expect(meetsPasswordRequirements("password1")).toBe(false); // no uppercase
-    expect(meetsPasswordRequirements("PASSWORD1")).toBe(false); // no lowercase
-    expect(meetsPasswordRequirements("Password")).toBe(false); // no digit
+  it("requires only 8+ characters, no complexity rules", () => {
+    expect(meetsPasswordRequirements("abcdefgh")).toBe(true);
+    expect(meetsPasswordRequirements("12345678")).toBe(true);
+    expect(meetsPasswordRequirements("password")).toBe(true);
+    expect(meetsPasswordRequirements("ABCDEFGH")).toBe(true);
     expect(meetsPasswordRequirements("Pw1")).toBe(false); // too short
   });
 });

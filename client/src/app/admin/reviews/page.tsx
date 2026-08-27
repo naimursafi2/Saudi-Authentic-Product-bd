@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, Star } from "lucide-react";
-import { listAllReviews, deleteReview } from "@/lib/api/reviews";
+import Image from "next/image";
+import { Trash2, Star, EyeOff, Eye } from "lucide-react";
+import { listAllReviews, deleteReview, setReviewVisibility } from "@/lib/api/reviews";
 import { useConfirm } from "@/context/ConfirmDialogContext";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { StarRating } from "@/components/ui/StarRating";
 import type { ApiReview, Pagination } from "@/types/api";
 
@@ -18,6 +20,7 @@ export default function AdminReviewsPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   function load() {
     setIsLoading(true);
@@ -46,6 +49,16 @@ export default function AdminReviewsPage() {
     load();
   }
 
+  async function handleToggleVisibility(review: ApiReview) {
+    setTogglingId(review._id);
+    try {
+      await setReviewVisibility(review._id, !review.isApproved);
+      load();
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Reviews" description="Moderate customer reviews across every product." />
@@ -66,6 +79,7 @@ export default function AdminReviewsPage() {
                 <th className="px-4 py-3">Rating</th>
                 <th className="px-4 py-3">Comment</th>
                 <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Visibility</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -84,20 +98,37 @@ export default function AdminReviewsPage() {
                     </td>
                     <td className="max-w-xs px-4 py-3 text-brown-600">
                       <p className="line-clamp-2">{review.comment}</p>
+                      {review.images.length > 0 && (
+                        <div className="mt-1.5 flex gap-1">
+                          {review.images.map((img) => (
+                            <a key={img.publicId} href={img.url} target="_blank" rel="noopener noreferrer">
+                              <Image src={img.url} alt="Review photo" width={32} height={32} className="size-8 rounded object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-brown-500">
                       {new Date(review.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={review.isApproved ? "visible" : "hidden"} />
+                    </td>
                     <td className="px-4 py-3 text-right">
-                      <Tooltip label="Delete">
-                        <button
-                          aria-label="Delete"
-                          onClick={() => handleDelete(review)}
-                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                      <ActionButtonGroup>
+                        <ActionButton
+                          tone="neutral"
+                          disabled={togglingId === review._id}
+                          onClick={() => handleToggleVisibility(review)}
                         >
-                          <Trash2 size={15} />
-                        </button>
-                      </Tooltip>
+                          {review.isApproved ? <EyeOff size={13} /> : <Eye size={13} />}
+                          {review.isApproved ? "Hide" : "Unhide"}
+                        </ActionButton>
+                        <ActionButton tone="danger" onClick={() => handleDelete(review)}>
+                          <Trash2 size={13} />
+                          Delete
+                        </ActionButton>
+                      </ActionButtonGroup>
                     </td>
                   </tr>
                 );

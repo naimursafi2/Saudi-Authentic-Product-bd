@@ -204,7 +204,7 @@ export function ShopPageClient() {
           ) : (
             <div className={SHOP_GRID_CLASS}>
               {pageItems.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} showCompareToggle />
               ))}
             </div>
           )}

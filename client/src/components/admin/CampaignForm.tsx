@@ -246,7 +246,7 @@ export function CampaignForm({
               type="button"
               onClick={removeImage}
               aria-label="Remove image"
-              className="absolute -right-2 -top-2 flex size-6 cursor-pointer items-center justify-center rounded-full bg-danger-soft text-danger hover:bg-danger-soft-hover"
+              className="absolute -right-2 -top-2 flex size-6 cursor-pointer items-center justify-center rounded-full bg-delete text-white transition-colors duration-200 ease-in-out hover:bg-delete-hover"
             >
               <X size={13} />
             </button>

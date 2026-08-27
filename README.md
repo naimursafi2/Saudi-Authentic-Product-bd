@@ -35,17 +35,27 @@ form or state-management library — forms/data fetching are hand-rolled with
 ## Features
 
 - **Customer storefront** (`client/src/app/(site)`): home, shop (filterable
-  catalog), product detail (a multi-photo gallery with thumbnails below the
-  main image, a cursor-following hover-zoom, and a click-to-open fullscreen
-  lightbox — dark backdrop, close/prev/next, its own thumbnail strip,
-  Escape and arrow-key navigation, click-outside-to-close — variant/quantity
+  catalog), product detail (a multi-photo gallery, width-capped below the
+  `lg` breakpoint so it can't blow up to full-width on tablet/mobile, with
+  thumbnails below the main image and a click-to-open fullscreen lightbox —
+  dark backdrop, close/prev/next, its own thumbnail strip, Escape and
+  arrow-key navigation, click-outside-to-close; hovering the main image is
+  deliberately static (a zoom-in cursor and a fading `ZoomIn` badge are the
+  only hover feedback — no magnify/scale effect) — variant/quantity
   selection,
-  a wishlist toggle alongside a 2x2 Add to Cart/Buy Now/Order on WhatsApp/
-  Call for Order action grid — colors from dedicated `--color-action-*`
-  tokens, WhatsApp/Call sourced from `SiteSettings.contactPhone` with a
-  dynamically-generated pre-filled message, not hardcoded — reviews,
-  delivery info, related products), categories, offers (discounted
-  variants), cart,
+  a wishlist toggle and an "Add to Compare" toggle alongside a 2x2 Add to
+  Cart/Buy Now/Order on WhatsApp/Call for Order action grid — colors from
+  dedicated `--color-action-*` tokens, WhatsApp/Call sourced from
+  `SiteSettings.contactPhone` with a dynamically-generated pre-filled
+  message, not hardcoded — delivery info, related products, a "Recently
+  Viewed" rail, and, as the page's final section immediately before the
+  footer, verified-purchase-gated Customer Reviews (a "Write a Review"
+  toggle reveals the star-rating/comment/photo form, a "Verified Purchase"
+  badge shows on reviews from customers who actually received the product,
+  and staff can hide or permanently delete any review from `/admin/reviews`)),
+  categories, offers (discounted
+  variants), a side-by-side product comparison page (`/compare`, populated
+  by an "Add to Compare" toggle on shop-grid product cards), cart,
   wishlist, a sidebar-driven account dashboard (login/register; a persistent
   nav — Dashboard/My Orders/Wishlist/My Alerts/Address/Manage Profile/Logout —
   next to stat cards, recent-orders and wishlist-preview panels, profile photo
@@ -69,10 +79,10 @@ form or state-management library — forms/data fetching are hand-rolled with
   Cloudinary imagery. The navbar shows
   a personalized "My Account" entry (account icon + the signed-in
   customer's first name) that links straight into the dashboard, replacing
-  the Sign In prompt shown to logged-out visitors. Cart and wishlist are
-  **client-side only**
+  the Sign In prompt shown to logged-out visitors. Cart, wishlist, Recently
+  Viewed, and the comparison list are all **client-side only**
   (`localStorage`), not synced to the account or across devices — there is
-  no server-side cart/wishlist model.
+  no server-side cart/wishlist/recently-viewed/compare model.
 - Secure authentication (JWT via httpOnly access/refresh cookies — the
   frontend API client silently refreshes and retries once on a 401 rather
   than signing the user out mid-session, only dropping the session if the
@@ -270,9 +280,13 @@ form or state-management library — forms/data fetching are hand-rolled with
   through a successful OTP verification, which also stamps
   `deliveryVerified`/`deliveredAt`/`deliveredBy` on the order.
 - **Finance module (Investment, Expense, Refund, Profit/Loss)** — an
-  append-only `Investment` ledger; an `Expense` log (12 categories,
-  auto-confirmed for admin/super_admin, pending confirmation for co_admin
-  above a configurable threshold); a `Refund` workflow (customer/staff
+  append-only `Investment` ledger; an `Expense` log (12 categories — "Other"
+  requires specifying what it actually was — a required reason, an optional
+  cash-memo receipt photo uploaded to Cloudinary or, for a file over the
+  2MB upload limit, a pasted image link instead, auto-confirmed for
+  admin/super_admin, pending confirmation for co_admin above a configurable
+  threshold, and a "Requested By" column that always shows the original
+  submitter, never the reviewer); a `Refund` workflow (customer/staff
   request on a `returned` order → Order Manager review → Admin/Super Admin
   financial approval, gated by amount for Admin, with an auto-created
   confirmed `Expense` on approval and the order flipped to `refunded`) —

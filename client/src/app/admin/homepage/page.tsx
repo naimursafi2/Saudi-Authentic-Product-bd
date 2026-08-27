@@ -19,6 +19,7 @@ import { listCategories } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
 import { useConfirm } from "@/context/ConfirmDialogContext";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -321,24 +322,16 @@ export default function AdminHomepagePage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Tooltip label="Edit">
-                        <button
-                          aria-label="Edit"
-                          onClick={() => setEditingSlide(slide)}
-                          className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Delete">
-                        <button
-                          aria-label="Delete"
-                          onClick={() => handleDeleteSlide(slide)}
-                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </Tooltip>
+                      <ActionButtonGroup>
+                        <ActionButton tone="info" onClick={() => setEditingSlide(slide)}>
+                          <Pencil size={13} />
+                          Edit
+                        </ActionButton>
+                        <ActionButton tone="danger" onClick={() => handleDeleteSlide(slide)}>
+                          <Trash2 size={13} />
+                          Delete
+                        </ActionButton>
+                      </ActionButtonGroup>
                     </td>
                   </tr>
                 ))}
@@ -416,28 +409,20 @@ export default function AdminHomepagePage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Tooltip label="Edit">
-                        <button
-                          aria-label="Edit"
-                          onClick={() => setEditingSection(section)}
-                          className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                      </Tooltip>
-                      {(section.type === "promoBanner" ||
-                        section.type === "productShowcase" ||
-                        section.type === "banner") && (
-                        <Tooltip label="Delete">
-                          <button
-                            aria-label="Delete"
-                            onClick={() => handleDeleteSection(section)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </Tooltip>
-                      )}
+                      <ActionButtonGroup>
+                        <ActionButton tone="info" onClick={() => setEditingSection(section)}>
+                          <Pencil size={13} />
+                          Edit
+                        </ActionButton>
+                        {(section.type === "promoBanner" ||
+                          section.type === "productShowcase" ||
+                          section.type === "banner") && (
+                          <ActionButton tone="danger" onClick={() => handleDeleteSection(section)}>
+                            <Trash2 size={13} />
+                            Delete
+                          </ActionButton>
+                        )}
+                      </ActionButtonGroup>
                     </td>
                   </tr>
                 ))}

@@ -8,6 +8,8 @@ import { ProductInfo } from "@/components/product/ProductInfo";
 import { ProductDetailsBento } from "@/components/product/ProductDetailsBento";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { RelatedProducts } from "@/components/product/RelatedProducts";
+import { RecentlyViewed } from "@/components/product/RecentlyViewed";
+import { RecentlyViewedRecorder } from "@/components/product/RecentlyViewedRecorder";
 
 // The catalog is managed live via the admin portal, so this page is always
 // rendered dynamically against the current database state.
@@ -49,6 +51,7 @@ export default async function ProductDetailsPage({
 
   return (
     <>
+      <RecentlyViewedRecorder productId={product.id} />
       <section className="mx-auto max-w-[1200px] px-6 py-10 sm:px-10 lg:px-16 lg:py-14">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:gap-16">
           <ProductGallery product={product} />
@@ -56,8 +59,11 @@ export default async function ProductDetailsPage({
         </div>
       </section>
       <ProductDetailsBento product={product} />
-      <ProductReviews productId={product.id} />
       <RelatedProducts products={related} />
+      <RecentlyViewed excludeProductId={product.id} />
+      {/* Reviews is deliberately the last section on the page, immediately
+          before the storefront Footer the (site) layout renders next. */}
+      <ProductReviews productId={product.id} />
     </>
   );
 }

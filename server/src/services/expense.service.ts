@@ -1,5 +1,6 @@
 import { ExpenseModel, type IExpense } from "../models/Expense.model";
 import { ApiError } from "../utils/ApiError";
+import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { getApprovalSettings } from "./approvalSettings.service";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
 import { recordAuditLog } from "./auditLog.service";
@@ -19,10 +20,27 @@ export interface ExpenseActor {
  * surfaces in the Super Admin's grant queue (§19), in addition to being
  * directly confirmable by an admin/super_admin below that threshold.
  */
-export async function createExpense(input: CreateExpenseInput, actor: ExpenseActor) {
+export async function createExpense(
+  input: CreateExpenseInput,
+  actor: ExpenseActor,
+  cashMemoFile?: Express.Multer.File
+) {
+  // A pasted URL (offered client-side when the chosen file exceeds the 2MB
+  // upload limit) takes precedence over a file — the client only ever sends
+  // one or the other, never both, but a file is the more deliberate action
+  // if somehow both arrived.
+  const cashMemo = cashMemoFile
+    ? await uploadBufferToCloudinary(cashMemoFile.buffer, {
+        folder: "saudi-authentic-product/expense-cash-memos",
+      }).then((img) => ({ url: img.url, publicId: img.publicId }))
+    : input.cashMemoUrl
+      ? { url: input.cashMemoUrl }
+      : undefined;
+
   if (actor.role === "admin" || actor.role === "super_admin") {
     const expense = await ExpenseModel.create({
       ...input,
+      cashMemo,
       recordedBy: actor.id,
       recordedByRole: actor.role,
       status: "confirmed",
@@ -44,6 +62,7 @@ export async function createExpense(input: CreateExpenseInput, actor: ExpenseAct
   // co_admin
   const expense = await ExpenseModel.create({
     ...input,
+    cashMemo,
     recordedBy: actor.id,
     recordedByRole: actor.role,
     status: "pending",
@@ -173,6 +192,7 @@ export async function createConfirmedExpense(input: {
     category: input.category,
     amountBDT: input.amountBDT,
     incurredAt: new Date(),
+    reason: "Customer refund",
     note: input.note,
     status: "confirmed",
     recordedBy: input.actor.id,

@@ -48,7 +48,7 @@ Register every new router in `routes/index.ts`.
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`/`existingImages`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
 | `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/send-delivery-otp`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
-| `/reviews` | public: recent reviews, reviews by product; customer creates one review per product; staff lists all/deletes | list-all/delete: `admin`,`super_admin`,`co_admin` |
+| `/reviews` | public: recent reviews, reviews by product; customer creates one review per product they have a `delivered` order for (optionally with up to 4 photos, multipart) — see "Product Reviews" below; staff lists all/hides-or-unhides (`PATCH /:id/visibility`)/deletes | list-all/visibility/delete: `admin`,`super_admin`,`co_admin` |
 | `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
 | `/leaves` | employee creates/lists own/cancels; staff lists all + approves/rejects | review/list-all: `admin`,`super_admin`,`co_admin` |
 | `/tasks` | employee lists own (`/mine`) + updates own status; staff creates/lists (filterable by `type`)/updates/deletes; every task has a required `type` (packing/product_counting/stock_checking/warehouse/customer_support/data_entry/product_preparation) for task-based access categorization | create/list/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
@@ -400,6 +400,19 @@ stat cards / Today's Attendance / Top Products —
   `log.resource` directly anywhere new** — always go through this shared
   module, per the existing audit-logs rule.
 
+**Dashboard visual design** (`app/admin/page.tsx`): each stat card carries a
+`tone` (`success`/`info`/`gold`/`danger`, the same token families used
+elsewhere — `ActionButton`'s tones, `StatusBadge`'s palette) picked by what
+the metric means rather than being uniformly neutral — Revenue is
+`success`, Orders/Customers are `info`, Active Products/Low Stock/Pending
+Leaves are `gold`, Out of Stock is `danger` (the one metric that's always
+actionable and never fine to ignore). The four section cards below the
+stat grid (Attendance, Top Products, Recent Orders, Recent Activities)
+share one `SectionHeader` (icon + heading + an optional "View all" link to
+the relevant full admin page) instead of each hand-rolling its own heading
+markup. No new colors or components were introduced — this is a
+reorganization of the existing design tokens, not a new visual language.
+
 **CSV / "PDF" export** (`lib/csvExport.ts#downloadCsv`): a small
 hand-rolled, dependency-free CSV generator (comma-joined rows, a Blob URL,
 a synthetic `<a download>` click) — no library needed for this, confirmed
@@ -411,7 +424,99 @@ already established — a `.print-area` class (`globals.css`, a generic
 version of that component's own `#invoice-print-area` rule) isolates the
 report table at print time, and the button just calls `window.print()`,
 letting the visitor's own browser's "Save as PDF" print destination do the
-actual PDF creation.
+actual PDF creation. The Reports print view renders a `.print-header`
+(the site name plus "Report date: ..."), the existing "Period: from – to"
+line, the report table itself, and a `.print-footer` (site name plus
+`SiteSettings.contactEmail`/`contactPhone`, whichever is set) — deliberately
+plain (no card border/shadow/rounded corners/brand colors; see "Print
+pagination" below) since a printed report should read as simple,
+professional paper, not a copy of the on-screen card. The groupBy dropdown
+and the CSV/Print buttons are marked `print:hidden` so only the report
+content itself appears on the printed page. `PrintInvoiceButton`/
+`AdminReportsPage`'s Print action also stamps `document.title` with
+`Report_YYYY-MM-DD_HH-mm` (local time, generated fresh at the moment Print
+is clicked) immediately before calling `window.print()`, then restores the
+original title right after — `document.title` is the only web API Chrome's
+"Save as PDF" destination reads for its suggested filename, so this is the
+only way to make that filename meaningful instead of the page's own title.
+
+**Print pagination** (`globals.css`'s `@media print` rules for
+`#invoice-print-area` and `.print-area`): hides everything outside the
+print target via `visibility: hidden` and reveals the target via
+`visibility: visible`, with the target itself `position: absolute` (not
+`static`, not `fixed`). Every piece of this combination is load-bearing —
+two different "simpler" versions of this were tried and both regressed:
+
+- **`display: none`/`revert` instead of `visibility`** (tried once) produces
+  a **completely blank printed page**, not just a pagination bug. The print
+  target sits several DOM levels below `<body>` (inside the admin shell,
+  page wrappers, modal chrome, ...), and `display: none` on an ancestor
+  permanently removes that ancestor's entire subtree from rendering — no
+  descendant rule, however specific or `!important`, can bring a child back
+  once its own ancestor generates no box at all. `visibility: hidden` is the
+  one CSS mechanism that doesn't have this problem: an invisible ancestor
+  still generates its box (so a descendant CAN set its own `visibility:
+  visible` and reappear), it just isn't painted. **If this is ever touched
+  again, reproduce in an actual print preview first** — a plausible-looking
+  `display`-based rewrite silently breaks this in a way that's easy to miss
+  without literally checking the print output.
+- **`position: fixed` on the print target** (the original bug) repeats
+  that target's content on every physical page — correct for a genuinely
+  short, one-page target, but it's what produced "the same report table
+  printed 2–3 times" once the invisible siblings' still-reserved layout
+  height pushed the page count above 1.
+- **`position: static`** (tried once, alongside the `display` mistake above)
+  leaves the revealed target wherever it naturally sits in the (still
+  height-reserving, since `visibility: hidden` doesn't collapse layout)
+  invisible document flow — potentially far down the page, forcing a pile
+  of blank pages just to scroll down to it.
+
+`position: absolute` is the one setting that avoids all three problems at
+once: with no positioned ancestor, it's positioned relative to the page box
+itself (specifically the page *area*, inside the `@page` margins — see
+below), which places it at the top of page 1 regardless of where it sits
+in the invisible flow, and — unlike `fixed` — an absolutely positioned
+element in paged media renders **once** and lets its own overflowing
+content paginate normally across as many further pages as it needs, rather
+than being re-painted on every page like a running header.
+
+`tr`/`td`/`th` inside the print target get `break-inside: avoid` so a table
+row is never split across a page boundary; `thead`'s untouched natural
+`table-header-group` display is what makes column headers legitimately
+repeat at the top of each page a long table spills onto. `.print-header`/
+`.print-footer` (the company-name banner and the minimal footer) are the
+deliberate exception to "avoid `position: fixed`" — a short banner meant to
+repeat on every page is exactly what `position: fixed` is for in print —
+paired with a global `@page { margin-top: 2.3cm; margin-bottom: 1.5cm }`
+that reserves room for them on every page. Per the CSS Paged Media spec, a
+`position: fixed` element's containing block is the page box itself (so
+`top: 0.2cm` sits inside that reserved margin gutter), while an absolutely
+positioned element with no positioned ancestor is contained by the page
+*area* (inside the margins) — so the header/footer and the report content
+never overlap, without either one needing to know the other's size.
+
+**`visibility: hidden` still reserves normal-flow layout height** — this is
+what fixed the blank-page and duplicate-page regressions above, but it
+reopens a third, more subtle one: every *other* section on the Reports page
+(the date-range filter form, the three stat tiles, the "Orders by Status"
+and "Top Products" cards, "Delivery Agent Performance") is invisible during
+print but still occupies its full on-screen height, since `visibility`
+never collapses a box the way `display: none` does. Chrome paginates
+against the *tallest* thing on the page regardless of what's actually
+painted, so that invisible-but-still-full-height content below/around
+`.print-area` was generating two extra blank pages beyond the one page the
+actual report needed. Each of those sections carries a Tailwind
+`print:hidden` class (`display: none` in print, collapsing its box to zero
+height) for exactly this reason — this is different from, and complements,
+the `visibility`-based reveal mechanism above: `.print-area` itself and its
+ancestors must stay under the `visibility` mechanism (a `display: none`
+ancestor would re-break the blank-page bug), but *siblings* that don't need
+any of their own content revealed can safely use `display: none` directly,
+since there's nothing nested inside them that needs to reveal itself back
+out. Any future addition to this page (or a new print-enabled report
+elsewhere) needs the same treatment — check the total invisible document
+height against `document.documentElement.scrollHeight` before assuming a
+short report will print to one page.
 
 **Delivery Portal** (`frontend/src/app/delivery`, `delivery_agent` only,
 modeled directly on the Employee Portal's shell): `/delivery` (dashboard —
@@ -755,7 +860,8 @@ any `.request`/`.grant`/`.deny` row that came through with no reviewer note).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below), `ProductAlert` (a customer's Price Drop / Back-in-Stock subscription, see "Price Drop & Back-in-Stock Alerts" above), `ReturnRequest` (a customer's Return/Exchange request, see "Return / Exchange Requests" above).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product, with an optional `images[]` of up
+to 4 Cloudinary photos — see "Product Reviews" below), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below), `ProductAlert` (a customer's Price Drop / Back-in-Stock subscription, see "Price Drop & Back-in-Stock Alerts" above), `ReturnRequest` (a customer's Return/Exchange request, see "Return / Exchange Requests" above).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -780,9 +886,14 @@ breakdown.
 - **`Expense`** (`models/Expense.model.ts`, `services/expense.service.ts`) —
   `category` (one of `product_purchase`/`packaging`/`delivery`/`shipping`/
   `marketing`/`advertising`/`warehouse`/`salaries`/`software`/
-  `payment_fees`/`refund`/`other`), `amountBDT`, `incurredAt`, `status`
-  (`pending`/`confirmed`/`rejected`). `admin`/`super_admin` entries are
-  auto-confirmed; `co_admin` entries always start `pending` and need
+  `payment_fees`/`refund`/`other`), `amountBDT`, `incurredAt`, a required
+  `reason` (why the expense was made — distinct from the optional `note`,
+  "additional information"), an `otherCategoryDetail` required only when
+  `category === "other"` (enforced by a Zod `.refine()`, not just the
+  frontend — "what specifically was this expense for," since "Other" alone
+  isn't a useful ledger entry), an optional `cashMemo` receipt photo, and
+  `status` (`pending`/`confirmed`/`rejected`). `admin`/`super_admin` entries
+  are auto-confirmed; `co_admin` entries always start `pending` and need
   `PATCH /expenses/:id/confirm`|`/reject` from an `admin`/`super_admin` —
   and if the amount exceeds `ApprovalSettings.expenseApprovalThresholdBDT`,
   a `pending_action` (`expense.confirm`) is *also* created so only a
@@ -790,10 +901,30 @@ breakdown.
   direct-confirm endpoint itself enforces this (`confirmExpense()` 403s an
   `admin` attempting to confirm an over-threshold expense outside the grant
   flow). Confirmed expenses are immutable — no edit/delete route exists once
-  `status: "confirmed"`. `/admin/expenses`.
+  `status: "confirmed"`. `recordedBy` is always the original submitter —
+  never overwritten by the reviewer, who is tracked separately as
+  `confirmedBy` — so `/admin/expenses`'s "Requested By" column always shows
+  who actually asked for the money, not who approved it.
+
+  **Cash memo** (`POST /expenses` accepts an optional `cashMemo` file,
+  multipart): uploaded to Cloudinary (folder
+  `saudi-authentic-product/expense-cash-memos`) the same way every other
+  single-image upload in this project is — multer passes a plain JSON
+  request straight through untouched, so a submission with no receipt keeps
+  working unchanged. Since the shared upload limit is 2MB (see `upload`
+  below), the expense form offers a fallback for a larger file: paste an
+  image URL instead of uploading it. `Expense.cashMemo.publicId` is
+  therefore optional — present for a real Cloudinary upload, absent for a
+  pasted external link — and `/admin/expenses` shows a paperclip link to
+  whichever one is set, so staff can view the receipt either way when
+  reviewing a pending expense.
 - **`Refund`** (`models/Refund.model.ts`, `services/refund.service.ts`) —
   the Refund & Return Workflow: `reasonCategory`
-  (`damaged`/`wrong_item`/`not_as_described`/`changed_mind`/`other`),
+  (`damaged`/`wrong_item`/`not_as_described`/`changed_mind`/`other` —
+  `reasonCategory === "other"` requires the otherwise-optional `note`, both
+  client-side and via a Zod `.refine()` server-side, so "Other" always
+  comes with an actual reason; the same rule applies to `ReturnRequest`'s
+  `reasonCategory`, since it reuses this same enum),
   `requestedAmountBDT`, `status`
   (`pending_review`→`pending_approval`→`approved`/`rejected`). A refund can
   only be requested on an order whose `Order.status` is already `"returned"`
@@ -871,7 +1002,7 @@ the existing `upload` middleware and `uploadBufferToCloudinary()` (folder
 `saudi-authentic-product/purchase-proofs`) — no parallel upload path. On
 `POST /purchases` the up-front cost items' files arrive as `costProof0`,
 `costProof1`, … so an item *without* a receipt doesn't shift the ones after it
-onto the wrong index; that route inherits the shared 5MB/6-file limits, and a
+onto the wrong index; that route inherits the shared 2MB/6-file limits, and a
 batch needing more receipts adds them one at a time through `POST /:id/costs`,
 which is unlimited.
 
@@ -1384,7 +1515,7 @@ below), and both public list endpoints are visible-only/sorted by default
 - `authorize(...roles)` / `authorizeSelfOrRoles(getOwnerId, ...staffRoles)` — role gating, still present for checks that really are about role identity rather than capability; ownership checks are otherwise done ad hoc inside controllers/services.
 - `validate({body,query,params})` — zod-parses and **replaces** the field via `Object.defineProperty` (Express 5 `req.query` gotcha, see below).
 - `sanitizeRequest` — `express-mongo-sanitize` on body/params/query, same `Object.defineProperty` fix.
-- `upload` (`upload.middleware.ts`) — multer memory storage, image-only, 5MB/6-file limits.
+- `upload` (`upload.middleware.ts`) — multer memory storage, image-only, 2MB/6-file limits. A file over 2MB now surfaces as a clean `400` (`error.middleware.ts` translates Multer's `LIMIT_FILE_SIZE`) rather than falling through to a generic `500`.
 - `parseMultipartJsonFields(fields[])` — JSON.parses specified multipart body fields (e.g. product `variants`/`categories`/`highlights`) before zod validation.
 - `authLimiter` (15min/20req, auth endpoints), `apiLimiter` (15min/600req, general) — `rateLimit.middleware.ts`.
 - `notFoundHandler` / `errorHandler` — central error formatting (`ApiError`, Mongoose `ValidationError`/duplicate-key 11000→409/`CastError`, JWT errors); stack trace only outside production.
@@ -1413,9 +1544,12 @@ pipeline & delivery" below); `delivery_agent` never reaches `/admin` at all
 Portal (`/delivery`) instead, self-scoped to its own assigned orders.
 
 **Registration** (`auth.validator.ts#registerSchema`, `auth.service.ts#registerCustomer`):
-`name`, `email` (unique), `password`+`confirmPassword` (must match; password
-must be 8+ chars with an uppercase letter, a lowercase letter and a digit —
-same regex enforced client-side live in `lib/passwordStrength.ts`), optional
+`name`, `email` (unique), `password`+`confirmPassword` (must match; password's
+only requirement is a minimum length of 8 characters — no uppercase/
+lowercase/digit/symbol composition rule — same check enforced client-side
+live in `lib/passwordStrength.ts`; the optional strength meter shown during
+registration still scores composition as an informational nicety, but
+nothing beyond length blocks submission), optional
 `phone` (also checked for uniqueness — a second registration with an
 already-used phone number 409s just like a duplicate email) and an optional
 `address` object (`fullAddress`/`district`/`cityArea`) that, if present,
@@ -2245,28 +2379,40 @@ Cloudinary photo or a curated local fallback.
 **Product detail page gallery** (`components/product/ProductGallery.tsx`):
 a real photo per `Product.images[]` entry renders as a thumbnail strip
 **below** the main image (`grid-cols-4`); clicking one swaps the main
-image. Hovering the main image (a real photo only — never the decorative
-`ProductVisual` fallback) applies a cursor-following 2x magnify: an inner
-wrapper around `ProductMedia` is scaled via inline `transform`/
-`transformOrigin` computed from the pointer position, with the outer box's
-`overflow-hidden` clipping it — `ProductMedia` itself is untouched (it's
-shared by cards/cart/checkout/search, so the zoom stays local to the
-gallery rather than becoming a prop every consumer has to think about). A
-`ZoomIn` icon badge fades in over the top-right corner on hover (`group`/
-`group-hover`, `pointer-events-none` so it doesn't add a second click
-target), and the whole main-image area is a `<button>` (not a `div` with an
-`onClick`, for native keyboard focus/Enter-Space support) that opens a
-**fullscreen lightbox** — a separate `ImageLightbox` function in the same
-file, `fixed inset-0 z-[110]` above everything else in the app (the mobile
-nav drawer is `z-[90]`, `SearchOverlay` is `z-[70]`). It follows the same
-"backdrop `<button>` behind, content as a DOM sibling" pattern
-`SearchOverlay` uses for click-outside-to-close (no `stopPropagation`
-needed — clicks on the backdrop button close it, clicks on sibling content
-don't bubble to it) — the one thing to get right is that the image's own
-wrapper must be `pointer-events-auto` (not inherit the centering flex
-wrapper's `pointer-events-none`), or a click directly on the image falls
-through to the backdrop underneath and closes the lightbox, which is the
-opposite of "click outside closes it, click the image doesn't." Escape and
+image. The gallery's root wrapper is width-capped below the `lg` breakpoint
+(`mx-auto max-w-md sm:max-w-lg lg:max-w-none`) — without this, the
+single-column tablet/mobile layout let the main image grow to the full
+content width, which on a tablet-sized viewport made it enormous and
+unbalanced relative to the rest of the page; at `lg`+ the two-column
+product-page layout already constrains it via the grid, so the cap steps
+aside (`lg:max-w-none`).
+
+**Hovering the main image is deliberately inert — there is no
+scale/magnify-on-hover effect.** An earlier version applied a
+cursor-following 2x magnify via an inline `transform`/`transformOrigin`
+recomputed on every `pointermove`; this was removed on request because it
+read as the image "jumping" under the cursor. The image itself now has no
+hover state at all — `cursor-zoom-in` on the button and a `ZoomIn` icon
+badge that fades in over the top-right corner (`group`/`group-hover`,
+`pointer-events-none` so it doesn't add a second click target) are the only
+hover feedback, signalling that the image is clickable without moving or
+scaling it. Do not reintroduce a pointer-tracked transform here — if a
+zoom-preview effect is wanted again, treat it as a new decision, not a
+restoration of "how this used to work."
+
+The whole main-image area is a `<button>` (not a `div` with an `onClick`,
+for native keyboard focus/Enter-Space support) that opens a **fullscreen
+lightbox** — a separate `ImageLightbox` function in the same file, `fixed
+inset-0 z-[110]` above everything else in the app (the mobile nav drawer is
+`z-[90]`, `SearchOverlay` is `z-[70]`). It follows the same "backdrop
+`<button>` behind, content as a DOM sibling" pattern `SearchOverlay` uses
+for click-outside-to-close (no `stopPropagation` needed — clicks on the
+backdrop button close it, clicks on sibling content don't bubble to it) —
+the one thing to get right is that the image's own wrapper must be
+`pointer-events-auto` (not inherit the centering flex wrapper's
+`pointer-events-none`), or a click directly on the image falls through to
+the backdrop underneath and closes the lightbox, which is the opposite of
+"click outside closes it, click the image doesn't." Escape and
 arrow-left/right are handled via a `keydown` listener scoped to while the
 lightbox is open; previous/next arrows and a bottom thumbnail strip only
 render `when images.length > 1`. Backdrop is `bg-black/95` rather than the
@@ -2274,7 +2420,76 @@ brand's green scrim used elsewhere (mobile drawer, etc.) — a colored
 backdrop would visibly shift how the product photo's own colors read, which
 defeats the point of a detail/zoom view meant to show the product
 accurately. The enlarged image uses `object-contain` (never `cover`) so it
-is never cropped or distorted.
+is never cropped or distorted. This lightbox is unaffected by the hover-zoom
+removal above — click-to-open, its own navigation, and its layout are a
+completely separate code path from the (now removed) hover effect.
+
+**Product Reviews** (`components/product/ProductReviews.tsx`,
+`models/Review.model.ts`, `services/review.service.ts`): one star-rating +
+comment per customer per product, optionally with up to 4 Cloudinary
+photos. `POST /reviews/product/:productId` is gated by `requireEmailVerified`
+**and** a verified-purchase check — `createReview()` rejects (`403`) unless
+the requesting customer has at least one `delivered` order containing that
+product; a review that clears the check is stamped `isVerifiedPurchase:
+true` at creation (a review created before this gate existed keeps the
+schema's `false` default, so the badge below never renders retroactively for
+something that was never actually checked). The storefront shows a
+**"Verified Purchase"** badge next to any review with that flag set. There is
+still only one review per customer per product (a repeat attempt 409s) and
+no edit route — a correction is a new review after deleting the old one
+(staff-only) or simply isn't supported for the customer directly.
+
+Staff moderation has two levers, not one: `DELETE /reviews/:id` removes a
+review permanently (`reviews.delete`), and `PATCH /reviews/:id/visibility`
+(same permission) flips `Review.isApproved` without deleting anything —
+`listReviewsForProduct()`'s `isApproved: true` filter (and
+`recomputeProductRating()`'s matching aggregation) already excluded
+anything not approved, so toggling this field is what actually pulls a
+review off the public product page while leaving it intact, still visible
+in `/admin/reviews`'s full list, and restorable later. `/admin/reviews`
+shows a Visibility column (`StatusBadge` `visible`/`hidden`) and a
+Hide/Unhide `ActionButton` beside Delete.
+
+**The Reviews section is deliberately the last section on the product
+page** (`app/(site)/product/[slug]/page.tsx`), placed after Related
+Products and Recently Viewed — since the `(site)` layout renders `Footer`
+immediately after `{children}` with nothing else in between, this makes
+Reviews the final content block before the footer on every product page.
+The review form itself is collapsed behind a **"Write a Review"** button
+(`PenLine` icon) for a signed-in `customer` — clicking it reveals the
+star-picker/textarea/photo-attach form (with its own Cancel button), rather
+than the form always sitting open on the page. An unauthenticated visitor
+sees a "Sign in to write a review" prompt instead; every visitor, signed in
+or not, can read every approved review regardless of role.
+
+There is no standalone Q&A/ask-a-question feature — one used to exist
+(`ProductQuestion` model, `/product-questions` routes, `/admin/product-questions`)
+but was removed entirely (model, service, controller, validator, routes,
+permissions, admin page, storefront component) in favor of this
+verified-purchase review system being the product page's only customer
+feedback surface. Don't reintroduce a parallel Q&A feature without a fresh
+decision to do so.
+
+**Recently Viewed & Product Comparison** (`context/RecentlyViewedContext.tsx`,
+`context/CompareContext.tsx`) — two more client-side-only, `localStorage`-
+backed contexts following the exact same shape as `WishlistContext`: no
+server-side model, hydrate-then-persist via a `hydrated` flag guard, and
+resolve stored product ids into full `Product` objects via the shared
+`useProductsByIds` hook. **Recently Viewed** (`sap:recently-viewed`, capped
+at 10, most-recent-first, re-viewing a product moves it to the front rather
+than duplicating it) is recorded by a `RecentlyViewedRecorder` (renders
+nothing, just the effect) mounted on the product page, and rendered as a
+`RecentlyViewed` rail (excluding the product page it's shown on) alongside
+Related Products. **Product Comparison** (`sap:compare`, capped at 4 —
+toggling a 5th product is a no-op rather than silently evicting an earlier
+pick) is populated via an "Add to Compare" toggle that only `/shop`'s
+`ProductCard`s render (`showCompareToggle` prop — other rails like
+homepage carousels and Related Products don't offer it), surfaced by a
+floating `CompareBar` (mounted once in the root layout, same pattern as
+`CartDrawer`, hidden on `/admin`/`/employee`/`/delivery`/`/checkout` and
+whenever nothing is selected) and the `/compare` page's side-by-side
+comparison table (price, rating, origin, badge, available weights, stock,
+storage instructions).
 
 **Product gallery editing** (`ProductForm.tsx`, part of the existing
 `/products` create/update endpoint — see the routes table above, no
@@ -2340,9 +2555,14 @@ status accents (`danger`/`danger-strong`/`danger-soft`/`danger-border`,
 `gold-soft`, `success-soft`, `warning-soft`), and the theme-constant
 `brand-deep`/`brand-deep-2`/`brand-deep-3`/`on-brand`/`on-gold`/
 `danger-solid`/`visual-*`.
-Fonts: EB Garamond (`font-serif`, headings) + Plus Jakarta Sans (`font-sans`,
-body) — self-hosted via `@fontsource/*` packages imported in `app/layout.tsx`
-(not `next/font`). Reuse `cn()` and `formatBDT()` from `lib/utils.ts` and the
+Fonts: Poppins (`font-serif`, headings/display) + Plus Jakarta Sans
+(`font-sans`, body) — self-hosted via `@fontsource/*` packages imported in
+`app/layout.tsx` (not `next/font`). Poppins replaced EB Garamond (a classic
+serif that read as formal/old-fashioned) site-wide — the `--font-serif`
+CSS variable and `font-serif` Tailwind utility class names were kept as-is
+even though the font itself is no longer a serif, since renaming them would
+mean touching every one of the ~140 components that reference `font-serif`
+for a value that's purely cosmetic. Reuse `cn()` and `formatBDT()` from `lib/utils.ts` and the
 primitives in `components/ui/` — don't hand-roll new buttons/cards/headings.
 
 **Dark mode** (`context/ThemeContext.tsx`, `components/ui/ThemeToggle.tsx`):
@@ -2592,43 +2812,70 @@ so cancelling the "reason" prompt still rejected/denied/cancelled the
 underlying record. Every `prompt()`-for-an-optional-note call site in the
 codebase now explicitly checks `=== null` before proceeding.
 
-**Consistent CRUD action colors**: `globals.css` defines a role-based
-(not literal-hex) color system for row-level actions, mirroring the
-existing `danger`/`success-soft` pattern — `--color-info`/`-strong`/`-soft`/
-`-soft-hover` (blue, new) for Edit/Update, `--color-danger`/`-soft`/
-`-soft-hover` (red, pre-existing) for Delete/Reject/Deny, and the
-pre-existing `green-900`/`success-soft`/`-soft-hover` (green) for
-Approve/Grant/Confirm. Every one of these is a **pill-shaped chip with a
-visible background at rest** — `inline-flex items-center rounded-full px-3
-py-1 ... bg-<color>-soft text-<color> hover:bg-<color>-soft-hover
-transition-colors duration-150 cursor-pointer` for a text-label action, or
-the same with `justify-center p-1.5` in place of `px-3 py-1` for an
-icon-only one — never bare colored text with no background. `Button.tsx`
-also gained a `danger` variant (`bg-danger-solid text-white
-hover:brightness-90`) for full-size buttons (the Confirm Dialog's destructive
-button, "Delete" on `/admin/purchases`, "Deactivate"/"Reject" on
-`/admin/customers`/`/admin/refunds`). Icon-only action buttons are also
-wrapped in `components/ui/Tooltip.tsx` (`<Tooltip label="Edit">...`) — a
-pure-CSS hover/focus-reveal label that sits alongside, not instead of, the
-button's own `aria-label`.
+**Admin Portal row actions — `ActionButton`/`ActionButtonGroup`**
+(`components/ui/ActionButton.tsx`): the shared control for every
+Edit/Delete/Update/Approve/Reject/Confirm/Grant/Deny-style row action across
+`/admin/*` — **always an always-visible text label, never an icon-only
+button that only reveals its meaning on hover.** An earlier version of
+almost every admin table used a circular icon-only button (`Pencil`/
+`Trash2`/etc.) wrapped in `components/ui/Tooltip.tsx` for a hover-reveal
+label; this was replaced project-wide because a label that only appears on
+hover isn't accessible or discoverable on touch devices, which have no
+hover state at all. `ActionButton` takes a `tone` (`info` for Edit/Update,
+`danger` for Delete/Reject/Deny, `success` for Approve/Grant/Confirm,
+`neutral` for anything else e.g. Pause) that picks a light background at
+rest (`bg-<tone>-soft`) and, deliberately, an unmistakably **darker, solid
+same-family color on hover** rather than the subtler `-soft-hover` tint
+alone — `hover:bg-info-solid`/`hover:bg-danger-solid` (two CONSTANT,
+never-theme-flipped tokens in `globals.css`, the same pattern
+`danger-solid` already established) and `hover:bg-brand-deep-2` for
+success, each paired with `hover:text-white` so the hover state reads as a
+strong, confident color shift rather than a gray/black dead-end. Icon +
+text both render together (`<Pencil size={13} />Edit`), so the icon is
+still there for quick visual scanning but the label is what actually
+identifies the action.
 
-This is applied project-wide, not just inside `/admin` — every Edit/Delete/
-Approve/Reject/Remove-style action across every portal follows the same
-chip recipe: the admin CRUD tables (products, categories, coupons, roles,
-reviews, tasks, attendance, leave review, expenses, purchases + their cost
-editor, shops, employees, navigation/footer/homepage content management,
-site settings' social links, static/homepage section blocks), and the
-customer-facing/shared surfaces too — `components/account/AddressBook.tsx`
-(shared by the customer account, employee, delivery and admin profile
-pages, so one fix covers all four), `components/account/ProfileSection.tsx`'s
-"Remove Photo", `components/layout/CartDrawer.tsx` and the standalone
-`/cart` page's "Remove item", `components/checkout/CheckoutClient.tsx`'s
-"Remove coupon", and the registration form's inline address section in
-`components/account/AuthForms.tsx`. Reorder arrows (move up/down) keep a
-neutral hover (`hover:bg-cream-300`) rather than a color, since they aren't
-Edit/Delete/Approve; purely navigational or dismiss-style icons (nav links,
-modal close buttons, the wishlist heart toggle) are deliberately left alone
-— they're a different UI pattern, not a CRUD action on a record.
+`ActionButtonGroup` wraps a row's `ActionButton`s with responsive spacing:
+`flex flex-col ... gap-2` (stacked, comfortable vertical gap) that flips to
+`sm:flex-row sm:flex-wrap ... sm:gap-2` at the `sm` breakpoint — and even
+in the row layout, `flex-wrap` lets a narrow actions column (most admin
+tables give it far less width than the viewport) wrap a second action onto
+its own line with the same `gap-2` rather than letting two buttons touch,
+which is what actually produces the "stacked with a clear gap" look on
+tablet/narrow layouts, not a hard mobile/desktop split. `ActionButton`
+itself uses `px-3.5 py-1.5` and `shrink-0`/`whitespace-nowrap` so the
+icon+label pair stays a comfortable, unbroken tap target at any width.
+
+This covers every `/admin/*` table's row actions: products, categories,
+coupons, roles, tasks, attendance (Edit only — no delete), homepage (hero
+slides and sections, each with their own Edit/Delete pair), navigation,
+footer, purchases (the in-progress cost-item "Remove" control), reviews
+(Delete only), product Q&A (Delete, alongside the existing text "Answer"/
+"Edit Answer" `Button`), leave review (Approve/Reject), expenses
+(Confirm/Reject), the approval queue (Grant/Deny), and campaigns
+(History/Edit/Approve/Reject/Send Now/Pause/Resume/Delete — the fullest
+set of tones in one row). Pages that already used a full-size, always-
+visible-text `Button` for their row actions (orders' "View", refunds'
+"Review OK"/"Reject", returns' "Approve"/"Reject", customers' "Unlock",
+inventory's stock adjust, employees' "Unlock", salary's "Mark Paid", shops'
+"Edit"/"Delete") needed no change — they already met the same
+always-visible-label requirement, just via the general-purpose `Button`
+component instead of this specialized row-action one.
+
+**What's deliberately unchanged**: reorder arrows (move up/down, on
+navigation/footer/homepage) stay icon-only with a `Tooltip` hover label —
+they're directional, not an Edit/Delete/Approve-style action, so spelling
+them out as "Move Up"/"Move Down" text wasn't part of this pass. Purely
+navigational/dismiss icons (nav links, modal close buttons, the wishlist
+heart toggle) are a different UI pattern entirely and untouched. Customer-
+facing/shared surfaces outside the Admin Portal — `components/account/
+AddressBook.tsx` (shared by the customer account, employee, delivery *and*
+admin profile pages), `ProfileSection.tsx`'s "Remove Photo",
+`CartDrawer.tsx`/`/cart`'s "Remove item", `CheckoutClient.tsx`'s "Remove
+coupon", and `AuthForms.tsx`'s inline address section — still use the
+older icon-only-plus-`Tooltip` chip pattern; this pass was scoped to the
+Admin Portal specifically, so those were left as-is rather than assumed to
+need the same fix.
 
 **Testing**: Vitest + React Testing Library (`vitest.config.mts`,
 `vitest.setup.ts` — jsdom environment, `@/*` alias resolved to `src/`,

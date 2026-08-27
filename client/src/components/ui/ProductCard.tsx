@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Heart, ShoppingCart } from "lucide-react";
+import { Heart, Scale, ShoppingCart } from "lucide-react";
 import type { Product } from "@/types/product";
 import { formatBDT, cn } from "@/lib/utils";
 import { ProductMedia } from "./ProductMedia";
@@ -9,11 +9,14 @@ import { StarRating } from "./StarRating";
 import { Button } from "./Button";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
+import { useCompare } from "@/context/CompareContext";
 import { isStockOut, firstAvailableVariant } from "@/lib/stock";
 
 interface ProductCardProps {
   product: Product;
   className?: string;
+  /** Only shop-style listing grids opt in — a card everywhere else (related/recently-viewed rails, homepage carousel) stays as-is. */
+  showCompareToggle?: boolean;
 }
 
 const badgeClasses: Record<NonNullable<Product["badge"]>, string> = {
@@ -23,9 +26,11 @@ const badgeClasses: Record<NonNullable<Product["badge"]>, string> = {
   Limited: "bg-danger-soft text-danger",
 };
 
-export function ProductCard({ product, className }: ProductCardProps) {
+export function ProductCard({ product, className, showCompareToggle }: ProductCardProps) {
   const { addItem } = useCart();
   const { isWishlisted, toggleWishlist } = useWishlist();
+  const { isComparing, toggleCompare } = useCompare();
+  const comparing = isComparing(product.id);
   const defaultVariant = product.variants[0];
   const wishlisted = isWishlisted(product.id);
   const stockOut = isStockOut(product);
@@ -125,6 +130,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
             <ShoppingCart size={14} />
             {addableVariant ? "Add to Cart" : "Stock Out"}
           </Button>
+          {showCompareToggle && (
+            <button
+              type="button"
+              onClick={() => toggleCompare(product.id)}
+              className={cn(
+                "flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors",
+                comparing
+                  ? "border-green-900 bg-green-950/5 text-green-950"
+                  : "border-brown-600/15 text-brown-500 hover:border-green-900/30 hover:text-green-950"
+              )}
+            >
+              <Scale size={12} />
+              {comparing ? "Added to Compare" : "Add to Compare"}
+            </button>
+          )}
         </div>
       </div>
     </div>

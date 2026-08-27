@@ -16,4 +16,9 @@ export const listRecentReviewsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(6),
 });
 
+export const updateReviewVisibilitySchema = z.object({
+  isApproved: z.boolean(),
+});
+
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
+export type UpdateReviewVisibilityInput = z.infer<typeof updateReviewVisibilitySchema>;

@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import type { ApiApprovalSettings, ApiPendingAction, PendingActionStatus } from "@/types/api";
 
 const fieldClasses =
@@ -344,28 +344,16 @@ export default function AdminApprovalsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {action.status === "pending" && (
-                        <div className="flex justify-end gap-2">
-                          <Tooltip label="Grant">
-                            <button
-                              aria-label="Grant"
-                              disabled={actingId === action._id}
-                              onClick={() => handleGrant(action)}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-full bg-success-soft p-1.5 text-green-900 transition-colors duration-150 hover:bg-success-soft-hover disabled:opacity-50"
-                            >
-                              <Check size={16} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="Deny">
-                            <button
-                              aria-label="Deny"
-                              disabled={actingId === action._id}
-                              onClick={() => handleDeny(action)}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-50"
-                            >
-                              <X size={16} />
-                            </button>
-                          </Tooltip>
-                        </div>
+                        <ActionButtonGroup>
+                          <ActionButton tone="success" disabled={actingId === action._id} onClick={() => handleGrant(action)}>
+                            <Check size={13} />
+                            Grant
+                          </ActionButton>
+                          <ActionButton tone="danger" disabled={actingId === action._id} onClick={() => handleDeny(action)}>
+                            <X size={13} />
+                            Deny
+                          </ActionButton>
+                        </ActionButtonGroup>
                       )}
                     </td>
                   </tr>

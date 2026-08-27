@@ -34,11 +34,13 @@ const variantClasses: Record<ButtonVariant, string> = {
     "rounded uppercase tracking-[0.05em] transition-colors duration-150 border border-green-900/30 text-green-950 hover:bg-green-950/5 bg-transparent",
   ghost:
     "rounded uppercase tracking-[0.05em] transition-colors duration-150 text-green-950 hover:bg-black/5 bg-transparent",
-  // Destructive confirmations (ConfirmDialogContext's "danger" tone) —
-  // `danger-solid` is CONSTANT across themes (always carries white text), so
-  // `hover:brightness-90` darkens it without needing a second token.
+  // Destructive confirmations (ConfirmDialogContext's "danger" tone) — a
+  // deliberately bright, vivid red (`--color-delete`/`-hover`, CONSTANT
+  // across themes, always white text), not the site's muted brick-red
+  // `danger-solid` used for badges/banners elsewhere. A destructive
+  // confirmation needs to read as unmistakable danger at a glance.
   danger:
-    "rounded uppercase tracking-[0.05em] transition-[filter] duration-150 bg-danger-solid text-white hover:brightness-90",
+    "rounded uppercase tracking-[0.05em] transition-colors duration-150 bg-delete text-white hover:bg-delete-hover",
   // The product page's four purchase-action buttons — see the CONSTANT
   // `--color-action-*` tokens' comment in globals.css for why these carry a
   // fixed color regardless of the light/dark toggle.

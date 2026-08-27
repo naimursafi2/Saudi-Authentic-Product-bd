@@ -76,5 +76,8 @@ export function toCustomerReview(api: ApiReview): CustomerReview {
     initial: authorName.charAt(0).toUpperCase(),
     rating: api.rating,
     quote: api.comment,
+    images: api.images,
+    isVerifiedPurchase: api.isVerifiedPurchase,
+    createdAt: api.createdAt,
   };
 }

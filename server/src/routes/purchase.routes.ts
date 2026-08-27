@@ -44,7 +44,7 @@ router.get(
 /**
  * Create. Accepts multipart so cost items supplied up front can each carry a
  * receipt image (`costProof0`, `costProof1`, ...) alongside the JSON-encoded
- * `costItems` array. `upload.any()` inherits the shared 5MB / 6-file limits;
+ * `costItems` array. `upload.any()` inherits the shared 2MB / 6-file limits;
  * a batch needing more receipts than that adds them through `POST
  * /:id/costs`, which is unlimited.
  */

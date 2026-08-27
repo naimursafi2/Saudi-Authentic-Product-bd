@@ -1,13 +1,8 @@
 import { z } from "zod";
 
-// At least one lowercase letter, one uppercase letter and one digit — mirrors
-// the live strength check in frontend/src/lib/passwordStrength.ts.
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
-const passwordField = z
-  .string()
-  .min(8, "Password must be at least 8 characters")
-  .max(128)
-  .regex(PASSWORD_REGEX, "Password must include an uppercase letter, a lowercase letter and a number");
+// Only requirement is length — mirrors the live check in
+// frontend/src/lib/passwordStrength.ts.
+const passwordField = z.string().min(8, "Password must be at least 8 characters").max(128);
 
 const phoneField = z
   .string()

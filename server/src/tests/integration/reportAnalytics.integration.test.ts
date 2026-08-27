@@ -114,6 +114,7 @@ describe("Reporting & analytics additions", () => {
       category: "packaging",
       amountBDT: 500,
       incurredAt: new Date("2026-04-10"),
+      reason: "Packaging materials",
       status: "confirmed",
       recordedBy: admin._id,
       recordedByRole: "admin",

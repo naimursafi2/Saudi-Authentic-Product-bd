@@ -91,4 +91,7 @@ export interface CustomerReview {
   initial: string;
   rating: number;
   quote: string;
+  images: { url: string; publicId: string }[];
+  isVerifiedPurchase: boolean;
+  createdAt: string;
 }

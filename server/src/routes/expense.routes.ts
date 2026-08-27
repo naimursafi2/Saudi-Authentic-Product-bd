@@ -3,6 +3,7 @@ import * as expenseController from "../controllers/expense.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
+import { upload } from "../middlewares/upload.middleware";
 import {
   createExpenseSchema,
   listExpensesQuerySchema,
@@ -24,6 +25,9 @@ router.get(
 router.post(
   "/",
   requirePermission("expenses.create"),
+  // Optional cash-memo photo — multer passes a plain JSON request straight
+  // through untouched, so a caller with no receipt keeps working unchanged.
+  upload.single("cashMemo"),
   validate({ body: createExpenseSchema }),
   expenseController.createExpense
 );

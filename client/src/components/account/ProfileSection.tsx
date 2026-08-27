@@ -80,7 +80,7 @@ function AvatarUploader({ user }: { user: ApiUser }) {
       </div>
       <div>
         <p className="text-sm font-semibold text-green-950">{isUploading ? "Uploading…" : "Profile Photo"}</p>
-        <p className="mt-0.5 text-xs text-brown-500">JPG or PNG, up to 5MB.</p>
+        <p className="mt-0.5 text-xs text-brown-500">JPG or PNG, up to 2MB.</p>
         {user.avatar?.url && (
           <button
             type="button"

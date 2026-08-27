@@ -44,3 +44,9 @@ export const deleteReview = catchAsync(async (req: Request, res: Response) => {
   await reviewService.deleteReview(paramStr(req.params.id));
   sendSuccess(res, 200, "Review deleted");
 });
+
+export const updateReviewVisibility = catchAsync(async (req: Request, res: Response) => {
+  const { isApproved } = req.body as { isApproved: boolean };
+  const review = await reviewService.setReviewVisibility(paramStr(req.params.id), isApproved);
+  sendSuccess(res, 200, isApproved ? "Review published" : "Review hidden", { review });
+});

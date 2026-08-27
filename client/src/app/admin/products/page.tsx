@@ -14,7 +14,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { Modal } from "@/components/admin/Modal";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { ProductForm, type ProductFormValues } from "@/components/admin/ProductForm";
 import type { ApiProduct } from "@/types/api";
 import type { Pagination } from "@/types/api";
@@ -185,26 +185,18 @@ export default function AdminProductsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Tooltip label="Edit">
-                        <button
-                          aria-label="Edit"
-                          onClick={() => setEditing(product)}
-                          className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                      </Tooltip>
-                      {(canDeleteDirectly || canRequestDelete) && (
-                        <Tooltip label={canDeleteDirectly ? "Delete" : "Request deletion"}>
-                          <button
-                            aria-label={canDeleteDirectly ? "Delete" : "Request deletion"}
-                            onClick={() => handleDelete(product)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </Tooltip>
-                      )}
+                      <ActionButtonGroup>
+                        <ActionButton tone="info" onClick={() => setEditing(product)}>
+                          <Pencil size={13} />
+                          Edit
+                        </ActionButton>
+                        {(canDeleteDirectly || canRequestDelete) && (
+                          <ActionButton tone="danger" onClick={() => handleDelete(product)}>
+                            <Trash2 size={13} />
+                            {canDeleteDirectly ? "Delete" : "Request Deletion"}
+                          </ActionButton>
+                        )}
+                      </ActionButtonGroup>
                     </td>
                   </tr>
                 );

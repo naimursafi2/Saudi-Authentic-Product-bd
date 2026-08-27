@@ -127,7 +127,7 @@ export function PurchaseCostEditor({
                           aria-label="Remove cost"
                           disabled={busyId === item._id}
                           onClick={() => handleRemove(item)}
-                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-50"
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-delete p-1.5 text-white transition-colors duration-200 ease-in-out hover:bg-delete-hover disabled:opacity-50"
                         >
                           <Trash2 size={14} />
                         </button>

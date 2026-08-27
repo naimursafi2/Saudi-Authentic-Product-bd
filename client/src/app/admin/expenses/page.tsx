@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Receipt, Check, X } from "lucide-react";
+import { Plus, Receipt, Check, X, Paperclip } from "lucide-react";
 import { confirmExpense, createExpense, listExpenses, rejectExpense } from "@/lib/api/finance";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
@@ -12,7 +12,7 @@ import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import type { ApiExpense, ExpenseCategory, Pagination } from "@/types/api";
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
@@ -33,6 +33,8 @@ const EXPENSE_CATEGORIES: ExpenseCategory[] = [
 const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
 const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
+
+const MAX_CASH_MEMO_BYTES = 2 * 1024 * 1024;
 
 function personName(person: ApiExpense["recordedBy"]): string {
   return typeof person === "string" ? person : person.name;
@@ -56,7 +58,28 @@ export default function AdminExpensesPage() {
   const [category, setCategory] = useState<ExpenseCategory>("other");
   const [amountBDT, setAmountBDT] = useState("");
   const [incurredAt, setIncurredAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [reason, setReason] = useState("");
+  const [otherCategoryDetail, setOtherCategoryDetail] = useState("");
   const [note, setNote] = useState("");
+  const [cashMemoFile, setCashMemoFile] = useState<File | null>(null);
+  const [cashMemoUrl, setCashMemoUrl] = useState("");
+  const [cashMemoTooLarge, setCashMemoTooLarge] = useState(false);
+
+  function handleCashMemoSelect(file: File | undefined) {
+    if (!file) {
+      setCashMemoFile(null);
+      setCashMemoTooLarge(false);
+      return;
+    }
+    if (file.size > MAX_CASH_MEMO_BYTES) {
+      setCashMemoFile(null);
+      setCashMemoTooLarge(true);
+      return;
+    }
+    setCashMemoFile(file);
+    setCashMemoTooLarge(false);
+    setCashMemoUrl("");
+  }
 
   function load() {
     setIsLoading(true);
@@ -76,17 +99,32 @@ export default function AdminExpensesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    if (category === "other" && !otherCategoryDetail.trim()) {
+      setFormError('Please specify the expense purpose for the "Other" category.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await createExpense({
-        category,
-        amountBDT: Number(amountBDT),
-        incurredAt: new Date(incurredAt).toISOString(),
-        note: note || undefined,
-      });
+      await createExpense(
+        {
+          category,
+          amountBDT: Number(amountBDT),
+          incurredAt: new Date(incurredAt).toISOString(),
+          reason,
+          otherCategoryDetail: category === "other" ? otherCategoryDetail : undefined,
+          note: note || undefined,
+          cashMemoUrl: cashMemoUrl || undefined,
+        },
+        cashMemoFile ?? undefined
+      );
       setIsAdding(false);
       setAmountBDT("");
+      setReason("");
+      setOtherCategoryDetail("");
       setNote("");
+      setCashMemoFile(null);
+      setCashMemoUrl("");
+      setCashMemoTooLarge(false);
       load();
     } catch (err) {
       setFormError(err instanceof ApiClientError ? err.message : "Could not record expense.");
@@ -152,7 +190,7 @@ export default function AdminExpensesPage() {
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Amount</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Recorded By</th>
+                <th className="px-4 py-3">Requested By</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -161,7 +199,23 @@ export default function AdminExpensesPage() {
               {expenses.map((expense) => (
                 <tr key={expense._id} className="border-b border-brown-600/10 last:border-none">
                   <td className="px-4 py-3 font-medium capitalize text-green-950">
-                    {expense.category.replace(/_/g, " ")}
+                    {expense.category === "other" && expense.otherCategoryDetail
+                      ? `Other — ${expense.otherCategoryDetail}`
+                      : expense.category.replace(/_/g, " ")}
+                    {expense.cashMemo && (
+                      <a
+                        href={expense.cashMemo.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View cash memo"
+                        className="ml-1.5 inline-flex text-brown-500 hover:text-green-950"
+                      >
+                        <Paperclip size={13} />
+                      </a>
+                    )}
+                    <p className="mt-0.5 truncate text-xs font-normal normal-case text-brown-500">
+                      {expense.reason}
+                    </p>
                   </td>
                   <td className="px-4 py-3 text-brown-600">{formatBDT(expense.amountBDT)}</td>
                   <td className="px-4 py-3 text-brown-600">{new Date(expense.incurredAt).toLocaleDateString()}</td>
@@ -171,28 +225,16 @@ export default function AdminExpensesPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {canReview && expense.status === "pending" && (
-                      <div className="flex justify-end gap-2">
-                        <Tooltip label="Confirm">
-                          <button
-                            aria-label="Confirm"
-                            disabled={actingId === expense._id}
-                            onClick={() => handleConfirm(expense)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-success-soft p-1.5 text-green-900 transition-colors duration-150 hover:bg-success-soft-hover disabled:opacity-50"
-                          >
-                            <Check size={16} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label="Reject">
-                          <button
-                            aria-label="Reject"
-                            disabled={actingId === expense._id}
-                            onClick={() => handleReject(expense)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-50"
-                          >
-                            <X size={16} />
-                          </button>
-                        </Tooltip>
-                      </div>
+                      <ActionButtonGroup>
+                        <ActionButton tone="success" disabled={actingId === expense._id} onClick={() => handleConfirm(expense)}>
+                          <Check size={13} />
+                          Confirm
+                        </ActionButton>
+                        <ActionButton tone="danger" disabled={actingId === expense._id} onClick={() => handleReject(expense)}>
+                          <X size={13} />
+                          Reject
+                        </ActionButton>
+                      </ActionButtonGroup>
                     )}
                   </td>
                 </tr>
@@ -245,8 +287,80 @@ export default function AdminExpensesPage() {
                 />
               </div>
             </div>
+
+            {category === "other" && (
+              <div>
+                <label className={labelClasses}>Please specify (Other category) *</label>
+                <input
+                  required
+                  type="text"
+                  value={otherCategoryDetail}
+                  onChange={(e) => setOtherCategoryDetail(e.target.value)}
+                  placeholder="What was this expense for?"
+                  className={fieldClasses}
+                />
+              </div>
+            )}
+
             <div>
-              <label className={labelClasses}>Note</label>
+              <label className={labelClasses}>Reason / Purpose *</label>
+              <textarea
+                required
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why was this expense made?"
+                className={fieldClasses}
+              />
+            </div>
+
+            <div>
+              <label className={labelClasses}>Cash Memo (optional)</label>
+              {cashMemoTooLarge ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-danger">
+                    That file is larger than 2MB. Paste a link to the image instead.
+                  </p>
+                  <input
+                    type="url"
+                    value={cashMemoUrl}
+                    onChange={(e) => setCashMemoUrl(e.target.value)}
+                    placeholder="https://..."
+                    className={fieldClasses}
+                  />
+                </div>
+              ) : cashMemoUrl ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={cashMemoUrl}
+                    onChange={(e) => setCashMemoUrl(e.target.value)}
+                    placeholder="https://..."
+                    className={fieldClasses}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCashMemoUrl("")}
+                    className="shrink-0 text-xs font-semibold text-brown-500 hover:text-green-950"
+                  >
+                    Use file instead
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleCashMemoSelect(e.target.files?.[0])}
+                    className={fieldClasses}
+                  />
+                  <p className="mt-1 text-xs text-brown-500">JPG or PNG, up to 2MB.</p>
+                </>
+              )}
+            </div>
+
+            <div>
+              <label className={labelClasses}>Notes</label>
               <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} className={fieldClasses} />
             </div>
 

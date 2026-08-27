@@ -305,8 +305,15 @@ export default function AdminRefundsPage() {
               </div>
             </div>
             <div>
-              <label className={labelClasses}>Note</label>
-              <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} className={fieldClasses} />
+              <label className={labelClasses}>{reasonCategory === "other" ? "Please specify *" : "Note"}</label>
+              <textarea
+                required={reasonCategory === "other"}
+                rows={3}
+                placeholder={reasonCategory === "other" ? "Tell us the reason for this refund" : undefined}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className={fieldClasses}
+              />
             </div>
 
             {formError && <p className="text-sm text-danger">{formError}</p>}

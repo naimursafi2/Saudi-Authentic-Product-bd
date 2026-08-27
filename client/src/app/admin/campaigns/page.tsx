@@ -23,7 +23,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminPagination } from "@/components/admin/AdminPagination";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { Button } from "@/components/ui/Button";
 import { CampaignForm } from "@/components/admin/CampaignForm";
 import type { ApiCampaign, CampaignChannelStatus, CampaignStatus, Pagination } from "@/types/api";
@@ -254,28 +254,18 @@ export default function AdminCampaignsPage() {
                     <StatusBadge status={campaign.status} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex flex-wrap justify-end gap-1.5">
+                    <ActionButtonGroup>
                       {campaign.deliveries.length > 0 && (
-                        <Tooltip label="Delivery History">
-                          <button
-                            aria-label="Delivery History"
-                            onClick={() => setHistoryOf(campaign)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                          >
-                            <History size={15} />
-                          </button>
-                        </Tooltip>
+                        <ActionButton tone="info" onClick={() => setHistoryOf(campaign)}>
+                          <History size={13} />
+                          History
+                        </ActionButton>
                       )}
                       {canEditCampaign(campaign) && (
-                        <Tooltip label="Edit">
-                          <button
-                            aria-label="Edit"
-                            onClick={() => setEditing(campaign)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                        </Tooltip>
+                        <ActionButton tone="info" onClick={() => setEditing(campaign)}>
+                          <Pencil size={13} />
+                          Edit
+                        </ActionButton>
                       )}
                       {canEditCampaign(campaign) && (
                         <Button
@@ -289,77 +279,41 @@ export default function AdminCampaignsPage() {
                       )}
                       {canApprove && campaign.status === "pending_approval" && (
                         <>
-                          <Tooltip label="Approve">
-                            <button
-                              aria-label="Approve"
-                              disabled={actingId === campaign._id}
-                              onClick={() => handleApprove(campaign)}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-full bg-success-soft p-1.5 text-green-900 transition-colors duration-150 hover:bg-success-soft/70"
-                            >
-                              <Check size={15} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="Reject">
-                            <button
-                              aria-label="Reject"
-                              disabled={actingId === campaign._id}
-                              onClick={() => handleReject(campaign)}
-                              className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                            >
-                              <XIcon size={15} />
-                            </button>
-                          </Tooltip>
+                          <ActionButton tone="success" disabled={actingId === campaign._id} onClick={() => handleApprove(campaign)}>
+                            <Check size={13} />
+                            Approve
+                          </ActionButton>
+                          <ActionButton tone="danger" disabled={actingId === campaign._id} onClick={() => handleReject(campaign)}>
+                            <XIcon size={13} />
+                            Reject
+                          </ActionButton>
                         </>
                       )}
                       {canSend && ["draft", "approved", "scheduled", "paused"].includes(campaign.status) && (
-                        <Tooltip label="Send Now">
-                          <button
-                            aria-label="Send Now"
-                            disabled={actingId === campaign._id}
-                            onClick={() => handleSendNow(campaign)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-success-soft p-1.5 text-green-900 transition-colors duration-150 hover:bg-success-soft/70"
-                          >
-                            <Send size={15} />
-                          </button>
-                        </Tooltip>
+                        <ActionButton tone="success" disabled={actingId === campaign._id} onClick={() => handleSendNow(campaign)}>
+                          <Send size={13} />
+                          Send Now
+                        </ActionButton>
                       )}
                       {canSend && campaign.status === "scheduled" && (
-                        <Tooltip label="Pause">
-                          <button
-                            aria-label="Pause"
-                            disabled={actingId === campaign._id}
-                            onClick={() => handlePause(campaign)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-cream-300 p-1.5 text-brown-600 transition-colors duration-150 hover:bg-cream-400"
-                          >
-                            <Pause size={15} />
-                          </button>
-                        </Tooltip>
+                        <ActionButton tone="neutral" disabled={actingId === campaign._id} onClick={() => handlePause(campaign)}>
+                          <Pause size={13} />
+                          Pause
+                        </ActionButton>
                       )}
                       {canSend && campaign.status === "paused" && (
-                        <Tooltip label="Resume">
-                          <button
-                            aria-label="Resume"
-                            disabled={actingId === campaign._id}
-                            onClick={() => handleResume(campaign)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-success-soft p-1.5 text-green-900 transition-colors duration-150 hover:bg-success-soft/70"
-                          >
-                            <Play size={15} />
-                          </button>
-                        </Tooltip>
+                        <ActionButton tone="success" disabled={actingId === campaign._id} onClick={() => handleResume(campaign)}>
+                          <Play size={13} />
+                          Resume
+                        </ActionButton>
                       )}
                       {canDelete && (
-                        <Tooltip label="Delete">
-                          <button
-                            aria-label="Delete"
-                            disabled={actingId === campaign._id}
-                            onClick={() => handleDelete(campaign)}
-                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </Tooltip>
+                        <ActionButton tone="danger" disabled={actingId === campaign._id} onClick={() => handleDelete(campaign)}>
+                          <Trash2 size={13} />
+                          Delete
+                        </ActionButton>
                       )}
-                    </div>
+                    </ActionButtonGroup>
                   </td>
                 </tr>
               ))}

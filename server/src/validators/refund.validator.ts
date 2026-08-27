@@ -1,12 +1,17 @@
 import { z } from "zod";
 import { REFUND_REASON_CATEGORIES, REFUND_STATUSES } from "../models/Refund.model";
 
-export const createRefundSchema = z.object({
-  orderId: z.string().length(24),
-  reasonCategory: z.enum(REFUND_REASON_CATEGORIES),
-  requestedAmountBDT: z.number().positive(),
-  note: z.string().trim().max(500).optional(),
-});
+export const createRefundSchema = z
+  .object({
+    orderId: z.string().length(24),
+    reasonCategory: z.enum(REFUND_REASON_CATEGORIES),
+    requestedAmountBDT: z.number().positive(),
+    note: z.string().trim().max(500).optional(),
+  })
+  .refine((data) => data.reasonCategory !== "other" || Boolean(data.note?.trim()), {
+    message: "Please specify the reason",
+    path: ["note"],
+  });
 
 export const listRefundsQuerySchema = z.object({
   status: z.enum(REFUND_STATUSES).optional(),

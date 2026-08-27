@@ -8,6 +8,7 @@ import {
   createReviewSchema,
   listRecentReviewsQuerySchema,
   listReviewsQuerySchema,
+  updateReviewVisibilitySchema,
 } from "../validators/review.validator";
 import { mongoIdParamSchema, productIdParamSchema } from "../validators/common.validator";
 
@@ -47,6 +48,13 @@ router.post(
 );
 
 // -- Staff only --
+router.patch(
+  "/:id/visibility",
+  authenticate,
+  requirePermission("reviews.delete"),
+  validate({ params: mongoIdParamSchema, body: updateReviewVisibilitySchema }),
+  reviewController.updateReviewVisibility
+);
 router.delete(
   "/:id",
   authenticate,

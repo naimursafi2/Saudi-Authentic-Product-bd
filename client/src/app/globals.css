@@ -108,6 +108,31 @@
   --color-danger-solid: #8a4a3f;
 
   /**
+   * CONSTANT across themes, same reasoning as `danger-solid` above —
+   * `info-solid` is the deep-blue hover state for Edit/Update action
+   * buttons (`ActionButton`), always paired with white text. The regular
+   * `info-soft-hover` tint is too subtle to read as "hover" on its own, so
+   * hovering an Edit/Update chip jumps to this solid, unmistakably darker
+   * blue instead.
+   */
+  --color-info-solid: #1c3170;
+
+  /**
+   * CONSTANT across themes. `--color-danger` above is a muted, earthy
+   * brick-red chosen to match this site's brand palette (used for error
+   * text, the "Save 14%" badge, form-validation borders) — but a Delete/
+   * Reject/Deny action button needs to read as unmistakable danger at a
+   * glance, which that muted tone doesn't achieve on its own. `delete` /
+   * `delete-hover` are a genuinely bright, vivid red reserved specifically
+   * for those destructive action buttons (`ActionButton`'s `danger` tone,
+   * `Button`'s `danger` variant) — solid fill + white text at rest, an
+   * even deeper red on hover. Deliberately NOT theme-flipped: a warning
+   * color has to stay exactly as alarming in dark mode as in light mode.
+   */
+  --color-delete: #dc2626;
+  --color-delete-hover: #991b1b;
+
+  /**
    * Text that sits on a gold fill (primary CTA, cart/wishlist count badges,
    * the selected variant chip). Gold stays a light, high-luminance colour in
    * BOTH themes, so its foreground must stay dark in both — using
@@ -194,7 +219,13 @@
   /** Hairline borders — was a hardcoded rgba() in the `*` rule below. */
   --color-hairline: rgba(113, 121, 115, 0.15);
 
-  --font-serif: "EB Garamond", "Times New Roman", serif;
+  /* Headings/display — was EB Garamond (a classic serif, read as formal/
+     old-fashioned); Poppins is the modern, friendly, highly-readable
+     replacement. The `--font-serif` name (and the `font-serif` Tailwind
+     utility every heading in the app already uses) is kept as-is on
+     purpose — renaming it would mean touching every component that
+     references it for a value that's purely cosmetic, not structural. */
+  --font-serif: "Poppins", "Segoe UI", sans-serif;
   --font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
 }
 
@@ -403,10 +434,75 @@ body {
   animation: slide-in-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Running company-name header + a minimal footer for print-isolated views
+   (below): short banners meant to repeat on every physical page, which is
+   the one case where `position: fixed` in print is actually correct —
+   everything else below deliberately avoids it. Hidden on screen; the
+   print blocks further down reveal them. The matching `@page` top/bottom
+   margins reserve room on every page so flowing content never renders
+   under either one. */
+.print-header,
+.print-footer {
+  display: none;
+  font-family: var(--font-sans);
+  color: #1b1b1b;
+}
+
+.print-header {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.print-header strong {
+  font-size: 14px;
+}
+
+.print-footer {
+  font-size: 10px;
+  color: #555;
+  border-top: 1px solid #ccc;
+  padding-top: 4px;
+}
+
+@page {
+  margin-top: 2.3cm;
+  margin-bottom: 1.5cm;
+}
+
 /* Printable invoice (components/order/OrderInvoice.tsx): isolates
    #invoice-print-area from the rest of the page — including the modal
    chrome it's shown in — so `window.print()` only outputs the invoice
-   itself, not the app UI around it. */
+   itself, not the app UI around it.
+
+   THE HIDE/REVEAL MECHANISM MUST BE `visibility`, NOT `display` — this
+   was tried (`display: none` / `revert` / `static`) and produced a
+   completely BLANK printed page, a worse regression than the one it was
+   meant to fix. `#invoice-print-area` sits several DOM levels below
+   `<body>` (inside modal chrome, page wrappers, ...), and `display: none`
+   on an ancestor permanently removes that ancestor's entire subtree from
+   rendering — no descendant rule, however specific or `!important`, can
+   bring a child back once its own ancestor generates no box at all.
+   `visibility: hidden` is the one CSS mechanism that doesn't have this
+   problem: an invisible ancestor still generates its box (so a descendant
+   CAN set its own `visibility: visible` and reappear), it just isn't
+   painted. Do not "simplify" this back to `display` — reproduce in an
+   actual print preview first if this is ever touched again.
+
+   Going back to `visibility` reopens the ORIGINAL bug this rule exists to
+   prevent, though: an invisible ancestor still occupies its normal-flow
+   height, so without further help the revealed target renders far down
+   the (invisible) page, and the browser generates a pile of blank pages
+   just to scroll down to it. `position: absolute` — NOT `fixed`, and NOT
+   `static` — is what fixes that without reintroducing duplication: with
+   no positioned ancestor, it's positioned relative to the page box
+   itself, which places it at the very top of page 1 regardless of where
+   it sits in the invisible flow — and unlike `position: fixed`, an
+   absolutely positioned element in paged media renders ONCE and lets its
+   own overflowing content paginate normally across as many further pages
+   as it needs, rather than being re-painted on every page like a running
+   header. (`.print-header`/`.print-footer` below are the deliberate
+   exception — a short banner that SHOULD repeat every page is exactly
+   what `position: fixed` is for.) */
 @media print {
   body * {
     visibility: hidden;
@@ -416,19 +512,72 @@ body {
     visibility: visible;
   }
   #invoice-print-area {
-    position: fixed;
-    inset: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
+  }
+  #invoice-print-area tr,
+  #invoice-print-area td,
+  #invoice-print-area th {
+    break-inside: avoid;
+  }
+  .print-header,
+  .print-footer {
+    display: block !important;
+    visibility: visible;
+  }
+  .print-header {
+    position: fixed;
+    top: 0.2cm;
+    left: 0;
+    right: 0;
+    text-align: center;
+  }
+  .print-footer {
+    position: fixed;
+    bottom: 0.2cm;
+    left: 0;
+    right: 0;
+    text-align: center;
   }
 }
 
-/* Generic version of the rule above, for any other "print this one section"
-   need (e.g. the Reports page's sales table) — same technique, a reusable
-   class instead of one component's specific id. No PDF library anywhere in
-   this project; "export as PDF" is always the browser's own "Save as PDF"
-   print destination on a print-isolated view like this one. */
+/* Generic version of the invoice rule above, for any other "print this one
+   section" need (currently the Reports page's sales table) — same
+   technique, a reusable class instead of one component's specific id. No
+   PDF library anywhere in this project; "export as PDF" is always the
+   browser's own "Save as PDF" print destination on a print-isolated view
+   like this one.
+
+   The hide-rule below must stay a bare `body *` (matching the invoice rule
+   above), NOT `body:has(.print-area) *` — `:has()` adds a class-level
+   specificity component on top of the `body` type selector, which then
+   OUTRANKS the plain-class `.print-area *` reveal rule below it (id/class/
+   type tiers: 0,1,1 beats 0,1,0), hiding the print area's own contents and
+   printing a blank page. A bare `body *` has lower specificity than any
+   class selector, so `.print-area *` reliably wins regardless of source
+   order — exactly like `#invoice-print-area` (id specificity) already
+   guarantees above. This was a real regression once already; don't
+   reintroduce a `:has()`/other-compound-selector hide-rule here.
+
+   Same `visibility`/`position: absolute` reasoning as the invoice rule
+   above — see that comment for exactly why `display`-based hiding and
+   `position: fixed` both broke this, one at a time, in two separate past
+   regressions. `break-inside: avoid` on row-level elements stops a table
+   row from being split across a page boundary, and `thead`'s natural
+   `table-header-group` display (untouched here, since we no longer force
+   `display` at all) is what makes the column headers legitimately repeat
+   at the top of each new page a long table spills onto — a real per-page
+   repeat, not a bug, since only the headers repeat, never the data rows.
+
+   The printed report is deliberately plain: `.print-area` sheds its
+   on-screen card chrome (border, rounded corners, shadow, background)
+   here so it reads as plain professional paper, not a copy of the
+   on-screen card — per the "simple, clean, no decorative styling"
+   requirement for this specific print output. */
 @media print {
-  body:has(.print-area) * {
+  body * {
     visibility: hidden;
   }
   .print-area,
@@ -436,8 +585,45 @@ body {
     visibility: visible;
   }
   .print-area {
-    position: fixed;
-    inset: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  /* Plain black-on-white text — the on-screen brand colors (green/brown)
+     read as "excessive color" on a printed page. */
+  .print-area,
+  .print-area * {
+    color: #1b1b1b !important;
+  }
+  .print-area tr,
+  .print-area td,
+  .print-area th {
+    break-inside: avoid;
+  }
+  .print-header,
+  .print-footer {
+    display: block !important;
+    visibility: visible;
+  }
+  .print-header {
+    position: fixed;
+    top: 0.2cm;
+    left: 0;
+    right: 0;
+    text-align: center;
+  }
+  .print-footer {
+    position: fixed;
+    bottom: 0.2cm;
+    left: 0;
+    right: 0;
+    text-align: center;
   }
 }

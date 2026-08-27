@@ -382,10 +382,15 @@ export function OrderHistory() {
               </div>
             </div>
             <div>
-              <label className={labelClasses}>Note</label>
+              <label className={labelClasses}>{reasonCategory === "other" ? "Please specify *" : "Note"}</label>
               <textarea
+                required={reasonCategory === "other"}
                 rows={3}
-                placeholder="Tell us more about the issue (optional)"
+                placeholder={
+                  reasonCategory === "other"
+                    ? "Tell us the reason for this refund"
+                    : "Tell us more about the issue (optional)"
+                }
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 className={fieldClasses}
@@ -459,10 +464,17 @@ export function OrderHistory() {
               </div>
             )}
             <div>
-              <label className={labelClasses}>Note</label>
+              <label className={labelClasses}>
+                {returnReasonCategory === "other" ? "Please specify *" : "Note"}
+              </label>
               <textarea
+                required={returnReasonCategory === "other"}
                 rows={3}
-                placeholder="Tell us more about the issue (optional)"
+                placeholder={
+                  returnReasonCategory === "other"
+                    ? "Tell us the reason for this request"
+                    : "Tell us more about the issue (optional)"
+                }
                 value={returnNote}
                 onChange={(e) => setReturnNote(e.target.value)}
                 className={fieldClasses}

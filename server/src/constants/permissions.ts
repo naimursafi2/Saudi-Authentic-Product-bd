@@ -90,9 +90,6 @@ export const PERMISSIONS = [
   // -- Reviews --
   "reviews.view",
   "reviews.delete",
-  "productQA.view",
-  "productQA.answer",
-  "productQA.delete",
 
   // -- Reporting & finance --
   "reports.view",
@@ -230,9 +227,6 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
     permissions: [
       { key: "reviews.view", label: "View all reviews" },
       { key: "reviews.delete", label: "Delete reviews" },
-      { key: "productQA.view", label: "View all product questions" },
-      { key: "productQA.answer", label: "Answer product questions" },
-      { key: "productQA.delete", label: "Delete product questions" },
     ],
   },
   {
@@ -358,9 +352,6 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "content.branding.manage",
     "reviews.view",
     "reviews.delete",
-    "productQA.view",
-    "productQA.answer",
-    "productQA.delete",
     "reports.view",
     "expenses.view",
     "expenses.create",
@@ -423,9 +414,6 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "settings.manage",
     "reviews.view",
     "reviews.delete",
-    "productQA.view",
-    "productQA.answer",
-    "productQA.delete",
     "reports.view",
     "finance.view",
     "investments.view",

@@ -32,6 +32,11 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   } else if (err?.name === "JsonWebTokenError" || err?.name === "TokenExpiredError") {
     statusCode = 401;
     message = "Invalid or expired session";
+  } else if (err?.name === "MulterError" && err?.code === "LIMIT_FILE_SIZE") {
+    // Multer's own error otherwise falls through to the generic 500 branch
+    // below — this is a client mistake (file too large), not a server fault.
+    statusCode = 400;
+    message = "File is too large. The maximum upload size is 2MB.";
   } else if (err instanceof Error) {
     message = err.message || message;
   }

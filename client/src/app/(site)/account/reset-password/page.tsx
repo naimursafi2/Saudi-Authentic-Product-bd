@@ -31,7 +31,7 @@ function ResetPasswordForm() {
     setError(null);
 
     if (!meetsPasswordRequirements(password)) {
-      setError("Password must be at least 8 characters and include an uppercase letter, a lowercase letter and a number.");
+      setError("Password must be at least 8 characters.");
       return;
     }
     if (password !== confirmPassword) {
