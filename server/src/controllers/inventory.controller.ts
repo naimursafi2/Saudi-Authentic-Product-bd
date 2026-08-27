@@ -29,6 +29,11 @@ export const lowStock = catchAsync(async (_req: Request, res: Response) => {
   sendSuccess(res, 200, "Low stock products fetched", { products });
 });
 
+export const outOfStock = catchAsync(async (_req: Request, res: Response) => {
+  const products = await inventoryService.listOutOfStockProducts();
+  sendSuccess(res, 200, "Out-of-stock products fetched", { products });
+});
+
 export const stockLevels = catchAsync(async (req: Request, res: Response) => {
   const { search } = req.query as unknown as { search?: string };
   const products = await inventoryService.listStockLevels(search);

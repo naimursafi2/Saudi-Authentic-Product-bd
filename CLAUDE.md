@@ -54,8 +54,8 @@ Register every new router in `routes/index.ts`.
 | `/tasks` | employee lists own (`/mine`) + updates own status; staff creates/lists (filterable by `type`)/updates/deletes; every task has a required `type` (packing/product_counting/stock_checking/warehouse/customer_support/data_entry/product_preparation) for task-based access categorization | create/list/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/performance-reviews` | employee lists own reviews; staff creates/lists | create/list: `admin`,`super_admin`,`co_admin` |
 | `/salary-payments` | employee lists own payment history; admin creates payment/lists all/updates status/sends notify email | `admin`,`super_admin` **only** — co_admin is deliberately excluded |
-| `/inventory` | `GET /stock` (read-only live per-variant stock), low-stock list, logs, manual stock adjustment | `GET /stock`: + `employee`,`order_manager` (read-only — warehouse staff need the real count, not the ability to change it); low-stock/logs/adjust: `admin`,`super_admin`,`co_admin`. `POST /adjust` applies immediately **only** for `super_admin`; every other role gets `202 {pendingActionId}` and live stock is unchanged — see "Stock-change approval gate" below |
-| `/reports` | any staff: `/employee-dashboard`; admin/co-admin: `/dashboard`, `/sales` | dashboard/sales: `admin`,`super_admin`,`co_admin` |
+| `/inventory` | `GET /stock` (read-only live per-variant stock), low-stock list, `GET /out-of-stock` (products with a variant at exactly zero — distinct from low-stock), logs, manual stock adjustment | `GET /stock`: + `employee`,`order_manager` (read-only — warehouse staff need the real count, not the ability to change it); low-stock/out-of-stock/logs/adjust: `admin`,`super_admin`,`co_admin`. `POST /adjust` applies immediately **only** for `super_admin`; every other role gets `202 {pendingActionId}` and live stock is unchanged — see "Stock-change approval gate" below |
+| `/reports` | any staff: `/employee-dashboard`; admin/co-admin: `/dashboard` (now also `outOfStockCount`/`recentOrders`/`recentActivities` — see "Admin Dashboard additions" below), `/sales`, `/sales-timeseries` (day/week/month revenue+order-count buckets — see "Sales Analytics & Reports" below), `/delivery-performance` (per-delivery-agent assigned/delivered/failed counts, success rate, and average delivery time — all derived live from `Order`, see "Delivery Agent Performance" above) | dashboard/sales/sales-timeseries/delivery-performance: `admin`,`super_admin`,`co_admin` |
 | `/hero-slides` | public list; create/update (image)/delete of homepage hero carousel slides | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/homepage-sections` | public list; create (promo banners, homepage carousel banners & product showcases only)/update/delete of homepage content sections | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/site-settings` | public `GET /` (singleton); `PATCH /` (logo upload) for site name/announcement strip (`announcementEnabled` + `announcementText`)/contact/footer; `PATCH /logo` (logo only) | `PATCH /`: `admin`,`super_admin` only — `co_admin` is **not** able to reach the full settings update (unlike `/hero-slides` and `/homepage-sections`, whose create/update do allow `co_admin`); `PATCH /logo`: also `co_admin` via the narrower `content.branding.manage` permission — see "Storefront header" below |
@@ -69,12 +69,14 @@ Register every new router in `routes/index.ts`.
 | `/investments` | `GET /` (list), `POST /` (create) — append-only partner investment ledger, no update/delete route | list: `admin`,`super_admin`; create: `super_admin` only |
 | `/expenses` | `GET /`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject` | list/create: `co_admin`,`admin`,`super_admin` (co_admin scoped to own submissions); confirm/reject: `admin`,`super_admin` only |
 | `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` — a `customer` viewer is force-scoped server-side to their own refunds (same pattern as `co_admin`'s own-submissions scoping), which is what powers the account portal's per-order refund status; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
-| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot | `finance.view` (`admin`,`super_admin` by default) — `co_admin` finance visibility is off by default per the spec |
+| `/returns` | `POST /` (customer requests a return/exchange on their own `delivered` order), `GET /`, `PATCH /:id/review` — see "Return / Exchange Requests" below | create: `returns.request` (customer only, by default); list: `returns.view` (a `customer` viewer is force-scoped to their own requests, same pattern as `/refunds`); review: `returns.review` (`order_manager`,`co_admin`,`admin`,`super_admin` by default) |
+| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot; `GET /revenue-vs-expense` — day/week/month revenue-vs-expense-vs-profit buckets, see "Sales Analytics & Reports" below | `finance.view` (`admin`,`super_admin` by default) — `co_admin` finance visibility is off by default per the spec |
 | `/shops` | `GET /` (scoped list), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` and `PATCH /users/:userId` (a staff member's shop assignment) | list: `shops.view`; create/update/delete/assign: `shops.manage` (`admin`,`super_admin` by default). A caller without `shops.manage` only ever sees the shops in their own `User.assignedShops` — see "Purchasing: shops, batches & flexible landed costs" below |
 | `/purchases` | `GET /`, `GET /:id`, `POST /` (multipart), `PATCH /:id`, `PATCH /:id/receive`, `PATCH /:id/cancel`, `DELETE /:id`, the cost-item endpoints `POST /:id/costs` / `PATCH /:id/costs/:costId` / `DELETE /:id/costs/:costId`, and `GET /product/:productId` (per-product landed-cost history) | view: `purchases.view`; create: `purchases.create`; edit/costs/receive/cancel: `purchases.edit`; delete: `purchases.delete` (`co_admin` deliberately lacks it). Every read and write is additionally shop-scoped |
 | `/roles` | `GET /permissions` (the permission catalogue, grouped + labelled), `GET /` (all roles with assigned-user counts), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` (one user's effective permissions) and `PATCH /users/:userId` (assign/clear a custom role) | read: `roles.view`; author roles: `roles.manage`; assign a role to a person: `employees.manage` — see "Roles & permissions" below for the guards the service adds on top |
 | `/campaigns` | `GET /channel-status`, `GET /audience-preview`, `GET /`, `GET /:id`, `POST /` (multipart, optional banner image), `PATCH /:id`, `DELETE /:id`, `POST /:id/submit`, `PATCH /:id/approve`, `PATCH /:id/reject`, `POST /:id/send-now`, `PATCH /:id/pause`, `PATCH /:id/resume` | view/audience-preview/channel-status: `campaigns.view`; create/submit: `campaigns.create`; edit: `campaigns.edit`; delete: `campaigns.delete` (`super_admin` only by default); approve/reject: `campaigns.approve` (`super_admin` only); send-now/pause/resume: `campaigns.send` (`super_admin` only) — see "Customer Messaging / Campaign Management System" below |
 | `/notifications` | `GET /mine`, `PATCH /:id/read`, `PATCH /mark-all-read` — a customer's own website-notification inbox | just `authenticate`, self-scoped to `req.user.id` — same as `/users/me/*` |
+| `/product-alerts` | `GET /mine`, `POST /` (subscribe), `DELETE /:id` (unsubscribe) — the Price Drop / Back-in-Stock "Notify Me" subscriptions | just `authenticate`, self-scoped to `req.user.id` — see "Price Drop & Back-in-Stock Alerts" below |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
 `validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
@@ -113,6 +115,60 @@ taking effect immediately (`POST`/`PATCH` respond `202` with a
 creates/updates directly, any discount size. Fixed-amount (non-percentage)
 coupons aren't gated by this — the spec only defines thresholds for
 percentage discounts.
+
+**Price Drop & Back-in-Stock Alerts** (`models/ProductAlert.model.ts`,
+`services/productAlert.service.ts`): a signed-in customer's "Notify Me"
+subscription on a product page — one document per `{user, product,
+variantId, type}`, `type` one of `price_drop`/`back_in_stock`.
+`POST /product-alerts` resolves the target variant (an explicit `variantId`,
+or the cheapest variant when omitted, mirroring `minPriceBDT`'s own logic);
+`back_in_stock` 400s if the variant already has stock, and `price_drop`
+captures the variant's current `priceBDT` as `referencePriceBDT` — the alert
+only fires once the live price drops *below* that captured value, so it
+survives ordinary price fluctuation upward without re-arming. Both types are
+**one-shot**: firing sets `isActive: false` and `notifiedAt`, and
+`GET /product-alerts/mine` only ever returns active subscriptions — a
+customer who wants another heads-up later just subscribes again. Everything
+is self-scoped to `req.user.id`, same as `/notifications`.
+
+Both triggers are awaited (not fire-and-forget) at the point of the actual
+DB write, since the only genuinely slow part — the alert email — is already
+`void`-dispatched *inside* `notifyPriceDropSubscribers`/
+`notifyBackInStockSubscribers` themselves via the existing `sendXEmail`
+convention; awaiting the surrounding DB-only orchestration costs nothing and
+means the mutation's own response can be trusted to reflect that any
+matching alerts have already been resolved:
+
+- **Back in stock** — fires the instant a variant's stock is observed
+  crossing `0 -> positive`. There is exactly one place stock is actually
+  written for a manual/purchase-driven change (`inventory.service.ts`'s
+  `applyStockDelta`/`setVariantStock`, both already the single source of
+  truth `InventoryLog` writes go through), so the check lives there once
+  rather than at every call site; `order.service.ts`'s `restockOrderItems`
+  (order cancelled/returned) also checks the same crossing, since a
+  cancellation can just as validly bring a variant back into stock.
+- **Price drop** — fires from `product.service.ts#updateProduct`, comparing
+  each submitted variant's new `priceBDT` against what it was immediately
+  before that same save (price is a content field, never stock-gated — see
+  "Stock-change approval gate" above — so this fires the moment the save
+  lands, same as the field-level audit log beside it).
+
+Delivery reuses existing infrastructure rather than adding anything new:
+`sendPriceDropAlertEmail`/`sendBackInStockAlertEmail` follow the same
+`layout()`/`button()`/`safeSend()` template convention as every other
+transactional email, and the website-notification half rides the existing
+`Notification` inbox via a small `customerNotification.service.ts#
+createUserNotification` addition (the same model/bell/list/mark-read UI a
+campaign notification uses, just with `campaign` omitted — see that
+service's own comment on why this doesn't reopen it into a general
+notification framework). Frontend: `ProductAlertButtons.tsx` on the product
+page (`ProductInfo.tsx`) — a "Notify me of price drops" link always shown,
+plus "Notify me when back in stock" only once the selected variant is
+actually out of stock; a signed-out visitor sees a "Sign in to get
+notified" prompt instead, matching `ProductReviews.tsx`'s convention for the
+same situation. The account portal's new **My Alerts** tab
+(`components/account/AlertsSection.tsx`) lists and lets a customer cancel
+their own active subscriptions.
 
 **Public order tracking** (`GET /orders/track?orderNumber=...&email=...`,
 `order.service.ts#trackOrder`): unauthenticated customers look up an order by
@@ -212,12 +268,158 @@ History — one timeline implementation, not two. `/track-order` also
 displays the owner-visible `otp` field when present, with a "share this
 code with the delivery agent" prompt.
 
+**Estimated Delivery Date** (`Order.model.ts`'s `estimatedDeliveryDate`
+virtual): derived, never stored — `createdAt` plus `ESTIMATED_DELIVERY_DAYS[
+deliveryMethod]` (5 days standard, 2 express), the same never-store-a-
+derived-value philosophy as `computeCouponStatus()`/Purchase's cost
+virtuals. Undefined once the order reaches `delivered`/`delivery_failed`/
+`cancelled`/`returned`/`refunded` (an estimate stops being meaningful once
+the order is resolved or on a branch path). Requires `toJSON`/`toObject:
+{virtuals: true}` on the schema to serialize automatically — every order
+response already includes it with no controller change needed.
+`OrderStatusTimeline.tsx` renders it above the step tracker when present.
+
+**Delivery Proof photo** (`Order.model.ts`'s `deliveryProofImage`):
+optional — a delivery agent may attach one photo of the delivered package
+at the same moment they submit the OTP that confirms delivery. `POST
+/orders/:id/verify-otp` accepts it as an optional multipart field
+(`deliveryProofImage`, via the existing `upload.middleware.ts` + `multer`),
+uploaded to Cloudinary (`saudi-authentic-product/delivery-proof`) only when
+present — multer passes a plain JSON request (no `multipart/form-data`
+content-type) straight through untouched, so the pre-existing JSON-only
+caller keeps working unchanged. Frontend: `/delivery/orders`'s Verify OTP
+form gained an optional file input beside the code field; the customer
+account portal's Order History and the public `/track-order` page both
+render the photo (as a thumbnail linking to the full image) whenever
+`Order.deliveryProofImage` is set.
+
+**Return / Exchange Requests** (`models/ReturnRequest.model.ts`,
+`services/returnRequest.service.ts`) — the customer self-service step that
+was missing: previously only staff could move an order into `"returned"`,
+and only through the generic status endpoint. `POST /returns` (any
+authenticated customer, own order, `returns.request` permission) requires
+`Order.status === "delivered"` and rejects a second request while one is
+already `pending` for that order. `type` is `"return"` or `"exchange"`:
+- **`return`** — approving (`PATCH /returns/:id/review`, `returns.review`)
+  calls the existing `order.service.ts#updateOrderStatus(orderId,
+  "returned", actor, note)` internally, reusing its own transition/
+  actor-role validation exactly as `refund.service.ts` already does for
+  `returned -> refunded` — the order genuinely moves to `"returned"`, which
+  is what then lets the customer (or staff) file the existing `Refund`
+  request. Rejecting leaves the order untouched.
+- **`exchange`** — approving only marks the `ReturnRequest` itself
+  `"approved"`; it does **not** move the order anywhere. There is no
+  automated replacement-order/exchange-fulfilment system in this codebase
+  (see Known limitations) — an approved exchange is a staff commitment to
+  handle the swap manually (a new order, a manual stock correction), and
+  `desiredExchangeDetails` (free text) is the only record of what the
+  customer asked for.
+
+`GET /returns` force-scopes a `customer` viewer to their own requests,
+identical to `/refunds`'s scoping. `reasonCategory` reuses
+`REFUND_REASON_CATEGORIES` from `Refund.model.ts` rather than a second
+enum. Every create/approve/reject is audit-logged (`return.request`/
+`return.approve`/`return.reject`). Frontend: `components/account/
+OrderHistory.tsx` shows a "Return / Exchange" button once an order is
+`delivered` (a type toggle, reason dropdown, and a conditional "what would
+you like instead?" field for exchange), replaced by a read-only status line
+once a request exists — the same pattern the adjacent Refund button already
+follows. `/admin/returns` (`returns.view`) is the staff review queue —
+approve/reject only, no staff-side creation (only a customer holds
+`returns.request` by default).
+
+**Delivery Agent Performance** (`report.service.ts#getDeliveryAgentPerformance`,
+`GET /reports/delivery-performance`): per `delivery_agent`, live counts —
+assigned/delivered/failed (via `Order.assignedAgent`/`status`), a computed
+success rate, and an average delivery time (`assigned_to_agent` ->
+`delivered`, read straight from the existing `statusHistory` timestamps
+rather than a separately-tracked number). Rendered as a table on
+`/admin/reports`, below the sales report.
+
+#### Sales Analytics & Reports, Out-of-Stock Alert, Revenue vs Expense
+
+**Sales time-series** (`report.service.ts#getSalesTimeSeries`, `GET
+/reports/sales-timeseries?groupBy=day|week|month`): the same `match` shape
+`getSalesSummary` already uses, but `$group`-ed by a `$dateToString` date
+bucket instead of collapsed to one total — `%Y-%m-%d` for day, `%G-W%V`
+(ISO week-year + ISO week number, so a bucket never straddles a year
+boundary oddly) for week, `%Y-%m` for month. `dateBucketFormat()` is
+exported from `report.service.ts` specifically so `finance.service.ts`
+(below) can bucket by the exact same format and the two line up
+period-for-period. Backs both the Admin Dashboard's implicit "last 30
+days" sales figure (unchanged) and `/admin/reports`'s new Daily/Weekly/
+Monthly Sales Report table — a groupBy selector re-fetches the same
+endpoint with a different bucket size, plus a date-range form re-using the
+existing from/to fields.
+
+**Revenue vs Expense / Profit report** (`finance.service.ts#
+getRevenueVsExpenseTimeSeries`, `GET /finance/revenue-vs-expense?
+groupBy=...`): revenue comes from `getSalesTimeSeries` (never re-derived —
+same principle as `getFinanceSummary` above); the expense side is grouped
+by the identical date-bucket format from `Expense.incurredAt`
+(`status: "confirmed"` only). The two series are merged by period key via
+a `Map` rather than assumed to share the same set of periods — a period
+with expenses but no orders (or vice versa) still appears once, with the
+other side at `0`, and `profitBDT` is `revenueBDT - expenseBDT` per period.
+Rendered as a table (with a groupBy selector) on `/admin/finance`, below
+the existing Expenses-by-Category breakdown — this is the "Profit Report"
+and "Revenue vs Expense" analytics view; there is no chart library in this
+project (see Known Limitations), so it's a data table, not a chart.
+
+**Out-of-Stock alert** (`inventory.service.ts#listOutOfStockProducts`/
+`countOutOfStockProducts`, `GET /inventory/out-of-stock`): a stricter,
+distinct signal from Low Stock (`stock <= lowStockThreshold`, which a
+variant with `lowStockThreshold: 0` would never even cross) — only
+variants at exactly `0`. Out-of-stock products are always a subset of
+low-stock ones. Rendered as its own section on `/admin/inventory`
+(alongside the existing Low Stock Alerts) and as an `outOfStockCount` stat
+card on the Admin Dashboard. Deliberately **not** wired into a new email
+alert — `notifyLowStock` (see "Operational notifications" above) already
+fires the moment a variant crosses at/below its threshold, which includes
+the moment it reaches zero, so a second "now it's zero" email would be
+redundant for the same crossing event.
+
+**Admin Dashboard additions** (`report.service.ts#getAdminDashboard`, now
+takes the viewer's `{id, role}`): two new widgets alongside the existing
+stat cards / Today's Attendance / Top Products —
+- **Recent Orders** (`getRecentOrders(5)`) — the 5 most recent orders,
+  newest first, each linking to `/admin/orders?viewOrder=<id>` (a new
+  `viewOrder` query param on `/admin/orders`, read the same way the
+  existing `status` param is, that opens straight to that order's detail
+  modal).
+- **Recent Activities** — the 5 most recent `AuditLog` entries via the
+  existing `listAuditLogs()`, with the *viewer's own* `{id, role}` threaded
+  through — so a Co-Admin's dashboard widget is force-scoped to their own
+  actions exactly like the full `/admin/audit-logs` page already is, not a
+  separately-maintained rule. Both widgets reuse
+  `client/src/lib/auditLogDisplay.tsx` — `ActionBadge`/`resourceLabel`/
+  `friendlyNote`/`actorName`, extracted out of `/admin/audit-logs/page.tsx`
+  (which now imports from there instead of defining its own copies) so the
+  dashboard widget and the full audit log page translate the exact same raw
+  `action`/`resource` strings identically. **Never render `log.action`/
+  `log.resource` directly anywhere new** — always go through this shared
+  module, per the existing audit-logs rule.
+
+**CSV / "PDF" export** (`lib/csvExport.ts#downloadCsv`): a small
+hand-rolled, dependency-free CSV generator (comma-joined rows, a Blob URL,
+a synthetic `<a download>` click) — no library needed for this, confirmed
+during the initial audit for this feature. Used by the Sales Report and the
+Revenue-vs-Expense table's "CSV" buttons. There is still no PDF-generation
+library anywhere in this project (see Known Limitations); "export as PDF"
+on the Sales Report is the same browser-print convention `OrderInvoice.tsx`
+already established — a `.print-area` class (`globals.css`, a generic
+version of that component's own `#invoice-print-area` rule) isolates the
+report table at print time, and the button just calls `window.print()`,
+letting the visitor's own browser's "Save as PDF" print destination do the
+actual PDF creation.
+
 **Delivery Portal** (`frontend/src/app/delivery`, `delivery_agent` only,
 modeled directly on the Employee Portal's shell): `/delivery` (dashboard —
 counts of assigned orders by status), `/delivery/orders` (assigned-orders
 list + a detail modal with Picked-Up/Out-for-Delivery buttons; once
 `out_for_delivery`, a **Send Delivery OTP** button, then — once a code is
-outstanding (`order.otpExpiresAt` present) — an OTP-entry field, a **Verify
+outstanding (`order.otpExpiresAt` present) — an OTP-entry field, an optional
+photo-proof file input (see "Delivery Proof photo" above), a **Verify
 & Confirm Delivery** button, a **Resend OTP** link, and a Delivery-Failed
 form), `/delivery/profile` (avatar/address,
 reusing the same `ProfileSection`/`AddressBook` components as everywhere
@@ -227,10 +429,13 @@ is the only role that can reach it; it is structurally excluded from
 
 **Order Manager** reuses the existing `/admin` shell rather than a separate
 portal — `ADMIN_PORTAL_ROLES` includes `order_manager`, and
-`AdminNav.tsx`'s nav items are explicitly `roles`-restricted so an Order
-Manager only ever sees Dashboard, Orders, Refunds, and Audit Logs (their own
-actions) — the real boundary is still backend `authorize()`, not nav
-visibility.
+`AdminNav.tsx`'s nav items are each gated by an optional `permissions`
+array (`NAV_ITEMS.filter((item) => !item.permissions ||
+hasPermission(...item.permissions))`) rather than a hardcoded role list, so
+an Order Manager only ever sees Dashboard, Orders, Refunds, Returns &
+Exchanges, and Audit Logs — exactly the routes covered by its default
+permission set (see "Roles & permissions" below) — the real boundary is
+still backend `requirePermission(...)`, not nav visibility.
 
 #### Roles & permissions
 
@@ -550,7 +755,7 @@ any `.request`/`.grant`/`.deny` row that came through with no reviewer note).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below), `ProductAlert` (a customer's Price Drop / Back-in-Stock subscription, see "Price Drop & Back-in-Stock Alerts" above), `ReturnRequest` (a customer's Return/Exchange request, see "Return / Exchange Requests" above).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -1148,13 +1353,22 @@ delete/reorder):
   `links[]` of `{label, href, sortOrder}`, replaced wholesale on update) —
   the storefront footer's link columns (`Footer.tsx`, an async server
   component fetching both this and `SiteSettings` server-side), managed at
-  `/admin/footer`. Social icons in the footer's bottom row come from
+  `/admin/footer`. Social icons in the footer's "Follow Us" row come from
   `SiteSettings.socialLinks` (edited on `/admin/settings`, alongside the
   existing branding/contact fields) and render via
-  `components/ui/SocialIcon.tsx` — a small stroked-circle-with-monogram
-  glyph (not a brand logo) since lucide-react dropped brand/logo icons for
-  trademark reasons; do not add a brand-icon dependency to restore literal
-  logos without checking that constraint first.
+  `components/ui/SocialIcon.tsx`, which maps each `SocialPlatform` to a real
+  brand glyph from `react-icons/fa6` (`FaFacebookF`/`FaInstagram`/
+  `FaXTwitter`/`FaYoutube`/`FaLinkedinIn`/`FaWhatsapp`/`FaTiktok`) — added as
+  a deliberate, project-wide dependency once a brand-icon look was
+  explicitly requested; **this supersedes the earlier stroked-circle-monogram
+  fallback** this component used while lucide-react (which has no brand/logo
+  icons, for trademark reasons) was the only icon library in the project.
+  Facebook/Instagram/Twitter(X)/WhatsApp always render in the footer's
+  "Follow Us" row regardless of `SiteSettings.socialLinks` — each defaults to
+  `#` until an Admin/Super Admin sets a real URL for that platform, so a
+  fresh install still shows the expected four icons rather than hiding the
+  row entirely; any other configured platform (youtube/linkedin/tiktok)
+  still appends after them using its real URL.
 
 Both `/admin/navigation` and `/admin/footer` are `admin`/`super_admin`
 only (nav-hidden from `co_admin`, same restricted-page pattern as
@@ -1534,7 +1748,23 @@ correctly via a mocked `sendMail`, SMS gracefully `"skipped"` via a mocked
 customer reading and marking those notifications read via `/notifications/
 mine`; pause/resume recomputing `nextRunAt`; delete restricted to Super
 Admin; and `computeNextRun()`'s weekly-rollover and monthly-clamp-to-
-shorter-month math as plain unit tests). All suites run together via `npm test` (Jest +
+shorter-month math as plain unit tests), `productAlert.integration.test.ts`
+(back-in-stock alerts firing only once stock crosses 0 -> positive and only
+for subscribers, price-drop alerts firing only when the price falls below
+the captured reference and not when raised/unchanged, one-shot
+deactivation, and per-customer scoping/ownership on list and unsubscribe),
+and `returnRequest.integration.test.ts` (a return only requestable once
+`delivered`, duplicate-pending-request rejection, ownership scoping on both
+create and list, approving a `return` transitioning the order to
+`"returned"` while approving an `exchange` leaves the order untouched,
+rejection leaving the order alone, a already-reviewed request refusing a
+second review, and that a customer cannot review their own request), and
+`reportAnalytics.integration.test.ts` (sales bucketed correctly into a
+monthly time series across multiple orders, out-of-stock listing including
+only genuinely zero-stock variants and excluding merely-low ones,
+revenue-vs-expense merging periods that only have one side present, and the
+admin dashboard's new `outOfStockCount`/`recentOrders`/`recentActivities`
+fields). All suites run together via `npm test` (Jest +
 ts-jest, `backend/jest.config.js`, `tsconfig.jest.json` since the main
 `tsconfig.json` excludes `src/tests/**/*` from the build).
 
@@ -1570,14 +1800,16 @@ types/product.ts       Storefront view-model types (Product, Category, ProductVa
 `/categories`, `/offers` (products with a `compareAtPriceBDT` discount),
 `/cart`, `/wishlist`, `/account` (customer dashboard — a persistent left
 sidebar, `CustomerSidebar.tsx` — user card (avatar/name/email) + Dashboard /
-My Orders / Wishlist / Address / Manage Profile nav + Logout, all in the
-site's green-950/gold-500 palette — next to a content pane keyed off the
-active tab: `DashboardOverview.tsx` (six real-data stat cards — total/
+My Orders / Wishlist / My Alerts / Address / Manage Profile nav + Logout, all
+in the site's green-950/gold-500 palette — next to a content pane keyed off
+the active tab: `DashboardOverview.tsx` (six real-data stat cards — total/
 running orders, cart items, wishlist items, amount spent, saved addresses —
 plus dark-header "Recent Orders" and "Wishlist Items" summary panels with
-their own "All Orders"/"View More" shortcuts) or the existing `OrderHistory`
-/ `AddressBook` / `ProfileSection` components, plus a Wishlist tab reusing
-the same `ProductCard` grid as the standalone `/wishlist` page. Sidebar items
+their own "All Orders"/"View More" shortcuts), the existing `OrderHistory`
+/ `AddressBook` / `ProfileSection` components, a Wishlist tab reusing
+the same `ProductCard` grid as the standalone `/wishlist` page, or
+`AlertsSection.tsx` (the customer's own active Price Drop / Back-in-Stock
+subscriptions — see "Price Drop & Back-in-Stock Alerts" above). Sidebar items
 are deliberately scoped to features the API actually has — no
 promo-code/payment-method/support-ticket nav items were added since no
 backend exists for them. A signed-in staff account never sees this dashboard
@@ -1642,7 +1874,8 @@ button is role-aware — hidden for `admin`, "Request deletion" for
 picker on orders that are `ready_for_dispatch`/`delivery_failed` — see
 "Order status pipeline & delivery" above), `/admin/refunds` (Order Manager
 review + Admin/Super Admin approval — see "Finance module" above),
-`/admin/coupons` (reachable by `co_admin` now too — large-discount
+`/admin/returns` (Return/Exchange review queue — see "Return / Exchange
+Requests" above), `/admin/coupons` (reachable by `co_admin` now too — large-discount
 create/update requests may come back as a pending-approval notice instead
 of an immediate save), `/admin/campaigns` (Customer Messaging / Campaign
 Management — reachable by `co_admin` and `admin` too, scoped to their own
@@ -1871,37 +2104,66 @@ only ever targets customers — Cart with its count badge, account) +
 alone as a glyph. Row 2 is
 the admin-managed `NavLink` list plus the Categories dropdown. Below `lg`
 the nav row collapses into a **left-hand** drawer (hamburger sits on the
-left, drawer uses `animate-slide-in-left`), and the search bar drops to its
-own row. `HeaderSearchBar` submits to `/shop?q=…`, which `ShopPageClient`
-already reads — no new endpoint or search page; the richer live-results
-`SearchOverlay` still opens from the compact search icon on small screens.
+left, drawer uses `animate-slide-in-left`). `HeaderSearchBar` submits to
+`/shop?q=…`, which `ShopPageClient` already reads — no new endpoint or
+search page.
 
-**Sticky-on-scroll behaviour is pure CSS (`position: sticky`), deliberately
-not scroll-event-driven JS.** At `lg`+, row 1 is plain normal-flow content
-(`lg:static`) — it scrolls away naturally as the page scrolls, and row 2
-(`sticky top-0 z-50`) takes over as the pinned nav once row 1 has scrolled
-past. Below `lg`, row 2 doesn't render at all (nav links live in the
-drawer instead), so row 1 itself is the one that's `sticky top-0` there,
-and only the separate mobile search row (its own plain block below row 1)
-scrolls away normally underneath it. Scrolling back up reveals row 1 again
-exactly when its ordinary document position comes back into view — no
-JS, no state, nothing to animate, so there's no scroll-vs-animation race to
-cause jitter.
+**Mobile/tablet has exactly one search entry point: the compact search icon
+in row 1**, which opens the richer live-results `SearchOverlay`. There used
+to also be a second, full-width `HeaderSearchBar` row rendered directly below
+row 1 on every screen below `lg` — visibly duplicating the same search
+affordance right next to the icon that already opened it — so that row is
+now unconditionally `hidden` (not removed; `Header.tsx`'s own comment marks
+exactly where it lives if a future request asks for a second mobile search
+bar again). Desktop (`lg`+) is unaffected either way: row 1's inline
+`HeaderSearchBar` (`lg:flex`) is the only search bar there, same as before.
 
-The one non-obvious requirement this depends on: **`<header>` itself must
-be `display: contents`, not a normal block.** A `position: sticky`
-descendant's containing block is its nearest block-container ancestor
-*regardless of that ancestor's own `position`* (this "positioned ancestor"
-requirement only applies to `absolute`/`fixed`) — so an ordinary `<header>`
-wrapping both rows would silently cap how far either sticky row can
-travel to header's own short (~120px) box, un-sticking the instant the
-page scrolls past it, which is a real, easy-to-reintroduce regression that
-looks fine at the very top of the page and only breaks once you scroll
-further. `display: contents` removes header's own box (so its children's
-containing block becomes `<body>`, which spans the whole page) while
-keeping `<header>` in the accessibility tree as a landmark. Don't reintroduce
-a plain `<header className="...">` wrapper around the two rows without
-re-verifying this.
+**Scroll behaviour: row 1 hides on scroll-down and reappears on scroll-up,
+at `lg`+ only — row 2 always stays visible, sliding up to occupy row 1's
+vacated space.** This superseded an earlier pure-CSS-only design (no JS, row
+1 as plain normal-flow content that simply scrolled away) once product
+requirements called for row 1 to reappear on *any* upward scroll gesture
+from anywhere on the page, not just when scrolled all the way back near the
+top — a `position: sticky`/normal-flow handoff can't express that, since a
+statically-positioned element only comes back once the page's absolute
+scroll position returns to where that element naturally sits.
+
+The whole `<header>` is now **one single `sticky top-0 z-50` unit** (row 1
+and row 2 are its plain, non-positioned children) rather than two
+independently-sticky rows — this is what makes the header still respect
+`AnnouncementBar` above it exactly like before (a sticky element only starts
+pinning once its own natural document position would scroll past `top: 0`,
+i.e. once the announcement strip has already scrolled out of view), with no
+spacer or height calculation needed for that interaction. Internally:
+
+- Row 1 (logo/search/actions, plus the mobile-only search row beneath it,
+  both wrapped in one `topBarRef`-measured div) gets `translateY(-100%)`
+  on scroll-down and `translateY(0)` on scroll-up, via a `hideTopBar` state
+  toggled by a `scroll`-event listener (`Header.tsx`) — `SCROLL_HIDE_THRESHOLD_PX`
+  (80) keeps it from hiding while still near the top of the page, and
+  `SCROLL_DELTA_PX` (8) ignores momentum/sub-pixel jitter.
+- Row 2 is translated by row 1's *measured* height (`topBarHeight`, tracked
+  via `ResizeObserver` since row 1's real height differs by breakpoint) in
+  lock-step with row 1's own transform — both share the same
+  `duration-300 ease-in-out` transition, so row 2 slides up to exactly fill
+  row 1's vacated space with no gap and no layout jump.
+- The hide/show only ever activates at `lg`+ (checked via
+  `window.matchMedia("(min-width: 1024px)")` inside the scroll handler) —
+  below `lg`, row 2 doesn't render at all (nav links live in the drawer
+  instead), so row 1 stays the single, always-visible mobile nav bar exactly
+  as before this change.
+- Deliberately **transform-only, never an animated height/grid-rows
+  collapse** — that combination was tried once already elsewhere in this
+  header (see the mobile-drawer history) and caused a stutter fighting live
+  scroll input; nothing here animates any element's box size, so there's
+  nothing to fight the scroll gesture.
+
+Since the header is a single real `sticky` box now (not `display: contents`
++ two independently-sticky children), the earlier "`<header>` must be
+`display: contents`" requirement no longer applies — don't reintroduce it,
+and don't reintroduce two separately-`sticky` rows either; the single
+sticky wrapper is now the whole mechanism both interactions (announcement
+bar handoff, hide/show) depend on.
 
 **Row 2 is a fixed premium emerald/gold bar — a deliberate exception to
 site-wide dark mode.** `navLinkClass()` styles each link as a rounded-full
@@ -2557,6 +2819,19 @@ catch-all rewrite here.
   per-user deny list and no way to give an Employee *fewer* permissions than
   their built-in role carries — narrowing means re-permissioning the built-in
   role itself, which affects everyone holding it.
+- **An approved Exchange request is not automatically fulfilled.** There is
+  no replacement-order or automated stock-swap system — approving a
+  `ReturnRequest` of `type: "exchange"` only records the approval and the
+  customer's `desiredExchangeDetails`; a staff member handles the actual
+  swap manually (creating a new order, adjusting stock) outside this
+  endpoint. Only `type: "return"` moves the underlying order (to
+  `"returned"`).
+- **No true PDF or Excel (.xlsx) export exists.** CSV export (`lib/
+  csvExport.ts`) is hand-rolled and needs no dependency; "export as PDF" on
+  the Sales Report is the browser's own print-to-PDF, not a generated file
+  (see "Sales Analytics & Reports" above) — there is still no PDF-generation
+  or spreadsheet library anywhere in this project. Reach for CSV (which
+  Excel opens natively) if a real file is needed.
 
 - **Test coverage is basic, not comprehensive** — the backend has unit specs
   plus a small set of integration tests (auth, catalog, order, orderStatus,

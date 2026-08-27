@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Boxes } from "lucide-react";
-import { adjustStock, listInventoryLogs, listLowStockProducts } from "@/lib/api/inventory";
+import { adjustStock, listInventoryLogs, listLowStockProducts, listOutOfStockProducts } from "@/lib/api/inventory";
 import { listProducts } from "@/lib/api/products";
 import { ApiClientError } from "@/lib/api/client";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -11,7 +11,7 @@ import { Modal } from "@/components/admin/Modal";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
 import { InventoryAdjustForm, type InventoryAdjustFormResult } from "@/components/admin/InventoryAdjustForm";
-import type { ApiInventoryLog, InventoryLogReason, LowStockEntry } from "@/types/hr";
+import type { ApiInventoryLog, InventoryLogReason, LowStockEntry, OutOfStockEntry } from "@/types/hr";
 import type { ApiProduct, Pagination } from "@/types/api";
 
 const REASON_LABELS: Record<InventoryLogReason, string> = {
@@ -27,6 +27,9 @@ function refName(ref: string | { name: string }): string {
 export default function AdminInventoryPage() {
   const [lowStock, setLowStock] = useState<LowStockEntry[]>([]);
   const [isLowStockLoading, setIsLowStockLoading] = useState(true);
+
+  const [outOfStock, setOutOfStock] = useState<OutOfStockEntry[]>([]);
+  const [isOutOfStockLoading, setIsOutOfStockLoading] = useState(true);
 
   const [logs, setLogs] = useState<ApiInventoryLog[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -48,6 +51,14 @@ export default function AdminInventoryPage() {
       .finally(() => setIsLowStockLoading(false));
   }
 
+  function loadOutOfStock() {
+    setIsOutOfStockLoading(true);
+    listOutOfStockProducts()
+      .then(({ data }) => setOutOfStock(data.products))
+      .catch(() => {})
+      .finally(() => setIsOutOfStockLoading(false));
+  }
+
   function loadLogs() {
     setIsLoading(true);
     listInventoryLogs({ page, limit: 30 })
@@ -65,6 +76,9 @@ export default function AdminInventoryPage() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(loadLowStock, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(loadOutOfStock, []);
 
   useEffect(() => {
     listProducts({ limit: 100 })
@@ -90,6 +104,7 @@ export default function AdminInventoryPage() {
       setIsAdjusting(false);
       loadLogs();
       loadLowStock();
+      loadOutOfStock();
     } catch (err) {
       setFormError(err instanceof ApiClientError ? err.message : "Could not adjust stock.");
     } finally {
@@ -131,6 +146,28 @@ export default function AdminInventoryPage() {
                     <li key={v._id}>
                       {v.label}: {v.stock} left (threshold {v.lowStockThreshold})
                     </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-8">
+        <h2 className="mb-3 font-serif text-lg text-green-950">Out of Stock</h2>
+        {isOutOfStockLoading ? (
+          <TableSkeleton rows={2} />
+        ) : outOfStock.length === 0 ? (
+          <p className="text-sm text-brown-500">Nothing is currently out of stock.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {outOfStock.map((entry) => (
+              <div key={entry.product._id} className="rounded-lg border border-brown-600/20 bg-cream-200 px-4 py-3">
+                <p className="font-medium text-green-950">{entry.product.name}</p>
+                <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-brown-600">
+                  {entry.outOfStockVariants.map((v) => (
+                    <li key={v._id}>{v.label}: Stock Out</li>
                   ))}
                 </ul>
               </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { PackageSearch } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Camera, PackageSearch } from "lucide-react";
 import {
   listAssignedOrders,
   getOrder,
@@ -20,21 +21,39 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import type { ApiOrder, Pagination } from "@/types/api";
 
+const DELIVERY_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "assigned_to_agent", label: "assigned to agent" },
+  { value: "picked_up,out_for_delivery", label: "in transit" },
+  { value: "delivered", label: "delivered" },
+  { value: "delivery_failed", label: "delivery failed" },
+  { value: "returned", label: "returned" },
+];
+
 function customerName(customer: ApiOrder["customer"]): string {
   return typeof customer === "string" ? customer : customer.name;
 }
 
 export default function DeliveryOrdersPage() {
+  return (
+    <Suspense fallback={<TableSkeleton />}>
+      <DeliveryOrdersPageContent />
+    </Suspense>
+  );
+}
+
+function DeliveryOrdersPageContent() {
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<ApiOrder[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
 
   function load() {
     setIsLoading(true);
-    listAssignedOrders(page, 20)
+    listAssignedOrders(page, 20, statusFilter || undefined)
       .then(({ data, pagination: pg }) => {
         setOrders(data.orders);
         setPagination(pg ?? null);
@@ -45,11 +64,29 @@ export default function DeliveryOrdersPage() {
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(load, [page]);
+  useEffect(load, [page, statusFilter]);
 
   return (
     <div>
       <PageHeader title="Assigned Orders" description="Orders assigned to you for delivery." />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+          }}
+          className="h-9 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+        >
+          <option value="">All statuses</option>
+          {DELIVERY_STATUS_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {isLoading ? (
         <TableSkeleton />
@@ -122,6 +159,7 @@ function DeliveryOrderModal({
   const [isActing, setIsActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
+  const [proofImage, setProofImage] = useState<File | null>(null);
   const [failureReason, setFailureReason] = useState("");
   const [note, setNote] = useState("");
   const [showFailureForm, setShowFailureForm] = useState(false);
@@ -196,10 +234,11 @@ function DeliveryOrderModal({
     setActionError(null);
     setIsActing(true);
     try {
-      const { data } = await verifyDeliveryOtp(order._id, otp.trim(), note || undefined);
+      const { data } = await verifyDeliveryOtp(order._id, otp.trim(), note || undefined, proofImage ?? undefined);
       setOrder(data.order);
       setOtp("");
       setNote("");
+      setProofImage(null);
       onUpdated();
     } catch (err) {
       setActionError(err instanceof ApiClientError ? err.message : "Could not verify OTP.");
@@ -324,7 +363,7 @@ function DeliveryOrderModal({
                     <p className="mb-2 text-sm text-gold-700">
                       Ask the customer for their delivery verification code and enter it below to confirm receipt.
                     </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
                         value={otp}
                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
@@ -333,6 +372,16 @@ function DeliveryOrderModal({
                         maxLength={4}
                         className="h-9 w-32 rounded border border-brown-600/20 bg-surface px-3 text-sm text-green-950 placeholder:text-brown-500/60 focus:outline-none focus:ring-1 focus:ring-green-900/30"
                       />
+                      <label className="flex h-9 cursor-pointer items-center gap-1.5 rounded border border-brown-600/20 bg-surface px-3 text-xs font-semibold text-brown-600 hover:border-green-900/30">
+                        <Camera size={14} />
+                        {proofImage ? proofImage.name : "Add photo proof (optional)"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => setProofImage(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
                       <Button
                         variant="primary"
                         size="sm"

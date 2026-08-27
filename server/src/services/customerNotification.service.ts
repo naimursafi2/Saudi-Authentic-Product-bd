@@ -36,6 +36,26 @@ export async function createCampaignNotifications(opts: {
   }
 }
 
+/**
+ * The same Website Notification inbox, for the handful of system-triggered
+ * alerts that aren't part of a Campaign (price-drop/back-in-stock — see
+ * `productAlert.service.ts`). `campaign` is simply omitted; the model has
+ * always allowed that (it's optional on the schema). Still not a general
+ * notification framework — just this one inbox covering campaign sends and
+ * these system alerts, both surfaced through the same bell/list/mark-read UI.
+ */
+export async function createUserNotification(opts: {
+  userId: Types.ObjectId | string;
+  title: string;
+  message: string;
+}): Promise<void> {
+  try {
+    await NotificationModel.create({ user: opts.userId, title: opts.title, message: opts.message });
+  } catch (err) {
+    console.error("[notification] create failed:", (err as Error).message);
+  }
+}
+
 export async function listMyNotifications(
   userId: string,
   filter: { page: number; limit: number; unreadOnly?: boolean }

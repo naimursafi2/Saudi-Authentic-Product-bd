@@ -66,6 +66,9 @@ export const PERMISSIONS = [
   "refunds.request",
   "refunds.review",
   "refunds.approve",
+  "returns.view",
+  "returns.request",
+  "returns.review",
   "campaigns.view",
   "campaigns.create",
   "campaigns.edit",
@@ -85,14 +88,17 @@ export type Permission = (typeof PERMISSIONS)[number];
  * holding any of these gets through `/admin` without being added to
  * `ADMIN_PORTAL_ROLES` in code — which is the whole point of custom roles.
  *
- * The three excluded permissions belong to people who are not admin staff:
+ * The excluded permissions belong to people who are not admin staff:
  * `orders.deliver` is the Delivery Portal's, and `refunds.request`/
- * `refunds.view` are held by ordinary customers for their own orders.
+ * `refunds.view`/`returns.request`/`returns.view` are held by ordinary
+ * customers for their own orders.
  */
 const NON_ADMIN_PORTAL_PERMISSIONS: Permission[] = [
   "orders.deliver",
   "refunds.request",
   "refunds.view",
+  "returns.request",
+  "returns.view",
 ];
 
 export function grantsAdminPortalAccess(permissions: Permission[]): boolean {

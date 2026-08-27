@@ -5,4 +5,11 @@ export const financeSummaryQuerySchema = z.object({
   to: z.coerce.date().optional(),
 });
 
+export const revenueVsExpenseQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  groupBy: z.enum(["day", "week", "month"]).default("month"),
+});
+
 export type FinanceSummaryQuery = z.infer<typeof financeSummaryQuerySchema>;
+export type RevenueVsExpenseQuery = z.infer<typeof revenueVsExpenseQuerySchema>;

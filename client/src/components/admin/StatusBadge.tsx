@@ -30,6 +30,7 @@ const PALETTE: Record<string, string> = {
   present: "bg-success-soft text-green-900",
   shipped: "bg-success-soft text-green-900",
   active: "bg-success-soft text-green-900",
+  verified: "bg-success-soft text-green-900",
   assigned_to_agent: "bg-success-soft text-green-900",
   picked_up: "bg-success-soft text-green-900",
   out_for_delivery: "bg-success-soft text-green-900",
@@ -47,6 +48,7 @@ const PALETTE: Record<string, string> = {
   returned: "bg-danger-soft text-danger",
   refunded: "bg-danger-soft text-danger",
   failed: "bg-danger-soft text-danger",
+  unverified: "bg-gold-soft text-gold-700",
 };
 
 export function StatusBadge({ status }: { status: string }) {

@@ -67,9 +67,9 @@ export default function DeliveryDashboardPage() {
   });
 
   const statCards = [
-    { icon: UserCheck, label: "Awaiting Pickup", value: assigned.length },
-    { icon: Truck, label: "In Transit", value: inTransit.length },
-    { icon: CheckCircle2, label: "Delivered", value: delivered.length },
+    { icon: UserCheck, label: "Awaiting Pickup", value: assigned.length, href: "/delivery/orders?status=assigned_to_agent" },
+    { icon: Truck, label: "In Transit", value: inTransit.length, href: "/delivery/orders?status=picked_up,out_for_delivery" },
+    { icon: CheckCircle2, label: "Delivered", value: delivered.length, href: "/delivery/orders?status=delivered" },
   ];
 
   return (
@@ -86,7 +86,11 @@ export default function DeliveryDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {statCards.map((card) => (
-          <div key={card.label} className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-surface p-4">
+          <Link
+            key={card.label}
+            href={card.href}
+            className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-surface p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+          >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
               <card.icon size={16} />
             </span>
@@ -94,7 +98,7 @@ export default function DeliveryDashboardPage() {
               <span className="block text-lg font-semibold text-green-950">{card.value}</span>
               <span className="block text-xs text-brown-500">{card.label}</span>
             </span>
-          </div>
+          </Link>
         ))}
       </div>
 

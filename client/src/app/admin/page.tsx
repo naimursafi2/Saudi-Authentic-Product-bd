@@ -7,6 +7,7 @@ import {
   Users,
   Package,
   AlertTriangle,
+  PackageX,
   CalendarClock,
   TrendingUp,
 } from "lucide-react";
@@ -14,6 +15,8 @@ import { getAdminDashboard } from "@/lib/api/reports";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
+import { StatusBadge } from "@/components/admin/StatusBadge";
+import { ActionBadge, actorName, friendlyNote, resourceLabel } from "@/lib/auditLogDisplay";
 import type { AdminDashboard } from "@/types/hr";
 
 const STAT_CARDS: {
@@ -27,8 +30,13 @@ const STAT_CARDS: {
   { key: "totalCustomers", label: "Customers", icon: Users, href: "/admin/customers" },
   { key: "totalProducts", label: "Active Products", icon: Package, href: "/admin/products" },
   { key: "lowStockCount", label: "Low Stock Alerts", icon: AlertTriangle, href: "/admin/inventory" },
+  { key: "outOfStockCount", label: "Out of Stock", icon: PackageX, href: "/admin/inventory" },
   { key: "pendingLeaves", label: "Pending Leave Requests", icon: CalendarClock, href: "/admin/leave" },
 ];
+
+function customerName(customer: AdminDashboard["recentOrders"][number]["customer"]): string {
+  return typeof customer === "string" ? customer : customer.name;
+}
 
 export default function AdminDashboardPage() {
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
@@ -115,6 +123,61 @@ export default function AdminDashboardPage() {
                       </span>
                     </li>
                   ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
+              <h2 className="mb-4 font-serif text-lg text-green-950">Recent Orders</h2>
+              {dashboard.recentOrders.length === 0 ? (
+                <p className="text-sm text-brown-500">No orders yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {dashboard.recentOrders.map((order) => (
+                    <li key={order._id}>
+                      <Link
+                        href={`/admin/orders?viewOrder=${order._id}`}
+                        className="flex items-center justify-between gap-3 text-sm hover:text-green-950"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-green-950">#{order.orderNumber}</span>
+                          <span className="block truncate text-xs text-brown-500">{customerName(order.customer)}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <StatusBadge status={order.status} />
+                          <span className="text-brown-600">{formatBDT(order.totalBDT)}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
+              <h2 className="mb-4 font-serif text-lg text-green-950">Recent Activities</h2>
+              {dashboard.recentActivities.length === 0 ? (
+                <p className="text-sm text-brown-500">No recent activity.</p>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {dashboard.recentActivities.map((log) => {
+                    const resource = resourceLabel(log);
+                    return (
+                      <li key={log._id} className="flex items-start justify-between gap-3 text-sm">
+                        <span className="min-w-0">
+                          <ActionBadge action={log.action} />
+                          <span className="mt-1 block truncate text-xs text-brown-500">
+                            {actorName(log.actor)} &middot; {friendlyNote(log)}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs text-brown-500">
+                          {resource.name ?? resource.type}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

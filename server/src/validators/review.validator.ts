@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const createReviewSchema = z.object({
-  rating: z.number().int().min(1).max(5),
+  // `z.coerce` so this still parses correctly when sent as multipart/form-data
+  // (alongside optional review-photo uploads), where every field arrives as a string.
+  rating: z.coerce.number().int().min(1).max(5),
   comment: z.string().trim().min(2).max(1000),
 });
 

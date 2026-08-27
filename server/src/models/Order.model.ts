@@ -73,8 +73,12 @@ export interface IOrder extends Document {
   deliveryNotes?: string;
   /** Set by the delivery agent on `delivery_failed`. */
   failureReason?: string;
+  /** Optional photo proof of delivery, uploaded by the delivery agent at the same moment OTP verification succeeds. */
+  deliveryProofImage?: { url: string; publicId: string };
   createdAt: Date;
   updatedAt: Date;
+  /** Derived, never stored — see `computeEstimatedDeliveryDate()`. Undefined once the order is delivered or in a terminal/branch status. */
+  estimatedDeliveryDate?: Date;
 }
 
 const orderItemSchema = new Schema<IOrderItem>(
@@ -153,16 +157,44 @@ const orderSchema = new Schema<IOrder>(
     deliveredBy: { type: Schema.Types.ObjectId, ref: "User" },
     deliveryNotes: { type: String, trim: true, maxlength: 1000 },
     failureReason: { type: String, trim: true, maxlength: 500 },
+    deliveryProofImage: {
+      url: { type: String },
+      publicId: { type: String },
+    },
   },
   {
     timestamps: true,
     toJSON: {
+      virtuals: true,
       transform: (_doc, ret) => {
         delete ret.otpCode;
         return ret;
       },
     },
+    toObject: { virtuals: true },
   }
 );
+
+/** Statuses an estimate is no longer meaningful for — either already resolved or on a branch path. */
+const ESTIMATE_HIDDEN_STATUSES: OrderStatus[] = [
+  "delivered",
+  "delivery_failed",
+  "cancelled",
+  "returned",
+  "refunded",
+];
+
+/** Calendar days from order placement to the expected delivery, by delivery method. */
+export const ESTIMATED_DELIVERY_DAYS: Record<DeliveryMethod, number> = {
+  standard: 5,
+  express: 2,
+};
+
+orderSchema.virtual("estimatedDeliveryDate").get(function estimatedDeliveryDate(this: IOrder) {
+  if (ESTIMATE_HIDDEN_STATUSES.includes(this.status)) return undefined;
+  const date = new Date(this.createdAt);
+  date.setDate(date.getDate() + ESTIMATED_DELIVERY_DAYS[this.deliveryMethod]);
+  return date;
+});
 
 export const OrderModel: Model<IOrder> = model<IOrder>("Order", orderSchema);

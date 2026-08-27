@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ApiInventoryLog, LowStockEntry, StockLevelProduct } from "@/types/hr";
+import type { ApiInventoryLog, LowStockEntry, OutOfStockEntry, StockLevelProduct } from "@/types/hr";
 
 /** Applies immediately only for `super_admin`; every other role gets back a
  * `pendingActionId` and the live stock is unchanged until a Super Admin
@@ -26,4 +26,8 @@ export async function listInventoryLogs(params: { product?: string; page?: numbe
 
 export async function listLowStockProducts() {
   return api.get<{ products: LowStockEntry[] }>("/inventory/low-stock");
+}
+
+export async function listOutOfStockProducts() {
+  return api.get<{ products: OutOfStockEntry[] }>("/inventory/out-of-stock");
 }

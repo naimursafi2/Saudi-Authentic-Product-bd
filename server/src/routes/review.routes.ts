@@ -3,6 +3,7 @@ import * as reviewController from "../controllers/review.controller";
 import { authenticate, requireEmailVerified } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
+import { upload } from "../middlewares/upload.middleware";
 import {
   createReviewSchema,
   listRecentReviewsQuerySchema,
@@ -38,6 +39,9 @@ router.post(
   "/product/:productId",
   authenticate,
   requireEmailVerified,
+  // Optional review photos — multer passes a plain JSON request straight
+  // through untouched, so an existing JSON-only caller keeps working.
+  upload.array("images", 4),
   validate({ params: productIdParamSchema, body: createReviewSchema }),
   reviewController.createReview
 );

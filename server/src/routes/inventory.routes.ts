@@ -28,6 +28,7 @@ router.get(
 const CAN_READ_LOGS = requirePermission("inventory.logs.view");
 
 router.get("/low-stock", CAN_READ_LOGS, inventoryController.lowStock);
+router.get("/out-of-stock", CAN_READ_LOGS, inventoryController.outOfStock);
 router.get(
   "/logs",
   CAN_READ_LOGS,

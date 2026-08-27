@@ -421,3 +421,23 @@ body {
     width: 100%;
   }
 }
+
+/* Generic version of the rule above, for any other "print this one section"
+   need (e.g. the Reports page's sales table) — same technique, a reusable
+   class instead of one component's specific id. No PDF library anywhere in
+   this project; "export as PDF" is always the browser's own "Save as PDF"
+   print destination on a print-isolated view like this one. */
+@media print {
+  body:has(.print-area) * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
+}

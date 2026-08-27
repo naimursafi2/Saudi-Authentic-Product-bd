@@ -12,6 +12,7 @@ import {
 } from "./pendingAction.service";
 import { recordAuditLog } from "./auditLog.service";
 import { requestVariantStockUpdate, type DesiredVariantStock, type StockActor } from "./inventory.service";
+import { notifyPriceDropSubscribers } from "./productAlert.service";
 import type {
   CreateProductInput,
   ListProductsQuery,
@@ -353,6 +354,18 @@ export async function updateProduct(
   }
 
   await product.save();
+
+  if (submittedVariants) {
+    // Fire price-drop alerts for whichever existing variants just got cheaper.
+    // Price is a content field (never stock-gated, see above), so this fires
+    // the moment the save lands, same as the audit log below.
+    for (const variant of product.variants) {
+      const previous = existingById.get(variant._id!.toString());
+      if (previous && variant.priceBDT < previous.priceBDT) {
+        await notifyPriceDropSubscribers(product._id.toString(), variant._id!.toString(), variant.priceBDT);
+      }
+    }
+  }
 
   if (Object.keys(fieldChanges).length > 0) {
     await recordAuditLog({

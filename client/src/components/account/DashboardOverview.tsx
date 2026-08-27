@@ -67,11 +67,12 @@ export function DashboardOverview({
     icon: typeof ShoppingBag;
     tone: "green" | "gold";
     loading: boolean;
+    onClick?: () => void;
   }[] = [
-    { label: "Total order placed", value: String(orders.length), icon: ShoppingBag, tone: "green", loading: isLoading },
-    { label: "Running orders", value: String(runningOrders), icon: PackageCheck, tone: "green", loading: isLoading },
+    { label: "Total order placed", value: String(orders.length), icon: ShoppingBag, tone: "green", loading: isLoading, onClick: onViewOrders },
+    { label: "Running orders", value: String(runningOrders), icon: PackageCheck, tone: "green", loading: isLoading, onClick: onViewOrders },
     { label: "Items in cart", value: String(totalQuantity), icon: ShoppingCart, tone: "green", loading: false },
-    { label: "Product in wishlist", value: String(wishlistItems.length), icon: Heart, tone: "green", loading: false },
+    { label: "Product in wishlist", value: String(wishlistItems.length), icon: Heart, tone: "green", loading: false, onClick: onViewWishlist },
     { label: "Amount spent", value: formatBDT(amountSpent), icon: Wallet, tone: "gold", loading: isLoading },
     { label: "Saved addresses", value: String(user.addresses.length), icon: MapPin, tone: "green", loading: false },
   ];
@@ -80,9 +81,15 @@ export function DashboardOverview({
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => (
-          <div
+          <button
             key={stat.label}
-            className="flex items-center justify-between gap-3 rounded-xl border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+            type="button"
+            disabled={!stat.onClick}
+            onClick={stat.onClick}
+            className={cn(
+              "flex w-full items-center justify-between gap-3 rounded-xl border border-brown-600/10 bg-surface p-5 text-left shadow-[0_1px_2px_rgba(61,43,31,0.04)]",
+              stat.onClick && "cursor-pointer transition-shadow hover:shadow-md"
+            )}
           >
             <div>
               <p className="text-2xl font-semibold text-green-950">{stat.loading ? "—" : stat.value}</p>
@@ -96,7 +103,7 @@ export function DashboardOverview({
             >
               <stat.icon size={20} />
             </span>
-          </div>
+          </button>
         ))}
       </div>
 

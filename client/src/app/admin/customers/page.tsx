@@ -18,8 +18,22 @@ function isLocked(user: ApiUser): boolean {
   return Boolean(user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now());
 }
 
-/** Live counts, never hardcoded — see `user.service.ts#getCustomerStats`. */
-function CustomerStatCards({ stats }: { stats: CustomerStats | null }) {
+type CustomerFilterKey = "total" | "verified" | "unverified" | "active" | "inactive";
+
+/**
+ * Live counts, never hardcoded — see `user.service.ts#getCustomerStats`.
+ * Each card doubles as a filter toggle for the table below it: clicking a
+ * card scopes the list to that segment, clicking the active one again clears it.
+ */
+function CustomerStatCards({
+  stats,
+  activeFilter,
+  onSelect,
+}: {
+  stats: CustomerStats | null;
+  activeFilter: CustomerFilterKey;
+  onSelect: (key: CustomerFilterKey) => void;
+}) {
   const cards = [
     { key: "total", label: "Total Customers", value: stats?.total, icon: Users },
     { key: "verified", label: "Verified", value: stats?.verified, icon: BadgeCheck },
@@ -30,17 +44,29 @@ function CustomerStatCards({ stats }: { stats: CustomerStats | null }) {
 
   return (
     <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-      {cards.map((card) => (
-        <div key={card.key} className="flex items-center gap-3 rounded-lg border border-brown-600/10 bg-surface p-4">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
-            <card.icon size={16} />
-          </span>
-          <span>
-            <span className="block text-lg font-semibold text-green-950">{card.value ?? "—"}</span>
-            <span className="block text-xs text-brown-500">{card.label}</span>
-          </span>
-        </div>
-      ))}
+      {cards.map((card) => {
+        const isActive = activeFilter === card.key;
+        return (
+          <button
+            key={card.key}
+            type="button"
+            onClick={() => onSelect(card.key)}
+            className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 text-left transition-colors ${
+              isActive
+                ? "border-green-900/30 bg-green-950/5 ring-1 ring-green-900/20"
+                : "border-brown-600/10 bg-surface hover:bg-cream-100"
+            }`}
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-green-950/5 text-green-900">
+              <card.icon size={16} />
+            </span>
+            <span>
+              <span className="block text-lg font-semibold text-green-950">{card.value ?? "—"}</span>
+              <span className="block text-xs text-brown-500">{card.label}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -62,12 +88,20 @@ export default function AdminCustomersPage() {
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [stats, setStats] = useState<CustomerStats | null>(null);
+  const [segmentFilter, setSegmentFilter] = useState<CustomerFilterKey>("total");
 
-  useEffect(() => {
+  function refreshStats() {
     getCustomerStats()
       .then(({ data }) => setStats(data))
       .catch(() => setStats(null));
-  }, []);
+  }
+
+  useEffect(refreshStats, []);
+
+  function handleSelectSegment(key: CustomerFilterKey) {
+    setSegmentFilter((current) => (current === key ? "total" : key));
+    setPage(1);
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -79,7 +113,14 @@ export default function AdminCustomersPage() {
 
   function load() {
     setIsLoading(true);
-    listUsers({ role: "customer", search: debouncedSearch || undefined, page, limit: 20 })
+    listUsers({
+      role: "customer",
+      search: debouncedSearch || undefined,
+      isActive: segmentFilter === "active" ? true : segmentFilter === "inactive" ? false : undefined,
+      isEmailVerified: segmentFilter === "verified" ? true : segmentFilter === "unverified" ? false : undefined,
+      page,
+      limit: 20,
+    })
       .then(({ data, pagination: pg }) => {
         setCustomers(data.users);
         setPagination(pg ?? null);
@@ -90,7 +131,7 @@ export default function AdminCustomersPage() {
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(load, [page, debouncedSearch]);
+  useEffect(load, [page, debouncedSearch, segmentFilter]);
 
   async function handleToggleStatus(customer: ApiUser) {
     const action = customer.isActive ? "deactivate" : "reactivate";
@@ -105,6 +146,7 @@ export default function AdminCustomersPage() {
     try {
       await updateUserStatus(customer._id, !customer.isActive);
       load();
+      refreshStats();
     } finally {
       setUpdatingId(null);
     }
@@ -147,7 +189,7 @@ export default function AdminCustomersPage() {
     <div>
       <PageHeader title="Customers" description="Browse registered customers and manage account access." />
 
-      <CustomerStatCards stats={stats} />
+      <CustomerStatCards stats={stats} activeFilter={segmentFilter} onSelect={handleSelectSegment} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-xs">
@@ -183,6 +225,7 @@ export default function AdminCustomersPage() {
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Addresses</th>
                 <th className="px-4 py-3">Joined</th>
+                <th className="px-4 py-3">Verification</th>
                 <th className="px-4 py-3">Status</th>
                 {(canManageStatus || canImpersonate) && <th className="px-4 py-3" />}
               </tr>
@@ -196,6 +239,9 @@ export default function AdminCustomersPage() {
                   <td className="px-4 py-3 text-brown-600">{customer.addresses.length}</td>
                   <td className="px-4 py-3 text-brown-600">
                     {new Date(customer.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={customer.isEmailVerified ? "verified" : "unverified"} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Heart,
@@ -108,6 +108,13 @@ function mobileNavLinkClass(active: boolean) {
 const MOBILE_ITEM_CLASS =
   "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-3 text-sm font-semibold tracking-[0.04em] text-green-950 transition-colors duration-150 hover:bg-green-950/10 hover:text-gold-600 active:bg-green-950/15 active:text-gold-600";
 
+/** Only hide-on-scroll at `lg`+, where row 2 exists to stay pinned in row 1's place — see the header's own comment. */
+const DESKTOP_QUERY = "(min-width: 1024px)";
+/** Ignore the first bit of scroll so the bar never hides while still near the top of the page. */
+const SCROLL_HIDE_THRESHOLD_PX = 80;
+/** Ignore sub-pixel/momentum jitter so a barely-there scroll doesn't flicker the bar. */
+const SCROLL_DELTA_PX = 8;
+
 interface HeaderProps {
   /** Fetched once, server-side, by the (site) layout — see its comment for why. */
   initialCategories: Category[];
@@ -127,6 +134,60 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
   const [mobileOpen, setMobileOpen] = useState(false);
   const siteName = settings?.siteName || "Saudi Authentic Product";
   const isAuthenticated = status === "authenticated" && Boolean(user);
+
+  // Row 1 (logo/search/actions) hides on scroll-down and reappears on
+  // scroll-up, at `lg`+ only — row 2 (the nav-links bar below it) stays put
+  // and slides up to occupy row 1's vacated space by the same measured
+  // amount, so there's no gap and no layout jump. Below `lg`, row 2 doesn't
+  // render at all (see row 2's own comment), so row 1 stays the single,
+  // always-visible mobile nav bar exactly as before.
+  const [hideTopBar, setHideTopBar] = useState(false);
+  const [topBarHeight, setTopBarHeight] = useState(0);
+  const topBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const topBarEl = topBarRef.current;
+    if (!topBarEl || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setTopBarHeight(entry.contentRect.height);
+    });
+    observer.observe(topBarEl);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+
+    function onScroll() {
+      const y = window.scrollY;
+      const isDesktop = window.matchMedia(DESKTOP_QUERY).matches;
+
+      if (!isDesktop || y <= SCROLL_HIDE_THRESHOLD_PX) {
+        setHideTopBar(false);
+        lastY = y;
+        return;
+      }
+
+      const delta = y - lastY;
+      if (delta > SCROLL_DELTA_PX) {
+        setHideTopBar(true);
+        lastY = y;
+      } else if (delta < -SCROLL_DELTA_PX) {
+        setHideTopBar(false);
+        lastY = y;
+      }
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    // A breakpoint crossing (e.g. rotating a tablet) without any scroll
+    // wouldn't otherwise re-evaluate `isDesktop` until the next scroll event.
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
 
   // "More" menu — About Us / Wishlist / FAQs / Call Us / WhatsApp, in the
   // header's row 2 on desktop and the mobile drawer below `lg`. Call
@@ -170,32 +231,41 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
 
   return (
     <>
-      {/* `display: contents` (not a normal block): a `position: sticky`
-          descendant's containing block is its nearest block-container
-          ancestor REGARDLESS of that ancestor's own `position` (this only
-          differs for absolute/fixed, which need a positioned ancestor) — so
-          a plain, ordinary `<header>` wrapping both rows would silently cap
-          how far row 1 (sticky below `lg`) and row 2 (sticky at `lg`+) can
-          stick to header's own short ~124px box, un-sticking the instant
-          the page scrolls past it. `contents` removes header's own box
-          entirely (so its children's containing block becomes `<body>`,
-          which spans the whole page) while keeping `<header>` in the
-          accessibility tree as a landmark — verified empirically: nav
-          stayed pinned through a full scroll only after this change, not
-          before. Confirmed independently that this isn't the earlier
-          "stuttering" bug either — that was caused by an animated
-          grid-template-rows collapse fighting live scroll input on a
-          sticky element's OWN box; nothing here animates any element's
-          size, so there's nothing to fight the scroll gesture. */}
-      <header className="contents">
-        {/* ---------- Row 1: logo | search | labelled actions ----------
-            Sticky only below `lg` (it's the only persistent nav bar on
-            mobile, so it stays put); at `lg`+ it's plain normal-flow
-            content, so it scrolls away naturally as the page scrolls and
-            row 2 takes over as the sticky nav — no JS, no animated
-            height/collapse, just native `position: sticky` plus ordinary
-            document flow, which is what keeps this perfectly smooth. */}
-        <div className="sticky top-0 z-50 bg-navbar shadow-[0_1px_3px_rgba(1,45,29,0.08)] lg:static lg:shadow-none">
+      {/* A single sticky unit (not `display: contents` any more): the
+          whole header sticks to the viewport as one box, and row 1 / row 2
+          are plain, non-positioned children inside it — internal CSS
+          `transform`s handle the hide/show below, not a second layer of
+          sticky positioning. This still respects the `AnnouncementBar`
+          above it exactly like before (a sticky element only starts
+          pinning once its own natural document position would scroll past
+          `top: 0`, i.e. once the announcement strip has already scrolled
+          out of view), so no spacer or height calculation is needed for
+          that interaction.
+
+          Row 1 hides via `translateY(-100%)` on scroll-down and reappears
+          on scroll-up (`hideTopBar` state above), at `lg`+ only. Row 2 is
+          translated by the *measured* height of row 1 (`topBarHeight`, via
+          `ResizeObserver` — row 1's real height differs by breakpoint, so a
+          hardcoded pixel value would drift) in lock-step, so it slides up
+          to exactly fill row 1's vacated space with no gap and no layout
+          jump — both use the same `duration-300 ease-in-out` transition so
+          they move together. Deliberately transform-only, never an animated
+          height/grid-rows collapse: that was tried once already elsewhere in
+          this header and caused a stutter fighting live scroll input (see
+          the mobile-drawer git history) — nothing here animates any
+          element's box size, so there's nothing to fight the scroll
+          gesture. Below `lg`, row 2 doesn't render at all (see its own
+          comment), so row 1 stays the single, always-visible mobile nav bar
+          exactly as before — the hide/show logic forces itself off outside
+          the `lg` breakpoint. */}
+      <header className="sticky top-0 z-50">
+        {/* ---------- Row 1: logo | search | labelled actions ---------- */}
+        <div
+          ref={topBarRef}
+          className="transition-transform duration-300 ease-in-out"
+          style={{ transform: hideTopBar ? "translateY(-100%)" : "translateY(0)" }}
+        >
+        <div className="bg-navbar shadow-[0_1px_3px_rgba(1,45,29,0.08)] lg:shadow-none">
         <div className="mx-auto flex max-w-[1240px] items-center gap-3 px-4 py-3 sm:gap-5 sm:px-6 lg:px-8">
           {/* Hamburger — LEFT, so the drawer slides in from the edge it sits on. */}
           <button
@@ -299,18 +369,30 @@ export function Header({ initialCategories, initialNavLinks, initialSettings }: 
         </div>
         </div>
 
-        {/* Search bar drops to its own row on tablet/mobile, where row 1 is
-            full. Plain normal-flow content, same as row 1 above at `lg`+ —
-            it scrolls away under the sticky row 1 as the page scrolls,
-            with no JS needed. */}
-        <div className="mx-auto max-w-[1240px] px-4 pb-3 sm:px-6 lg:hidden">
+        {/* Hidden at every breakpoint (`hidden`, not removed — the
+            component and its functionality stay intact, just never
+            rendered) so mobile/tablet has exactly one search entry point:
+            the compact search icon in row 1 above, which opens
+            `SearchOverlay`. This used to be a second, full-width inline
+            search row shown only below `lg` — duplicating the navbar's own
+            search affordance on small screens — which is why it's hidden
+            outright now rather than kept `lg:hidden`. Restore it (e.g. back
+            to `lg:hidden`) only if a future request explicitly asks for a
+            second mobile search bar again. */}
+        <div className="hidden">
           <HeaderSearchBar className="w-full" />
+        </div>
         </div>
 
         {/* ---------- Row 2: main nav / categories ----------
-            Sticky only at `lg`+, taking over from row 1 once it's scrolled
-            out of the normal document flow above. */}
-        <nav className="sticky top-0 z-50 hidden bg-navbar-secondary lg:block">
+            Only rendered at `lg`+ (see row 1's comment on why mobile has no
+            second bar). Translated by row 1's measured height in lock-step
+            with row 1's own hide/show, so it slides up to take row 1's
+            place with no gap. */}
+        <nav
+          className="hidden bg-navbar-secondary transition-transform duration-300 ease-in-out lg:block"
+          style={{ transform: hideTopBar ? `translateY(-${topBarHeight}px)` : "translateY(0)" }}
+        >
           <div className="mx-auto flex max-w-[1240px] items-center gap-1 px-4 py-1.5 sm:px-6 lg:px-8">
             {navLinks.map((link) => {
               const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);

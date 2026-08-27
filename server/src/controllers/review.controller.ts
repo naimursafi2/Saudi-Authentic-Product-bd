@@ -31,7 +31,12 @@ export const createReview = catchAsync(async (req: Request, res: Response) => {
   const productId = paramStr(req.params.productId);
   // Ensures a 404 (not a confusing validation error) if the product doesn't exist.
   await getProductById(productId);
-  const review = await reviewService.createReview(productId, req.user!.id, req.body);
+  const review = await reviewService.createReview(
+    productId,
+    req.user!.id,
+    req.body,
+    req.files as Express.Multer.File[] | undefined
+  );
   sendSuccess(res, 201, "Review submitted", { review });
 });
 

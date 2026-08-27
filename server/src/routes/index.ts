@@ -25,12 +25,14 @@ import approvalSettingsRoutes from "./approvalSettings.routes";
 import investmentRoutes from "./investment.routes";
 import expenseRoutes from "./expense.routes";
 import refundRoutes from "./refund.routes";
+import returnRequestRoutes from "./returnRequest.routes";
 import financeRoutes from "./finance.routes";
 import roleRoutes from "./role.routes";
 import shopRoutes from "./shop.routes";
 import purchaseRoutes from "./purchase.routes";
 import campaignRoutes from "./campaign.routes";
 import notificationRoutes from "./notification.routes";
+import productAlertRoutes from "./productAlert.routes";
 
 const router = Router();
 
@@ -60,11 +62,13 @@ router.use("/approval-settings", approvalSettingsRoutes);
 router.use("/investments", investmentRoutes);
 router.use("/expenses", expenseRoutes);
 router.use("/refunds", refundRoutes);
+router.use("/returns", returnRequestRoutes);
 router.use("/finance", financeRoutes);
 router.use("/roles", roleRoutes);
 router.use("/shops", shopRoutes);
 router.use("/purchases", purchaseRoutes);
 router.use("/campaigns", campaignRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/product-alerts", productAlertRoutes);
 
 export default router;

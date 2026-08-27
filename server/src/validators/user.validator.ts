@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ROLES } from "../constants/roles";
+import { booleanish } from "./common.validator";
 
 export const createStaffSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -66,6 +67,8 @@ export const updateMyProfileSchema = z.object({
 export const listUsersQuerySchema = z.object({
   role: z.enum(ROLES).optional(),
   search: z.string().trim().optional(),
+  isActive: booleanish.optional(),
+  isEmailVerified: booleanish.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

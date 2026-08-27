@@ -11,13 +11,22 @@ export const createStaff = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const listUsers = catchAsync(async (req: Request, res: Response) => {
-  const { role, search, page, limit } = req.query as unknown as {
+  const { role, search, isActive, isEmailVerified, page, limit } = req.query as unknown as {
     role?: import("../constants/roles").Role;
     search?: string;
+    isActive?: boolean;
+    isEmailVerified?: boolean;
     page: number;
     limit: number;
   };
-  const { users, pagination } = await userService.listUsers({ role, search, page, limit });
+  const { users, pagination } = await userService.listUsers({
+    role,
+    search,
+    isActive,
+    isEmailVerified,
+    page,
+    limit,
+  });
   sendSuccess(res, 200, "Users fetched", { users }, { pagination });
 });
 

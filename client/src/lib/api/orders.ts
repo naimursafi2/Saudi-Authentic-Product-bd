@@ -46,8 +46,10 @@ export async function assignAgent(id: string, agentId: string) {
 
 // -- Delivery Agent (self-scoped) --
 
-export async function listAssignedOrders(page = 1, limit = 20) {
-  return api.get<{ orders: ApiOrder[] }>(`/orders/assigned-to-me?page=${page}&limit=${limit}`);
+export async function listAssignedOrders(page = 1, limit = 20, status?: string) {
+  const search = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (status) search.set("status", status);
+  return api.get<{ orders: ApiOrder[] }>(`/orders/assigned-to-me?${search.toString()}`);
 }
 
 export async function updateDeliveryStatus(
@@ -65,8 +67,16 @@ export async function sendDeliveryOtp(id: string) {
   return api.post<{ order: ApiOrder }>(`/orders/${id}/send-delivery-otp`, {});
 }
 
-export async function verifyDeliveryOtp(id: string, otp: string, note?: string) {
-  return api.post<{ order: ApiOrder }>(`/orders/${id}/verify-otp`, { otp, note });
+/** `proofImage` is optional — a delivery agent can confirm with or without a photo. */
+export async function verifyDeliveryOtp(id: string, otp: string, note?: string, proofImage?: File) {
+  if (!proofImage) {
+    return api.post<{ order: ApiOrder }>(`/orders/${id}/verify-otp`, { otp, note });
+  }
+  const formData = new FormData();
+  formData.append("otp", otp);
+  if (note) formData.append("note", note);
+  formData.append("deliveryProofImage", proofImage);
+  return api.postForm<{ order: ApiOrder }>(`/orders/${id}/verify-otp`, formData);
 }
 
 export async function markDeliveryFailed(id: string, failureReason: string, note?: string) {

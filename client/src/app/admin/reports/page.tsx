@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ListFilter, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
-import { getSalesSummary } from "@/lib/api/reports";
+import Link from "next/link";
+import { Download, ListFilter, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
+import { getDeliveryAgentPerformance, getSalesSummary, getSalesTimeSeries } from "@/lib/api/reports";
 import { formatBDT } from "@/lib/utils";
+import { downloadCsv } from "@/lib/csvExport";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ErrorState } from "@/components/admin/EmptyState";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import type { SalesSummary } from "@/types/hr";
+import type { SalesSummary, SalesTimeSeriesPoint } from "@/types/hr";
+import type { ApiDeliveryAgentPerformance } from "@/types/api";
+
+type GroupBy = "day" | "week" | "month";
+const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+];
 
 const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 focus:border-green-900/40 focus:outline-none";
@@ -19,6 +30,10 @@ export default function AdminReportsPage() {
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [agents, setAgents] = useState<ApiDeliveryAgentPerformance[] | null>(null);
+  const [groupBy, setGroupBy] = useState<GroupBy>("day");
+  const [timeSeries, setTimeSeries] = useState<SalesTimeSeriesPoint[]>([]);
+  const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(true);
 
   function load(fromDate?: string, toDate?: string) {
     setIsLoading(true);
@@ -31,12 +46,38 @@ export default function AdminReportsPage() {
       .finally(() => setIsLoading(false));
   }
 
+  function loadTimeSeries(by: GroupBy, fromDate?: string, toDate?: string) {
+    setIsTimeSeriesLoading(true);
+    getSalesTimeSeries(by, fromDate || undefined, toDate || undefined)
+      .then(({ data }) => setTimeSeries(data.timeSeries))
+      .catch(() => setTimeSeries([]))
+      .finally(() => setIsTimeSeriesLoading(false));
+  }
+
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(load, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => loadTimeSeries(groupBy), [groupBy]);
+
+  useEffect(() => {
+    getDeliveryAgentPerformance()
+      .then(({ data }) => setAgents(data.agents))
+      .catch(() => setAgents([]));
+  }, []);
 
   function handleApply(e: React.FormEvent) {
     e.preventDefault();
     load(from, to);
+    loadTimeSeries(groupBy, from, to);
+  }
+
+  function handleExportCsv() {
+    downloadCsv(
+      `sales-report-${groupBy}.csv`,
+      ["Period", "Revenue (BDT)", "Orders"],
+      timeSeries.map((row) => [row.period, row.revenueBDT, row.orders])
+    );
   }
 
   return (
@@ -81,20 +122,73 @@ export default function AdminReportsPage() {
             />
           </div>
 
+          <div className="print-area mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-serif text-lg text-green-950">
+                {GROUP_BY_OPTIONS.find((o) => o.value === groupBy)?.label} Sales Report
+              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  className="h-8 rounded border border-brown-600/20 bg-surface px-2 text-xs text-green-950 focus:outline-none focus:ring-1 focus:ring-green-900/30"
+                >
+                  {GROUP_BY_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <Button variant="outline" size="xs" onClick={handleExportCsv} disabled={timeSeries.length === 0}>
+                  <Download size={13} /> CSV
+                </Button>
+                <Button variant="outline" size="xs" onClick={() => window.print()} disabled={timeSeries.length === 0}>
+                  <Printer size={13} /> Print / Save as PDF
+                </Button>
+              </div>
+            </div>
+            {isTimeSeriesLoading ? (
+              <div className="h-32 animate-pulse rounded-lg bg-cream-200" />
+            ) : timeSeries.length === 0 ? (
+              <p className="text-sm text-brown-500">No sales in this range.</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
+                    <th className="py-2">Period</th>
+                    <th className="py-2">Revenue</th>
+                    <th className="py-2">Orders</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timeSeries.map((row) => (
+                    <tr key={row.period} className="border-b border-brown-600/10 last:border-none">
+                      <td className="py-2 font-medium text-green-950">{row.period}</td>
+                      <td className="py-2 text-brown-600">{formatBDT(row.revenueBDT)}</td>
+                      <td className="py-2 text-brown-600">{row.orders}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
           <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
             <h2 className="mb-3 font-serif text-lg text-green-950">Orders by Status</h2>
+            <p className="mb-3 text-xs text-brown-500">Click a status to view those orders.</p>
             {Object.keys(summary.ordersByStatus).length === 0 ? (
               <p className="text-sm text-brown-500">No orders in this range.</p>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
                 {Object.entries(summary.ordersByStatus).map(([status, count]) => (
-                  <div
+                  <Link
                     key={status}
-                    className="flex items-center justify-between border-b border-brown-600/10 py-2 text-sm last:border-none"
+                    href={`/admin/orders?status=${status}`}
+                    className="flex items-center justify-between rounded border-b border-brown-600/10 px-2 py-2 text-sm transition-colors last:border-none hover:bg-cream-100"
                   >
                     <span className="capitalize text-brown-600">{status.replace("_", " ")}</span>
                     <span className="font-semibold text-green-950">{count}</span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -127,6 +221,54 @@ export default function AdminReportsPage() {
           </div>
         </>
       ) : null}
+
+      <div className="mt-8 rounded-lg border border-brown-600/10 bg-surface p-5">
+        <h2 className="mb-1 font-serif text-lg text-green-950">Delivery Agent Performance</h2>
+        <p className="mb-3 text-xs text-brown-500">
+          Live counts derived from assigned orders — not a separate tracked number.
+        </p>
+        {agents === null ? (
+          <div className="h-24 animate-pulse rounded-lg bg-cream-200" />
+        ) : agents.length === 0 ? (
+          <p className="text-sm text-brown-500">No delivery agents yet.</p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
+                <th className="py-2">Agent</th>
+                <th className="py-2">Status</th>
+                <th className="py-2">Assigned</th>
+                <th className="py-2">Delivered</th>
+                <th className="py-2">Failed</th>
+                <th className="py-2">Success Rate</th>
+                <th className="py-2">Avg. Delivery Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((agent) => (
+                <tr key={agent.agentId} className="border-b border-brown-600/10 last:border-none">
+                  <td className="py-2">
+                    <p className="font-medium text-green-950">{agent.name}</p>
+                    <p className="text-xs text-brown-500">{agent.email}</p>
+                  </td>
+                  <td className="py-2">
+                    <StatusBadge status={agent.isActive ? "active" : "inactive"} />
+                  </td>
+                  <td className="py-2 text-brown-600">{agent.assignedCount}</td>
+                  <td className="py-2 text-brown-600">{agent.deliveredCount}</td>
+                  <td className="py-2 text-brown-600">{agent.failedCount}</td>
+                  <td className="py-2 text-brown-600">
+                    {agent.successRate === null ? "—" : `${agent.successRate}%`}
+                  </td>
+                  <td className="py-2 text-brown-600">
+                    {agent.averageDeliveryHours === null ? "—" : `${agent.averageDeliveryHours} hrs`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { AddressBook } from "@/components/account/AddressBook";
 import { OrderHistory } from "@/components/account/OrderHistory";
 import { ProfileSection } from "@/components/account/ProfileSection";
 import { DashboardOverview } from "@/components/account/DashboardOverview";
+import { AlertsSection } from "@/components/account/AlertsSection";
 import { CustomerSidebar, type AccountTab } from "@/components/account/CustomerSidebar";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { ButtonLink } from "@/components/ui/Button";
@@ -30,6 +31,7 @@ const TAB_COPY: Record<AccountTab, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Your account at a glance." },
   orders: { title: "My Orders", description: "Track and review your past orders." },
   wishlist: { title: "Wishlist", description: "Products you've saved for later." },
+  alerts: { title: "My Alerts", description: "Price-drop and back-in-stock notifications you've subscribed to." },
   addresses: { title: "Address", description: "Manage your saved delivery addresses." },
   profile: { title: "Manage Profile", description: "Update your photo, details and password." },
 };
@@ -96,6 +98,7 @@ export default function AccountPage() {
                 ))}
               </div>
             ))}
+          {tab === "alerts" && <AlertsSection />}
           {tab === "addresses" && <AddressBook addresses={user.addresses} />}
           {tab === "profile" && <ProfileSection user={user} />}
         </div>

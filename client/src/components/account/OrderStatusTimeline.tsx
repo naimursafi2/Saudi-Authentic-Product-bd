@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   Boxes,
+  CalendarClock,
   CheckCircle2,
   Clock,
   KeyRound,
@@ -51,9 +52,12 @@ function formatDateTime(value: string) {
 export function OrderStatusTimeline({
   status,
   statusHistory,
+  estimatedDeliveryDate,
 }: {
   status: OrderStatus;
   statusHistory: ApiOrder["statusHistory"];
+  /** Derived server-side, absent once delivered/cancelled/returned/refunded/delivery_failed — see `Order.model.ts`'s virtual. */
+  estimatedDeliveryDate?: string;
 }) {
   const branchCopy = BRANCH_STATUS_COPY[status];
   if (branchCopy) {
@@ -73,6 +77,17 @@ export function OrderStatusTimeline({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      {estimatedDeliveryDate && (
+        <p className="mb-4 flex items-center gap-2 text-sm font-semibold text-green-950">
+          <CalendarClock size={16} className="text-gold-600" />
+          Estimated delivery:{" "}
+          {new Date(estimatedDeliveryDate).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
+        </p>
+      )}
       <div className="flex min-w-[720px] items-start justify-between">
         {ORDER_STATUS_STEPS.map((step, i) => {
           const reached = i <= currentStepIndex;

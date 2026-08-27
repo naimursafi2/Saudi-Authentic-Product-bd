@@ -9,6 +9,7 @@ import type {
   RefundReasonCategory,
   RefundStatus,
 } from "@/types/api";
+import type { RevenueVsExpensePoint } from "@/types/hr";
 
 // -- Investments --
 
@@ -106,4 +107,11 @@ export async function getFinanceSummary(params: { from?: string; to?: string } =
   if (params.to) search.set("to", params.to);
   const qs = search.toString();
   return api.get<{ summary: FinanceSummary }>(`/finance/summary${qs ? `?${qs}` : ""}`);
+}
+
+export async function getRevenueVsExpense(groupBy: "day" | "week" | "month", from?: string, to?: string) {
+  const search = new URLSearchParams({ groupBy });
+  if (from) search.set("from", from);
+  if (to) search.set("to", to);
+  return api.get<{ timeSeries: RevenueVsExpensePoint[] }>(`/finance/revenue-vs-expense?${search.toString()}`);
 }

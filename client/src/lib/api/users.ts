@@ -63,10 +63,21 @@ export async function createStaff(payload: CreateStaffPayload) {
   return api.post<{ user: ApiUser }>("/users", payload);
 }
 
-export async function listUsers(params: { role?: Role; search?: string; page?: number; limit?: number } = {}) {
+export async function listUsers(
+  params: {
+    role?: Role;
+    search?: string;
+    isActive?: boolean;
+    isEmailVerified?: boolean;
+    page?: number;
+    limit?: number;
+  } = {}
+) {
   const search = new URLSearchParams();
   if (params.role) search.set("role", params.role);
   if (params.search) search.set("search", params.search);
+  if (params.isActive !== undefined) search.set("isActive", String(params.isActive));
+  if (params.isEmailVerified !== undefined) search.set("isEmailVerified", String(params.isEmailVerified));
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();

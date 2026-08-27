@@ -72,8 +72,8 @@ export const updateOrderStatus = catchAsync(async (req: Request, res: Response) 
 });
 
 export const listAssignedOrders = catchAsync(async (req: Request, res: Response) => {
-  const { page, limit } = req.query as unknown as { page: number; limit: number };
-  const { orders, pagination } = await orderService.listAssignedOrders(req.user!.id, page, limit);
+  const { status, page, limit } = req.query as unknown as { status?: string; page: number; limit: number };
+  const { orders, pagination } = await orderService.listAssignedOrders(req.user!.id, page, limit, status);
   sendSuccess(res, 200, "Assigned orders fetched", { orders }, { pagination });
 });
 
@@ -101,7 +101,13 @@ export const sendDeliveryOtp = catchAsync(async (req: Request, res: Response) =>
 });
 
 export const verifyDeliveryOtp = catchAsync(async (req: Request, res: Response) => {
-  const order = await orderService.verifyDeliveryOtp(paramStr(req.params.id), req.user!.id, req.body.otp, req.body.note);
+  const order = await orderService.verifyDeliveryOtp(
+    paramStr(req.params.id),
+    req.user!.id,
+    req.body.otp,
+    req.body.note,
+    req.file
+  );
   sendSuccess(res, 200, "Delivery confirmed", { order });
 });
 

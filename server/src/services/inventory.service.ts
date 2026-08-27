@@ -2,7 +2,27 @@ import { ProductModel } from "../models/Product.model";
 import { InventoryLogModel, type IInventoryLog, type InventoryLogReason } from "../models/InventoryLog.model";
 import { ApiError } from "../utils/ApiError";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
+import { notifyBackInStockSubscribers } from "./productAlert.service";
 import type { Role } from "../constants/roles";
+
+/**
+ * A variant just went from 0 (or negative — shouldn't happen, but defensive)
+ * to positive stock. Awaited (not fire-and-forget) at the call site — the
+ * only genuinely slow part, the alert emails, is already `void`-dispatched
+ * inside `notifyBackInStockSubscribers` itself, so awaiting the DB-only
+ * orchestration around it costs nothing and means a caller can trust the
+ * alert has already been resolved by the time this request responds.
+ */
+async function maybeNotifyBackInStock(
+  productId: string,
+  variantId: string,
+  previousStock: number,
+  newStock: number
+): Promise<void> {
+  if (previousStock <= 0 && newStock > 0) {
+    await notifyBackInStockSubscribers(productId, variantId);
+  }
+}
 
 export interface StockActor {
   id: string;
@@ -67,6 +87,7 @@ async function applyStockDelta(
   const newStock = variant.stock + input.delta;
   if (newStock < 0) throw ApiError.badRequest("Adjustment would result in negative stock");
 
+  const previousStock = variant.stock;
   variant.stock = newStock;
   await product.save();
 
@@ -80,6 +101,8 @@ async function applyStockDelta(
     note: input.note,
     actor: actorId,
   });
+
+  await maybeNotifyBackInStock(product._id.toString(), input.variantId, previousStock, newStock);
 
   return product;
 }
@@ -164,6 +187,7 @@ async function setVariantStock(
   const delta = target.stock - variant.stock;
   if (delta === 0) return;
 
+  const previousStock = variant.stock;
   variant.stock = target.stock;
   await product.save();
 
@@ -177,6 +201,8 @@ async function setVariantStock(
     note: note ?? "Stock update",
     actor: actorId,
   });
+
+  await maybeNotifyBackInStock(product._id.toString(), variant._id!.toString(), previousStock, target.stock);
 }
 
 /**
@@ -301,4 +327,25 @@ export async function listLowStockProducts() {
 export async function countLowStockProducts(): Promise<number> {
   const lowStock = await listLowStockProducts();
   return lowStock.length;
+}
+
+/**
+ * Products with at least one variant at exactly zero — a stricter, distinct
+ * signal from "low stock" (`stock <= lowStockThreshold`, which a variant
+ * with `lowStockThreshold: 0` would never even cross). Out-of-stock
+ * products are always a subset of low-stock ones.
+ */
+export async function listOutOfStockProducts() {
+  const products = await ProductModel.find({ isActive: true }).select("name slug variants images");
+  return products
+    .map((product) => ({
+      product,
+      outOfStockVariants: product.variants.filter((v) => v.stock === 0),
+    }))
+    .filter((entry) => entry.outOfStockVariants.length > 0);
+}
+
+export async function countOutOfStockProducts(): Promise<number> {
+  const outOfStock = await listOutOfStockProducts();
+  return outOfStock.length;
 }

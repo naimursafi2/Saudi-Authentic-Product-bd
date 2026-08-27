@@ -3,6 +3,7 @@ import * as orderController from "../controllers/order.controller";
 import { authenticate, requireEmailVerified } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
+import { upload } from "../middlewares/upload.middleware";
 import {
   assignAgentSchema,
   createOrderSchema,
@@ -54,6 +55,10 @@ router.post(
 router.post(
   "/:id/verify-otp",
   requirePermission("orders.deliver"),
+  // Optional delivery-proof photo — multer passes plain JSON requests
+  // (no `multipart/form-data` content-type) straight through untouched, so
+  // the existing JSON-only caller keeps working with no change.
+  upload.single("deliveryProofImage"),
   validate({ params: mongoIdParamSchema, body: verifyOtpSchema }),
   orderController.verifyDeliveryOtp
 );

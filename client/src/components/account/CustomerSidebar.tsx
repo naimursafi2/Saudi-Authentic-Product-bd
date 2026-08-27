@@ -1,16 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import { LayoutDashboard, Package, Heart, MapPin, User as UserIcon, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Heart, Bell, MapPin, User as UserIcon, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ApiUser } from "@/types/api";
 
-export type AccountTab = "dashboard" | "orders" | "wishlist" | "addresses" | "profile";
+export type AccountTab = "dashboard" | "orders" | "wishlist" | "alerts" | "addresses" | "profile";
 
 const NAV_ITEMS: { id: AccountTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "orders", label: "My Orders", icon: Package },
   { id: "wishlist", label: "Wishlist", icon: Heart },
+  { id: "alerts", label: "My Alerts", icon: Bell },
   { id: "addresses", label: "Address", icon: MapPin },
   { id: "profile", label: "Manage Profile", icon: UserIcon },
 ];

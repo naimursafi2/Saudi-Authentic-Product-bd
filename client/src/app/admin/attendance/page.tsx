@@ -46,6 +46,7 @@ export default function AdminAttendancePage() {
   const [records, setRecords] = useState<ApiAttendance[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<AttendanceStatus | "">("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ApiAttendance | null>(null);
@@ -54,7 +55,7 @@ export default function AdminAttendancePage() {
 
   function load() {
     setIsLoading(true);
-    Promise.all([getTodaySummary(), listAttendance({ page, limit: 30 })])
+    Promise.all([getTodaySummary(), listAttendance({ status: statusFilter || undefined, page, limit: 30 })])
       .then(([summaryRes, recordsRes]) => {
         setSummary(summaryRes.data.summary);
         setRecords(recordsRes.data.records);
@@ -66,7 +67,12 @@ export default function AdminAttendancePage() {
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(load, [page]);
+  useEffect(load, [page, statusFilter]);
+
+  function handleSelectStat(status: AttendanceStatus) {
+    setStatusFilter((current) => (current === status ? "" : status));
+    setPage(1);
+  }
 
   async function handleSubmit(status: AttendanceStatus, note: string) {
     if (!editing) return;
@@ -89,12 +95,27 @@ export default function AdminAttendancePage() {
 
       {summary && (
         <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label="Checked In" value={summary.totalCheckedIn} />
-          <Stat label="Present" value={summary.present} />
-          <Stat label="Late" value={summary.late} />
-          <Stat label="Half Day" value={summary.half_day} />
-          <Stat label="Absent" value={summary.absent} />
-          <Stat label="On Leave" value={summary.leave} />
+          <Stat label="Checked In" value={summary.totalCheckedIn} onClick={() => setStatusFilter("")} active={statusFilter === ""} />
+          <Stat label="Present" value={summary.present} onClick={() => handleSelectStat("present")} active={statusFilter === "present"} />
+          <Stat label="Late" value={summary.late} onClick={() => handleSelectStat("late")} active={statusFilter === "late"} />
+          <Stat label="Half Day" value={summary.half_day} onClick={() => handleSelectStat("half_day")} active={statusFilter === "half_day"} />
+          <Stat label="Absent" value={summary.absent} onClick={() => handleSelectStat("absent")} active={statusFilter === "absent"} />
+          <Stat label="On Leave" value={summary.leave} onClick={() => handleSelectStat("leave")} active={statusFilter === "leave"} />
+        </div>
+      )}
+
+      {statusFilter && (
+        <div className="mb-4 flex items-center gap-2 text-sm text-brown-600">
+          <span>
+            Showing <span className="font-semibold capitalize text-green-950">{statusFilter.replace("_", " ")}</span> records only
+          </span>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("")}
+            className="cursor-pointer text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
+          >
+            Clear filter
+          </button>
         </div>
       )}
 
@@ -103,7 +124,11 @@ export default function AdminAttendancePage() {
       ) : error ? (
         <ErrorState message={error} />
       ) : records.length === 0 ? (
-        <EmptyState icon={CalendarCheck} title="No attendance records" description="Records will appear here once staff check in." />
+        <EmptyState
+          icon={CalendarCheck}
+          title="No attendance records"
+          description={statusFilter ? "No records match this status." : "Records will appear here once staff check in."}
+        />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
           <table className="w-full text-left text-sm">
@@ -216,11 +241,27 @@ function AttendanceEditForm({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: number;
+  onClick?: () => void;
+  active?: boolean;
+}) {
   return (
-    <div className="rounded bg-cream-200 p-3 text-center">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full cursor-pointer rounded p-3 text-center transition-colors ${
+        active ? "bg-green-950/10 ring-1 ring-green-900/25" : "bg-cream-200 hover:bg-cream-300"
+      }`}
+    >
       <span className="block text-lg font-semibold text-green-950">{value}</span>
       <span className="block text-[11px] uppercase tracking-wide text-brown-500">{label}</span>
-    </div>
+    </button>
   );
 }

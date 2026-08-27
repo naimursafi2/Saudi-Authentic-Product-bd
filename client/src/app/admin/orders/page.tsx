@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PackageSearch } from "lucide-react";
 import { listOrders, getOrder, updateOrderStatus, assignAgent } from "@/lib/api/orders";
 import { listUsers } from "@/lib/api/users";
@@ -24,13 +25,27 @@ function customerName(customer: ApiOrder["customer"]): string {
 }
 
 export default function AdminOrdersPage() {
+  return (
+    <Suspense fallback={<TableSkeleton />}>
+      <AdminOrdersPageContent />
+    </Suspense>
+  );
+}
+
+function AdminOrdersPageContent() {
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get("status");
   const [orders, setOrders] = useState<ApiOrder[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | "">("");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "">(
+    initialStatus && (STATUS_OPTIONS as readonly string[]).includes(initialStatus) ? (initialStatus as OrderStatus) : ""
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewingId, setViewingId] = useState<string | null>(null);
+  // Deep-linked from the dashboard's "Recent Orders" widget (`?viewOrder=<id>`),
+  // same pattern as the `status` query param above.
+  const [viewingId, setViewingId] = useState<string | null>(searchParams.get("viewOrder"));
 
   function load() {
     setIsLoading(true);

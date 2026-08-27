@@ -178,7 +178,11 @@ function TrackOrderForm() {
             </div>
           )}
 
-          <OrderStatusTimeline status={order.status} statusHistory={order.statusHistory} />
+          <OrderStatusTimeline
+            status={order.status}
+            statusHistory={order.statusHistory}
+            estimatedDeliveryDate={order.estimatedDeliveryDate}
+          />
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div className="rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">

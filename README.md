@@ -47,11 +47,14 @@ form or state-management library — forms/data fetching are hand-rolled with
   delivery info, related products), categories, offers (discounted
   variants), cart,
   wishlist, a sidebar-driven account dashboard (login/register; a persistent
-  nav — Dashboard/My Orders/Wishlist/Address/Manage Profile/Logout — next to
-  stat cards, recent-orders and wishlist-preview panels, profile photo
+  nav — Dashboard/My Orders/Wishlist/My Alerts/Address/Manage Profile/Logout —
+  next to stat cards, recent-orders and wishlist-preview panels, profile photo
   upload via Cloudinary, editable name/phone/password, a full address
-  book with add/edit/delete/set-default, and a visual order-status timeline
-  per order — shared with the public tracking page below), password reset, a
+  book with add/edit/delete/set-default, a Price Drop / Back-in-Stock "Notify
+  Me" subscription list, a Return/Exchange request action once an order is
+  delivered, and a visual order-status timeline per order — including an
+  estimated delivery date and, once verified, an optional delivery-proof
+  photo — shared with the public tracking page below), password reset, a
   public order-tracking page (`/track-order` — look up any order by order
   number + checkout email, no login required, auto-prefilled for signed-in
   customers, showing a full step-by-step delivery timeline and — while an
@@ -96,13 +99,19 @@ form or state-management library — forms/data fetching are hand-rolled with
   `google-auth-library`) but stays inactive — button hidden, endpoint 503s —
   until a `GOOGLE_CLIENT_ID` is configured (see Environment variables).
 - **Admin / Co-Admin / Super Admin / Order Manager portal**
-  (`client/src/app/admin`, fully built): dashboard (live stats), products
+  (`client/src/app/admin`, fully built): dashboard (live stats — including
+  an Out of Stock count alongside Low Stock, a Recent Orders panel, and a
+  Recent Activities panel scoped to the viewer's own actions for non-admin
+  roles), products
   (a whole new product from Admin or Co-Admin is queued for Super Admin
   approval and doesn't exist until granted — only Super Admin publishes
   directly; deletion is Super-Admin-direct / Co-Admin-request-only — Admin
   has no product-deletion access at all), categories, orders (including assigning
   a delivery agent once an order is ready for dispatch), refunds (Order
-  Manager review, then Admin/Super Admin financial approval), coupons
+  Manager review, then Admin/Super Admin financial approval), return/exchange
+  requests (a customer-initiated step — approving a return moves the order to
+  "returned", unlocking the refund flow above; an exchange approval is a
+  manual-fulfilment commitment, not automated), coupons
   (percentage/fixed discounts, scheduling window, minimum order amount,
   usage limit — reachable by co_admin too, with large-percentage discounts
   routed through the approval-gate system below), customers, reviews,
@@ -110,8 +119,12 @@ form or state-management library — forms/data fetching are hand-rolled with
   performance, salary & payments (admin/super_admin only), inventory (stock
   adjustments + audit log), purchases (purchase batches with unlimited
   custom cost items and automatic landed-/unit-cost maths), shops (sourcing
-  outlets plus per-staff shop assignment), reports (sales summary), finance (revenue/
-  expense/investment/profit-loss summary, admin/super_admin only),
+  outlets plus per-staff shop assignment), reports (sales summary, a
+  daily/weekly/monthly sales report with CSV export and browser-print-to-PDF,
+  and a per-delivery-agent performance table — assigned/delivered/failed
+  counts, success rate, average delivery time), finance (revenue/
+  expense/investment/profit-loss summary plus a day/week/month
+  revenue-vs-expense/profit table with CSV export, admin/super_admin only),
   investments (append-only investor ledger, admin/super_admin can view,
   super_admin can record), expenses (co_admin can submit — auto-confirmed
   for admin/super_admin, pending confirmation otherwise), approvals (the
@@ -536,10 +549,19 @@ machine.
   (email success/failure counting, graceful SMS-not-configured skipping,
   website notifications actually landing in the recipient's own inbox),
   live audience/recipient-count resolution, pause/resume, and the weekly/
-  monthly schedule-rollover math — run with
-  `supertest` against an actual in-memory MongoDB via
-  `mongodb-memory-server`. 222 tests across 29 suites as of the campaign
-  management build. Coverage is still partial, not exhaustive.
+  monthly schedule-rollover math; the product-alerts system — back-in-stock
+  alerts firing only on a genuine 0-to-positive stock crossing and only for
+  subscribers, price-drop alerts firing only below the captured reference
+  price, one-shot deactivation, and per-customer scoping; and the return/
+  exchange workflow — request-only-once-delivered, duplicate-pending
+  rejection, ownership scoping, a `return` approval transitioning the order
+  to "returned" while an `exchange` approval leaves it untouched, and
+  rejection/re-review handling; and the reporting/analytics additions —
+  monthly sales bucketing, out-of-stock vs. low-stock distinction,
+  revenue-vs-expense period merging, and the dashboard's new fields — run
+  with `supertest` against an actual in-memory MongoDB via
+  `mongodb-memory-server`. 238 tests across 32 suites as of the
+  Analytics/Reports additions build. Coverage is still partial, not exhaustive.
 - **Frontend**: `npm test` runs Vitest (`vitest.config.mts`, jsdom
   environment) with React Testing Library. Covers pure-logic modules
   (`lib/utils`, `lib/passwordStrength`, `lib/mappers`, `lib/stock`), one
@@ -589,6 +611,10 @@ missing/malformed):
 - Test coverage is basic on both sides (a handful of backend integration
   specs, a handful of frontend Vitest specs) — not comprehensive. No
   Playwright/e2e browser testing exists. See Testing above.
+- An approved Exchange request is not automatically fulfilled — no
+  replacement-order/stock-swap automation exists; a staff member handles
+  the swap manually outside the system. Only a `return`-type request moves
+  the order itself (to `"returned"`).
 - No payment gateway integration — `bkash`/`nagad` are selectable at
   checkout and stored as the order's `paymentMethod`, but nothing actually
   charges the customer, verifies a payment signature, or flips

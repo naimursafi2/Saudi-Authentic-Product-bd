@@ -90,6 +90,9 @@ export const PERMISSIONS = [
   // -- Reviews --
   "reviews.view",
   "reviews.delete",
+  "productQA.view",
+  "productQA.answer",
+  "productQA.delete",
 
   // -- Reporting & finance --
   "reports.view",
@@ -103,6 +106,9 @@ export const PERMISSIONS = [
   "refunds.request",
   "refunds.review",
   "refunds.approve",
+  "returns.view",
+  "returns.request",
+  "returns.review",
 
   // -- Customer messaging / campaigns --
   "campaigns.view",
@@ -151,6 +157,9 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
       { key: "orders.view", label: "View all orders" },
       { key: "orders.manage", label: "Update order status & assign agents" },
       { key: "orders.deliver", label: "Delivery agent actions (own orders)" },
+      { key: "returns.view", label: "View return/exchange requests" },
+      { key: "returns.request", label: "Request a return or exchange" },
+      { key: "returns.review", label: "Approve or reject return/exchange requests" },
     ],
   },
   {
@@ -221,6 +230,9 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
     permissions: [
       { key: "reviews.view", label: "View all reviews" },
       { key: "reviews.delete", label: "Delete reviews" },
+      { key: "productQA.view", label: "View all product questions" },
+      { key: "productQA.answer", label: "Answer product questions" },
+      { key: "productQA.delete", label: "Delete product questions" },
     ],
   },
   {
@@ -285,7 +297,7 @@ export const SENSITIVE_PERMISSIONS: Permission[] = [
  * escape hatch a mistaken edit could lock every human out of the panel.
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Permission[]> = {
-  customer: ["refunds.request", "refunds.view"],
+  customer: ["refunds.request", "refunds.view", "returns.request", "returns.view"],
 
   employee: ["orders.view", "inventory.view", "auditLogs.view"],
 
@@ -298,6 +310,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "refunds.view",
     "refunds.request",
     "refunds.review",
+    "returns.view",
+    "returns.review",
     "auditLogs.view",
   ],
 
@@ -344,11 +358,16 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "content.branding.manage",
     "reviews.view",
     "reviews.delete",
+    "productQA.view",
+    "productQA.answer",
+    "productQA.delete",
     "reports.view",
     "expenses.view",
     "expenses.create",
     "refunds.view",
     "refunds.request",
+    "returns.view",
+    "returns.review",
     "auditLogs.view",
     "roles.view",
     // Co-Admin creates and edits its own campaigns and submits them for
@@ -404,6 +423,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "settings.manage",
     "reviews.view",
     "reviews.delete",
+    "productQA.view",
+    "productQA.answer",
+    "productQA.delete",
     "reports.view",
     "finance.view",
     "investments.view",
@@ -414,6 +436,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "refunds.request",
     "refunds.review",
     "refunds.approve",
+    "returns.view",
+    "returns.review",
     "auditLogs.view",
     "roles.view",
     "roles.manage",
@@ -435,5 +459,10 @@ export const ALL_PERMISSIONS: Permission[] = [...PERMISSIONS];
  * `ADMIN_PORTAL_ROLES` in code.
  */
 export const ADMIN_PORTAL_PERMISSIONS: Permission[] = PERMISSIONS.filter(
-  (p) => p !== "orders.deliver" && p !== "refunds.request" && p !== "refunds.view"
+  (p) =>
+    p !== "orders.deliver" &&
+    p !== "refunds.request" &&
+    p !== "refunds.view" &&
+    p !== "returns.request" &&
+    p !== "returns.view"
 );

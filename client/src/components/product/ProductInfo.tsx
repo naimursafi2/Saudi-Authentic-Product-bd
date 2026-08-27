@@ -8,6 +8,7 @@ import type { Product } from "@/types/product";
 import { formatBDT, cn } from "@/lib/utils";
 import { toTelHref, toWhatsAppHref } from "@/lib/phone";
 import { StarRating } from "@/components/ui/StarRating";
+import { ProductAlertButtons } from "@/components/product/ProductAlertButtons";
 import { QuantityInput } from "@/components/ui/QuantityInput";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { SocialIcon } from "@/components/ui/SocialIcon";
@@ -155,6 +156,8 @@ export function ProductInfo({ product }: { product: Product }) {
           </p>
         )}
       </div>
+
+      <ProductAlertButtons productId={product.id} variantId={variant.id} outOfStock={outOfStock} />
 
       {/* Four purchase-action buttons in a 2x2 grid (same at every
           breakpoint — two narrow buttons per row reads fine even on small

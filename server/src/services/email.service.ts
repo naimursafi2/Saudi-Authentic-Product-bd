@@ -170,6 +170,38 @@ export async function sendLowStockAlertEmail(
   await safeSend(to, `Low stock — ${opts.productName}`, html);
 }
 
+export async function sendPriceDropAlertEmail(
+  to: string,
+  name: string,
+  opts: { productName: string; slug: string; oldPriceBDT: number; newPriceBDT: number }
+): Promise<void> {
+  const oldPrice = new Intl.NumberFormat("en-IN").format(Math.round(opts.oldPriceBDT));
+  const newPrice = new Intl.NumberFormat("en-IN").format(Math.round(opts.newPriceBDT));
+  const html = layout(
+    "Price drop on an item you're watching",
+    `<p>Hi ${name},</p>
+     <p><strong>${opts.productName}</strong> just dropped from
+     <span style="text-decoration:line-through;color:#705a4c;">৳ ${oldPrice}</span> to
+     <strong>৳ ${newPrice}</strong>.</p>
+     ${button("View Product", `${FRONTEND_URL}/product/${opts.slug}`)}`
+  );
+  await safeSend(to, `Price drop — ${opts.productName}`, html);
+}
+
+export async function sendBackInStockAlertEmail(
+  to: string,
+  name: string,
+  opts: { productName: string; slug: string }
+): Promise<void> {
+  const html = layout(
+    "Back in stock",
+    `<p>Hi ${name},</p>
+     <p><strong>${opts.productName}</strong> is back in stock — grab it before it sells out again.</p>
+     ${button("View Product", `${FRONTEND_URL}/product/${opts.slug}`)}`
+  );
+  await safeSend(to, `Back in stock — ${opts.productName}`, html);
+}
+
 export async function sendDeliveryFailedAlertEmail(
   to: string,
   name: string,

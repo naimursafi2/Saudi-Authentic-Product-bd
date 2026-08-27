@@ -4,13 +4,15 @@ import { UserModel } from "../models/User.model";
 import { OrderModel, type IOrder } from "../models/Order.model";
 import type { InventoryLogReason } from "../models/InventoryLog.model";
 import { ApiError } from "../utils/ApiError";
+import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { computeShippingFee } from "../constants/shipping";
 import { recordStockChange } from "./inventory.service";
+import { notifyBackInStockSubscribers } from "./productAlert.service";
 import { sendOrderConfirmationEmail, sendDeliveryOtpEmail } from "./email.service";
 import { sendSms } from "../config/sms";
 import { notifyNewOrder, notifyLowStock, notifyDeliveryFailed } from "./notification.service";
 import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
-import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
+import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_STATUSES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
 import { DELIVERY_OTP_TTL_MINUTES, MAX_DELIVERY_OTP_ATTEMPTS } from "../constants/security";
 import type { Role } from "../constants/roles";
 import type { CreateOrderInput } from "../validators/order.validator";
@@ -53,21 +55,32 @@ function pushStatusHistory(order: IOrder, status: OrderStatus, actor: OrderActor
 async function restockOrderItems(order: IOrder, reason: InventoryLogReason) {
   await Promise.all(
     order.items.map(async (item) => {
+      const before = await ProductModel.findOne(
+        { _id: item.product, "variants._id": item.variantId },
+        { "variants.$": 1 }
+      );
+      const previousStock = before?.variants[0]?.stock ?? 0;
+
       const updated = await ProductModel.findOneAndUpdate(
         { _id: item.product, "variants._id": item.variantId },
         { $inc: { "variants.$.stock": item.quantity } },
         { new: true }
       );
       const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
+      const newStock = variant?.stock ?? 0;
       await recordStockChange({
         productId: item.product.toString(),
         variantId: item.variantId,
         variantLabel: item.variantLabel,
         delta: item.quantity,
-        balanceAfter: variant?.stock ?? 0,
+        balanceAfter: newStock,
         reason,
         note: `Order ${order.orderNumber} ${reason === "order_cancelled" ? "cancelled" : "returned"}`,
       });
+
+      if (previousStock <= 0 && newStock > 0) {
+        await notifyBackInStockSubscribers(item.product.toString(), item.variantId);
+      }
     })
   );
 }
@@ -247,8 +260,15 @@ export async function listOrders(filter: { status?: OrderStatus; page: number; l
   };
 }
 
-export async function listAssignedOrders(agentId: string, page: number, limit: number) {
-  const filter = { assignedAgent: agentId };
+export async function listAssignedOrders(agentId: string, page: number, limit: number, status?: string) {
+  const filter: Record<string, unknown> = { assignedAgent: agentId };
+  if (status) {
+    const statuses = status
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s): s is OrderStatus => (ORDER_STATUSES as readonly string[]).includes(s));
+    if (statuses.length > 0) filter.status = { $in: statuses };
+  }
   const skip = (page - 1) * limit;
   const [orders, total] = await Promise.all([
     OrderModel.find(filter)
@@ -402,7 +422,13 @@ export async function sendDeliveryOtp(orderId: string, agentId: string) {
   return order;
 }
 
-export async function verifyDeliveryOtp(orderId: string, agentId: string, otp: string, note?: string) {
+export async function verifyDeliveryOtp(
+  orderId: string,
+  agentId: string,
+  otp: string,
+  note?: string,
+  proofImage?: Express.Multer.File
+) {
   const order = await loadOrderAssignedTo(orderId, agentId);
   const actor: OrderActor = { id: agentId, role: "delivery_agent" };
 
@@ -449,6 +475,13 @@ export async function verifyDeliveryOtp(orderId: string, agentId: string, otp: s
   order.otpGeneratedAt = undefined;
   order.otpExpiresAt = undefined;
   order.otpAttempts = 0;
+
+  if (proofImage) {
+    const uploaded = await uploadBufferToCloudinary(proofImage.buffer, {
+      folder: "saudi-authentic-product/delivery-proof",
+    });
+    order.deliveryProofImage = { url: uploaded.url, publicId: uploaded.publicId };
+  }
 
   await order.save();
   return order;

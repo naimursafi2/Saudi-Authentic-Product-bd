@@ -71,9 +71,18 @@ export async function updateStaffNidImage(id: string, file: Express.Multer.File)
   return user;
 }
 
-export async function listUsers(filter: { role?: Role; search?: string; page: number; limit: number }) {
+export async function listUsers(filter: {
+  role?: Role;
+  search?: string;
+  isActive?: boolean;
+  isEmailVerified?: boolean;
+  page: number;
+  limit: number;
+}) {
   const query: Record<string, unknown> = {};
   if (filter.role) query.role = filter.role;
+  if (filter.isActive !== undefined) query.isActive = filter.isActive;
+  if (filter.isEmailVerified !== undefined) query.isEmailVerified = filter.isEmailVerified;
   if (filter.search) {
     query.$or = [
       { name: { $regex: filter.search, $options: "i" } },

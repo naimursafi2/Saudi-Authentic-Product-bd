@@ -388,6 +388,9 @@ export interface ApiOrder {
   deliveredBy?: string | { _id: string; name: string; email: string };
   deliveryNotes?: string;
   failureReason?: string;
+  deliveryProofImage?: { url: string; publicId: string };
+  /** Derived, never stored — absent once the order is delivered/cancelled/returned/refunded/delivery_failed. */
+  estimatedDeliveryDate?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -538,6 +541,37 @@ export interface ApiRefund {
   linkedExpense?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type ReturnRequestType = "return" | "exchange";
+export type ReturnRequestStatus = "pending" | "approved" | "rejected";
+
+export interface ApiReturnRequest {
+  _id: string;
+  order: string | { _id: string; orderNumber: string; totalBDT: number; status: OrderStatus };
+  customer: string | { _id: string; name: string; email: string };
+  type: ReturnRequestType;
+  reasonCategory: RefundReasonCategory;
+  note?: string;
+  desiredExchangeDetails?: string;
+  status: ReturnRequestStatus;
+  reviewedBy?: string | { _id: string; name: string; email: string };
+  reviewedAt?: string;
+  reviewNote?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiDeliveryAgentPerformance {
+  agentId: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  assignedCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  successRate: number | null;
+  averageDeliveryHours: number | null;
 }
 
 export interface FinanceSummary {
@@ -712,6 +746,22 @@ export interface CustomerStats {
   unverified: number;
   active: number;
   inactive: number;
+}
+
+export type ProductAlertType = "price_drop" | "back_in_stock";
+
+/** The "Notify Me" subscriptions on a product page — see `productAlert.service.ts`. */
+export interface ApiProductAlert {
+  _id: string;
+  product: ApiProduct | string;
+  variantId: string;
+  variantLabel: string;
+  type: ProductAlertType;
+  referencePriceBDT?: number;
+  isActive: boolean;
+  notifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiNotification {

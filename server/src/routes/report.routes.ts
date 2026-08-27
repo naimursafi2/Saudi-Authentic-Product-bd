@@ -3,7 +3,7 @@ import * as reportController from "../controllers/report.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
-import { salesSummaryQuerySchema } from "../validators/report.validator";
+import { salesSummaryQuerySchema, salesTimeSeriesQuerySchema } from "../validators/report.validator";
 
 const router = Router();
 
@@ -23,6 +23,17 @@ router.get(
   requirePermission("reports.view"),
   validate({ query: salesSummaryQuerySchema }),
   reportController.salesSummary
+);
+router.get(
+  "/sales-timeseries",
+  requirePermission("reports.view"),
+  validate({ query: salesTimeSeriesQuerySchema }),
+  reportController.salesTimeSeries
+);
+router.get(
+  "/delivery-performance",
+  requirePermission("reports.view"),
+  reportController.deliveryPerformance
 );
 
 export default router;

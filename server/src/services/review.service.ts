@@ -1,6 +1,7 @@
 import { ReviewModel } from "../models/Review.model";
 import { ProductModel } from "../models/Product.model";
 import { ApiError } from "../utils/ApiError";
+import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { recomputeProductRating } from "./product.service";
 import type { CreateReviewInput } from "../validators/review.validator";
 
@@ -51,7 +52,8 @@ export async function listRecentReviews(limit: number) {
 export async function createReview(
   productId: string,
   customerId: string,
-  input: CreateReviewInput
+  input: CreateReviewInput,
+  images?: Express.Multer.File[]
 ) {
   const product = await ProductModel.findById(productId);
   if (!product) throw ApiError.notFound("Product not found");
@@ -61,11 +63,21 @@ export async function createReview(
     throw ApiError.conflict("You have already reviewed this product");
   }
 
+  const uploadedImages =
+    images && images.length > 0
+      ? await Promise.all(
+          images.map((file) =>
+            uploadBufferToCloudinary(file.buffer, { folder: "saudi-authentic-product/reviews" })
+          )
+        )
+      : [];
+
   const review = await ReviewModel.create({
     product: productId,
     customer: customerId,
     rating: input.rating,
     comment: input.comment,
+    images: uploadedImages.map((img) => ({ url: img.url, publicId: img.publicId })),
   });
 
   await recomputeProductRating(productId);
