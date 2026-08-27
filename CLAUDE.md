@@ -44,7 +44,7 @@ Register every new router in `routes/index.ts`.
 | Base path | Purpose | Role restrictions (beyond `authenticate`) |
 | --- | --- | --- |
 | `/auth` | register/login/`google` (Continue with Google)/refresh/logout/logout-all, `GET /me`, change-password, forgot/reset-password, verify-email/resend-verification, plus 2FA (`POST /2fa/setup`, `/2fa/enable`, `/2fa/disable`, `/2fa/verify` — see "Security hardening" below). Login/register/google/refresh/forgot/reset/verify-email/resend-verification/`2fa/verify` are rate-limited via `authLimiter`. | mostly public; `/logout-all`, `/me`, `/change-password`, `/2fa/setup`, `/2fa/enable`, `/2fa/disable` require auth; `/2fa/verify` is public (it carries its own short-lived challenge token); `/google` 503s until `GOOGLE_CLIENT_ID` is configured |
-| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates; `PATCH /:id/staff-meta/nid-image` (staff NID card photo upload); `PATCH /:id/unlock` (clear a failed-login lockout); `POST /:id/impersonate` (support-login) | create/role/status/staff-meta/nid-image/unlock: `admin`,`super_admin`; list/get: + `co_admin`; impersonate: `super_admin` only (and never onto another `super_admin`); all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
+| `/users` | customer's own profile (`PATCH /me` — name/phone), avatar (`PATCH`/`DELETE /me/avatar`, image upload via Cloudinary), address CRUD (`POST`/`PATCH`/`DELETE /me/addresses[/:addressId]`); staff creation/listing/role/status/staff-meta updates; `PATCH /:id/staff-meta/nid-image` (staff NID card photo upload); `PATCH /:id/unlock` (clear a failed-login lockout); `POST /:id/impersonate` (support-login); `GET /customer-stats` (live total/verified/unverified/active/inactive customer counts, see "Customer Messaging / Campaign Management System" below) | create/role/status/staff-meta/nid-image/unlock: `admin`,`super_admin`; list/get/customer-stats: + `co_admin`; impersonate: `super_admin` only (and never onto another `super_admin`); all `/me/...` routes just require `authenticate` — scoped to the calling user via `req.user.id`, no role check needed; `createStaffSchema` allows creating `employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin` (never `super_admin`) |
 | `/categories` | public list/get by slug; create/update (image upload)/delete | create/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`/`existingImages`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
 | `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/send-delivery-otp`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
@@ -73,6 +73,8 @@ Register every new router in `routes/index.ts`.
 | `/shops` | `GET /` (scoped list), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` and `PATCH /users/:userId` (a staff member's shop assignment) | list: `shops.view`; create/update/delete/assign: `shops.manage` (`admin`,`super_admin` by default). A caller without `shops.manage` only ever sees the shops in their own `User.assignedShops` — see "Purchasing: shops, batches & flexible landed costs" below |
 | `/purchases` | `GET /`, `GET /:id`, `POST /` (multipart), `PATCH /:id`, `PATCH /:id/receive`, `PATCH /:id/cancel`, `DELETE /:id`, the cost-item endpoints `POST /:id/costs` / `PATCH /:id/costs/:costId` / `DELETE /:id/costs/:costId`, and `GET /product/:productId` (per-product landed-cost history) | view: `purchases.view`; create: `purchases.create`; edit/costs/receive/cancel: `purchases.edit`; delete: `purchases.delete` (`co_admin` deliberately lacks it). Every read and write is additionally shop-scoped |
 | `/roles` | `GET /permissions` (the permission catalogue, grouped + labelled), `GET /` (all roles with assigned-user counts), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` (one user's effective permissions) and `PATCH /users/:userId` (assign/clear a custom role) | read: `roles.view`; author roles: `roles.manage`; assign a role to a person: `employees.manage` — see "Roles & permissions" below for the guards the service adds on top |
+| `/campaigns` | `GET /channel-status`, `GET /audience-preview`, `GET /`, `GET /:id`, `POST /` (multipart, optional banner image), `PATCH /:id`, `DELETE /:id`, `POST /:id/submit`, `PATCH /:id/approve`, `PATCH /:id/reject`, `POST /:id/send-now`, `PATCH /:id/pause`, `PATCH /:id/resume` | view/audience-preview/channel-status: `campaigns.view`; create/submit: `campaigns.create`; edit: `campaigns.edit`; delete: `campaigns.delete` (`super_admin` only by default); approve/reject: `campaigns.approve` (`super_admin` only); send-now/pause/resume: `campaigns.send` (`super_admin` only) — see "Customer Messaging / Campaign Management System" below |
+| `/notifications` | `GET /mine`, `PATCH /:id/read`, `PATCH /mark-all-read` — a customer's own website-notification inbox | just `authenticate`, self-scoped to `req.user.id` — same as `/users/me/*` |
 
 **Coupons** (`models/Coupon.model.ts`, `services/coupon.service.ts`,
 `validators/coupon.validator.ts`): `code` (unique, uppercased), `discountType`
@@ -548,7 +550,7 @@ any `.request`/`.grant`/`.deny` row that came through with no reviewer note).
 
 #### Models (`src/models`)
 
-`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below).
+`User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -715,6 +717,193 @@ there as well would double-count anything a user also recorded as an expense.
 Purchase costs are landed-cost accounting for a batch, and the finance summary
 is operational spend — joining them is a decision for whoever owns the
 finance model, not a side effect of this module.
+
+#### Customer Messaging / Campaign Management System
+
+Lets Super Admin, Admin and Co-Admin create promotional/informational
+messages and deliver them to customers over Email, SMS and/or an in-app
+Website Notification. Built entirely on top of existing infrastructure —
+`email.service.ts`/`config/mailer.ts`, `config/sms.ts`'s gateway-ready
+abstraction, the permission system, the approval-email/audit-log
+conventions the Grant-Based Approval Workflow already established, and (new)
+a single project-wide `node-cron` scheduler — rather than introducing a
+parallel system for any of those.
+
+**`Campaign`** (`models/Campaign.model.ts`, `services/campaign.service.ts`):
+`title`, `message`, an optional Cloudinary `image`, `targetAudience`
+(`{type: "all"|"selected"|"specific", customerIds[]}`), `channels`
+(`("email"|"sms"|"website")[]` — a plain array rather than a hand-enumerated
+"Email Only"/"Email + SMS"/"All Channels" combo, since every combination
+reduces to the same three underlying channels and one array is simpler to
+validate and dispatch than five), `schedule`
+(`{type:"now"|"weekly"|"monthly"|"custom", sendAt?, dayOfWeek?, dayOfMonth?,
+hour?, minute?}`), `status` (the nine spec statuses:
+draft/pending_approval/approved/scheduled/sending/sent/paused/rejected/
+failed), `approvalStatus`, `createdBy`/`createdByRole`, `reviewedBy`/
+`reviewedAt`/`reviewNote`, `nextRunAt`/`lastSentAt`/`sendCount`, and
+`deliveries[]` — one entry per actual send (scheduled or manual), each
+holding a `channelResults[]` summary (`{channel, status: "sent"|"failed"|
+"skipped", recipientCount, successCount, failureCount, skippedReason?,
+failures[]}`). `failures[]` is capped at 25 samples per channel per send
+(`FAILURE_SAMPLE_LIMIT`) and `deliveries[]` itself is capped at 200 entries
+(`DELIVERY_HISTORY_LIMIT`, applied via `.slice(-200)` on push) — a campaign
+with thousands of recipients or years of weekly sends never grows the
+document without bound; `failureCount` is always the true total even once
+the sample caps out.
+
+**Why this is its own lifecycle, not routed through `PendingAction`.** The
+existing Grant-Based Approval Workflow (see "Approval-gate system & audit
+logging" above) exists for actions that have **no record of their own**
+until a Super Admin grants them — a new product, a stock delta. A campaign
+needs the opposite: an Admin/Co-Admin drafts it, edits it repeatedly, and
+only later submits it, and the Campaign Management page needs to list
+Draft/Pending/Rejected campaigns throughout that process. So the approval
+fields live directly on `Campaign` instead: `draft`/`rejected` → (edit any
+number of times) → `submitCampaign()` → `pending_approval` → Super Admin
+`approveCampaign()`/`rejectCampaign()`. Audit logging (`recordAuditLog`) and
+the email-on-submit/email-on-review pattern are still reused as-is from
+`pendingAction.service.ts`'s conventions (`sendCampaignSubmittedEmail`/
+`sendCampaignReviewedEmail` in `email.service.ts`, mirroring
+`sendPendingActionRequestedEmail`/`sendPendingActionReviewedEmail`) — only
+the "does this exist yet" question is answered differently.
+
+**A Super Admin's own campaign never goes through review.** Calling
+`submitCampaign()` as `super_admin` skips straight to `activateCampaign()`
+(the same internal function `approveCampaign()` calls) instead of setting
+`pending_approval` — one function, actor-dependent branching, the same
+shape `coupon.service.ts#resolveCouponGate` uses. `activateCampaign()`
+either dispatches immediately (schedule type `"now"`, fired via
+`void dispatchCampaign(...)` so the HTTP response returns fast while the
+send happens in the background) or computes `nextRunAt` and sets `status:
+"scheduled"` (`weekly`/`monthly`/`custom`).
+
+**Scheduling is entirely server-side** (`services/scheduler.service.ts`,
+`node-cron`, `"* * * * *"` — every minute): `startCampaignScheduler()` is
+called once from `server.ts` after `connectDatabase()`/`ensureSystemRoles()`.
+Each tick calls `campaign.service.ts#claimDueCampaigns()`, which finds every
+`{status: "scheduled", nextRunAt: {$lte: now}}` campaign and **atomically
+claims** each one via a conditional `findOneAndUpdate({_id, status:
+"scheduled"}, {status: "sending"})` before dispatching it — this is what
+stops a slow send from being picked up twice by an overlapping tick, or
+fired again after being paused mid-flight. `computeNextRun(schedule, from)`
+(exported, unit-tested) rolls a weekly schedule forward to the next matching
+`dayOfWeek`/`hour`/`minute` strictly after `from`, and a monthly schedule to
+the next occurrence of `dayOfMonth` — clamped to a shorter month's own last
+day (`clampDayOfMonth`), so "day 31" reliably fires on Feb 28/29 rather than
+skipping February or throwing. This is the only cron job in the project;
+any future scheduled job should live in `scheduler.service.ts` too rather
+than each feature starting its own `cron.schedule`.
+
+**Dispatch** (`campaign.service.ts#dispatchCampaign`, called both by the
+scheduler and by direct actions like `sendCampaignNow`): always reloads the
+campaign fresh from the DB (it can run minutes after being triggered),
+resolves recipients live via `getAudienceRecipients()` — `role: "customer",
+isActive: true`, further filtered to `targetAudience.customerIds` for
+`"selected"`/`"specific"` — then runs each configured channel:
+- **Email**: sent in batches of 20 (`EMAIL_BATCH_SIZE`) via
+  `Promise.allSettled`, calling `config/mailer.ts#sendMail` **directly**
+  rather than through `email.service.ts`'s `safeSend()` wrapper — deliberate,
+  since `safeSend()` swallows every error (the right behavior for an
+  incidental notification email elsewhere in the app) which would make
+  every campaign email look like a success. `email.service.ts` exports
+  `renderCampaignEmailHtml()` (a pure template function, reusing the shared
+  `layout()` helper) precisely so the dispatch code can send it itself and
+  catch per-recipient failures.
+- **SMS**: gated on `isSmsConfigured` (`config/env.ts`) exactly like the
+  delivery-OTP flow. Not configured → the channel result is `status:
+  "skipped"` with `skippedReason: "SMS gateway not configured"` and the
+  campaign still completes normally through its other channels — never a
+  failure, never a crash. Configured → calls the existing `sendSms(to,
+  message)` per recipient with a phone number on file. `sendSms()` was
+  extended to **return `Promise<boolean>`** (success/failure) instead of
+  `Promise<void>`, purely so campaign dispatch can count per-recipient
+  results — its one existing fire-and-forget caller
+  (`order.service.ts`'s delivery OTP, `void sendSms(...)`) is unaffected
+  since it already discarded the return value, and `sendSms()` itself still
+  never throws.
+- **Website**: `customerNotification.service.ts#createCampaignNotifications`
+  bulk-`insertMany`s one `Notification` document per recipient.
+
+Every channel's result becomes one `ICampaignChannelResult` appended to a
+new `deliveries[]` entry, along with `recipientCount`, `trigger`
+(`"scheduled"`/`"manual"`), and `triggeredBy`. Afterward: a one-shot
+schedule (`now`/`custom`) becomes `status: "sent"` with `nextRunAt` cleared;
+a recurring schedule fired by the scheduler advances `nextRunAt` from its
+own previous value (not from "now", to avoid drift) and stays `"scheduled"`;
+a recurring schedule fired ad hoc via **Send Now** stays `"scheduled"`
+without disturbing its normal cadence. An exception anywhere in the pipeline
+(not a per-recipient channel failure, an actual thrown error) marks the
+whole campaign `"failed"` and is audit-logged.
+
+**`Notification`** (`models/Notification.model.ts`,
+`services/customerNotification.service.ts`): the Website Notification
+channel's storage — one row per recipient per campaign (`user`, optional
+`campaign` ref, `title`, `message`, `image?`, `isRead`), the normal shape for
+a per-user inbox (unlike email/SMS, a website notification has to be
+individually readable/dismissable by its owner, so it can't collapse into
+an aggregate count the way the other two channels' results do). This is
+deliberately **not a general notification system** — it exists only to
+carry campaign messages into a customer's account, matching the existing
+staff-facing `notification.service.ts`'s "specific, spec-defined surface,
+not a framework" precedent (that module is unrelated — it fans emails out
+to staff for new-order/low-stock/delivery-failed events; this one is
+customer-facing, in-app, and campaign-only). `GET /notifications/mine`,
+`PATCH /notifications/:id/read`, `PATCH /notifications/mark-all-read` are
+all self-scoped to `req.user.id`, no permission needed, same as `/users/me/*`.
+
+**Target audience is always resolved live, never stored.** `"all"` queries
+every active customer at send/preview time; `"selected"`/`"specific"` filter
+that same live query down to `targetAudience.customerIds` — so a recipient
+who was deactivated or deleted since the campaign was created or approved is
+silently excluded, and the recipient count shown in the UI (`GET
+/campaigns/audience-preview`) is always accurate, the same
+never-store-a-derived-value philosophy as `computeCouponStatus()` and
+Purchase's cost virtuals elsewhere in this project. `getAudiencePreview()`
+also returns `withEmail`/`withPhone` counts — `withEmail` is always the full
+total (email is a required field on every `User`), `withPhone` is the
+genuinely useful per-channel estimate for SMS.
+
+**Permissions** (`constants/permissions.ts`): `campaigns.view`/`.create`/
+`.edit` (Co-Admin and Admin both hold these three by default — create,
+edit their own, submit for approval), `campaigns.delete`/`.approve`/`.send`
+(Super Admin only by default, via its usual "holds every permission"
+special-case — not present in either built-in role's default list, matching
+the spec's Admin/Co-Admin vs. Super Admin split exactly). `campaigns.send`
+covers Send Now, Pause and Resume together — all three are "operate an
+already-approved/live campaign" capabilities that only Super Admin has in
+this spec, so one permission covers them rather than three near-identical
+ones. List/detail (`listCampaigns`/`getCampaignById`) force-scope a viewer
+without `campaigns.approve` to their own `createdBy` campaigns only — the
+same "own submissions" pattern Expenses and Audit Logs already use — so
+Super Admin (the only holder of `campaigns.approve`) is the only role that
+sees every campaign.
+
+**Customer statistics** (`user.service.ts#getCustomerStats`, `GET
+/users/customer-stats`, gated by the existing `employees.view` permission —
+no new permission needed): live `countDocuments` aggregates — total,
+verified/unverified (`isEmailVerified`), active/inactive (`isActive`) — never
+hardcoded or cached. Backs stat cards on both `/admin/customers` and
+implicitly the campaign creation flow's audience numbers.
+
+Frontend: `/admin/campaigns` (`app/admin/campaigns/page.tsx`) is the
+Campaign Management page — status-filter pills covering all nine statuses
+plus "All", a table with per-row actions gated by permission *and* campaign
+status (Edit/Submit only while draft/rejected and only for the owner or a
+Super Admin; Approve/Reject only `pending_approval`; Send Now/Pause/Resume
+per their valid source statuses; Delete Super-Admin-only), and a Delivery
+History modal rendering each `deliveries[]` entry's per-channel
+sent/failed/skipped breakdown. `components/admin/CampaignForm.tsx` is the
+create/edit form: a live recipient-count line and a debounced
+customer-search checkbox/radio list for Selected/Specific audiences, a
+Delivery Channel section showing each channel's real
+Available/Not-Configured status (from `GET /campaigns/channel-status`, itself
+just `{email: isSmtpConfigured, sms: isSmsConfigured, website: true}` — never
+hardcoded), and schedule sub-fields that change with the selected schedule
+type. `components/layout/NotificationBell.tsx` is the storefront header's
+bell icon (visible only for a signed-in `customer`) — an unread-count badge
+polled every 60s, and a click-toggled dropdown (not hover, since it fetches
+over the network) listing recent notifications with mark-one-read/mark-all-
+read actions.
 
 #### Staff HR additions (NID, editable joining date, daily allowance)
 
@@ -1234,7 +1423,7 @@ locking in the `order_manager`/`delivery_agent` role strings), plus
 HTTP-through-Mongoose integration specs (`auth`, `emailVerification`,
 `catalog`, `order`, `orderStatus`, `task`, `coupon`, `approvalGate`,
 `stockApproval`, `finance`, `security`, `notification`, `siteSettings`,
-`heroSlide`, `permissions`, `purchase`, `staffHr`) run against an
+`heroSlide`, `permissions`, `purchase`, `staffHr`, `campaign`) run against an
 actual in-memory MongoDB via `mongodb-memory-server`
 (`tests/integration/setup.ts` starts/stops it and wipes collections between
 tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
@@ -1328,7 +1517,24 @@ singleton, that an admin can switch it on and edit its text in one request,
 that the string `"false"` from the multipart form really switches it back
 off, that the text survives being switched off so it can be reused, and that
 `co_admin`/`order_manager`/`employee`/`customer` all get 403 while anonymous
-gets 401). All suites run together via `npm test` (Jest +
+gets 401), and `campaign.integration.test.ts` (customers/employees blocked
+entirely; the Co-Admin/Admin create→edit→submit→pending_approval walk, with
+editing rejected once submitted; Super Admin approve moving a weekly
+campaign to `"scheduled"` with a computed `nextRunAt`; Super Admin reject
+followed by the creator editing the rejected campaign back to `"draft"` and
+resubmitting; a Super Admin's own campaign skipping approval entirely; the
+campaign list force-scoping a non-Super-Admin viewer to their own
+`createdBy` campaigns; a live, dynamic audience-preview count — including
+an inactive customer correctly excluded and a `withPhone` count that only
+counts customers with a phone on file; the channel-status endpoint
+reflecting real (mocked) server configuration; a direct `dispatchCampaign()`
+call exercising all three channels at once — email partial failure counted
+correctly via a mocked `sendMail`, SMS gracefully `"skipped"` via a mocked
+`isSmsConfigured: false`, and website notifications actually created; a
+customer reading and marking those notifications read via `/notifications/
+mine`; pause/resume recomputing `nextRunAt`; delete restricted to Super
+Admin; and `computeNextRun()`'s weekly-rollover and monthly-clamp-to-
+shorter-month math as plain unit tests). All suites run together via `npm test` (Jest +
 ts-jest, `backend/jest.config.js`, `tsconfig.jest.json` since the main
 `tsconfig.json` excludes `src/tests/**/*` from the build).
 
@@ -1438,7 +1644,12 @@ picker on orders that are `ready_for_dispatch`/`delivery_failed` — see
 review + Admin/Super Admin approval — see "Finance module" above),
 `/admin/coupons` (reachable by `co_admin` now too — large-discount
 create/update requests may come back as a pending-approval notice instead
-of an immediate save), `/admin/customers`, `/admin/reviews`,
+of an immediate save), `/admin/campaigns` (Customer Messaging / Campaign
+Management — reachable by `co_admin` and `admin` too, scoped to their own
+campaigns; approve/reject/send/pause/resume/delete stay `super_admin` only —
+see "Customer Messaging / Campaign Management System" above),
+`/admin/customers` (now with live Total/Verified/Unverified/Active/Inactive
+stat cards), `/admin/reviews`,
 `/admin/employees` (each staff row has an **Access** action — assign a custom role, review the person's effective permissions), `/admin/roles` (Roles & Permissions management — create/edit/delete custom roles, assign permissions; visible with `roles.view`, editable with `roles.manage`), `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
 `/admin/inventory`, `/admin/purchases` (purchase batches + their fully
@@ -1653,8 +1864,11 @@ facet without a real field behind it.
 shape common to Bangladeshi storefronts (ghorerbazar.com was the reference
 for the structure only — palette, type and components are this project's).
 Row 1 is logo | `HeaderSearchBar` | labelled action icons (Track Order,
-Wishlist, Cart with its count badge, account) + `ThemeToggle`; each action
-carries its own text label rather than standing alone as a glyph. Row 2 is
+Wishlist, a **Notifications** bell — `NotificationBell.tsx`, visible only
+for a signed-in `customer`, since the campaign website-notification channel
+only ever targets customers — Cart with its count badge, account) +
+`ThemeToggle`; each action carries its own text label rather than standing
+alone as a glyph. Row 2 is
 the admin-managed `NavLink` list plus the Categories dropdown. Below `lg`
 the nav row collapses into a **left-hand** drawer (hamburger sits on the
 left, drawer uses `animate-slide-in-left`), and the search bar drops to its
@@ -2369,7 +2583,22 @@ catch-all rewrite here.
   changes, settings changes, product content edits, and other sensitive
   actions are audit-*logged* (see "Approval-gate system & audit logging"
   above) but are **not** routed through the Grant-Based Approval Workflow;
-  only the nine action types above create a `PendingAction`.
+  only the nine action types above create a `PendingAction`. Campaign
+  approval is a separate, purpose-built lifecycle on the `Campaign` document
+  itself (see "Customer Messaging / Campaign Management System" above) —
+  deliberately not a tenth `PendingAction` type, since a campaign needs its
+  own persistent, editable-before-submission record.
+- **No SMS gateway is actually connected**, so a campaign's SMS channel is
+  always reported `"skipped"` rather than attempted — Email and Website
+  Notification still send normally. Once a real provider is configured (see
+  "No SMS gateway" below), the SMS channel becomes active with no code
+  change, same as the delivery-OTP flow.
+- **A campaign's delivery history is capped** (`DELIVERY_HISTORY_LIMIT` =
+  200 entries, `FAILURE_SAMPLE_LIMIT` = 25 failure samples per channel per
+  send) — a long-lived weekly/monthly campaign or one with thousands of
+  recipients keeps its aggregate counts exactly, but the oldest delivery
+  records and the least-recent failure samples eventually roll off rather
+  than growing the document without bound.
 - **A queued stock change is still not *locked* against concurrent edits** —
   two staff members can each queue a change to the same variant and both
   apply in grant order (`inventory.adjust` deltas compose correctly;
@@ -2430,7 +2659,12 @@ catch-all rewrite here.
   The delivery-agent OTP flow (see "Order status pipeline & delivery" above)
   works around the missing SMS by emailing the code and also surfacing it
   directly on the order owner's own tracking/account page — until a real
-  provider is wired up, the delivery agent must obtain it verbally.
+  provider is wired up, the delivery agent must obtain it verbally. The
+  Campaign system's SMS channel (see "Customer Messaging / Campaign
+  Management System" above) reuses this exact same `sendSms`/
+  `isSmsConfigured` pair and degrades the same way — a campaign's SMS
+  channel is reported `"skipped"`, never attempted or failed, until a
+  provider is configured.
 - **Still no arbitrary page/route creation** — `/about`, `/contact`, and
   `/shipping-policy`'s body copy is admin-editable via the fixed-type
   `StaticPage` system (see "Static page content management"), same as the

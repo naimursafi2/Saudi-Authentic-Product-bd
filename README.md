@@ -399,6 +399,28 @@ form or state-management library — forms/data fetching are hand-rolled with
   doesn't email on every sale), and a failed delivery (order manager/
   co-admin/admin/super admin). This is not a full notification matrix —
   there's no per-user subscription model and no in-app inbox.
+- **Customer Messaging / Campaign Management** (`/admin/campaigns`) — Super
+  Admin, Admin and Co-Admin can create promotional/informational campaigns
+  (title, message, optional banner image, target audience, delivery
+  channel(s), schedule) and send them to customers over Email, SMS, and/or
+  an in-app Website Notification (a bell icon in the storefront header for
+  signed-in customers). Admin/Co-Admin submissions go through the same
+  Super-Admin review shape as the rest of the approval system; a Super
+  Admin's own campaigns send or schedule directly. Scheduling supports Send
+  Now, Weekly, Monthly, and a Custom date/time, driven entirely by a
+  server-side `node-cron` scheduler (checks every minute) — a scheduled send
+  fires with no browser open. Target audience is always resolved live
+  against real customer data (All / a multi-select of Selected Customers /
+  one Specific Customer), with a dynamic recipient count and a live
+  Email/SMS/Website availability panel read from actual server
+  configuration. SMS reuses the existing `sendSms` gateway abstraction and
+  degrades gracefully — an unconfigured SMS channel is marked "skipped" with
+  a clear reason rather than failing the campaign, and Email/Website continue
+  normally. Every send records per-channel delivery results (sent/failed/
+  skipped counts, a bounded sample of failures) in the campaign's own
+  delivery history, viewable from the campaign list. The Customers page also
+  shows live Total/Verified/Unverified/Active/Inactive stat cards, backed by
+  the same real customer data.
 
 ## Getting started
 
@@ -508,10 +530,16 @@ machine.
   receipt through the stock approval gate for both Super Admin and Admin, an
   unlinked batch receiving without touching stock, a received batch refusing
   further cost edits, and shop scoping — a scoped viewer failing closed with
-  no assignment and unable to widen scope with a `?shop=` filter — run with
+  no assignment and unable to widen scope with a `?shop=` filter; and the
+  campaign system — the full Draft to Submit to Approve/Reject lifecycle for
+  Co-Admin/Admin vs. a Super Admin's direct path, per-channel dispatch
+  (email success/failure counting, graceful SMS-not-configured skipping,
+  website notifications actually landing in the recipient's own inbox),
+  live audience/recipient-count resolution, pause/resume, and the weekly/
+  monthly schedule-rollover math — run with
   `supertest` against an actual in-memory MongoDB via
-  `mongodb-memory-server`. 198 tests across 27 suites passing as of the
-  purchasing build. Coverage is still partial, not exhaustive.
+  `mongodb-memory-server`. 222 tests across 29 suites as of the campaign
+  management build. Coverage is still partial, not exhaustive.
 - **Frontend**: `npm test` runs Vitest (`vitest.config.mts`, jsdom
   environment) with React Testing Library. Covers pure-logic modules
   (`lib/utils`, `lib/passwordStrength`, `lib/mappers`, `lib/stock`), one
@@ -573,7 +601,13 @@ missing/malformed):
   confirmation, purchase receipt) —
   role changes, settings changes, product content edits, and other
   sensitive actions are audit-logged but do not go through the
-  grant/deny `PendingAction` queue.
+  grant/deny `PendingAction` queue. Campaign approval is a separate,
+  purpose-built lifecycle on the `Campaign` document itself (Draft → Pending
+  Approval → Approved/Rejected, editable while draft/rejected) rather than
+  routed through `PendingAction` — a campaign needs its own persistent
+  record from creation (so it can be edited before submission and listed by
+  status), which doesn't fit `PendingAction`'s "doesn't exist until granted"
+  shape.
 - Purchase costs are not fed into the finance summary — `/admin/finance`
   still totals confirmed `Expense` documents only, because auto-logging a
   batch's landed cost there would double-count anything the user also
@@ -637,7 +671,10 @@ missing/malformed):
   is a gateway-ready abstraction gated on `SMS_API_URL`/`SMS_API_KEY`/
   `SMS_SENDER_ID`, but with no provider chosen those are blank and every
   call is a logged no-op. The delivery OTP still reaches the customer via
-  email and the order tracking/account page in the meantime.
+  email and the order tracking/account page in the meantime, and a campaign's
+  SMS channel is simply marked "skipped" rather than attempted — Email and
+  Website Notification still send normally. Once a provider is configured,
+  both the delivery OTP and campaign SMS become active with no code change.
 - The homepage content system (hero slides + homepage sections), navigation
   (header nav links), footer (link columns + social links), and now
   `/about`/`/contact`/`/shipping-policy` (via `/admin/pages`) are all
