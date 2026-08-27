@@ -231,7 +231,7 @@ export default function AdminEmployeesPage() {
                             <button
                               onClick={() => handleUnlock(person)}
                               disabled={actingId === person._id}
-                              className="cursor-pointer text-xs font-bold uppercase tracking-wide text-danger hover:underline disabled:opacity-50"
+                              className="inline-flex cursor-pointer items-center rounded-full bg-success-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-green-900 transition-colors duration-150 hover:bg-success-soft-hover disabled:opacity-50"
                             >
                               Unlock
                             </button>

@@ -6,6 +6,7 @@ import { useCart } from "@/context/CartContext";
 import { formatBDT } from "@/lib/utils";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 
 export default function CartPage() {
@@ -77,13 +78,15 @@ export default function CartPage() {
                     </Link>
                     <p className="text-xs text-brown-500 sm:text-sm">{item.variant.label}</p>
                   </div>
-                  <button
-                    aria-label="Remove item"
-                    onClick={() => removeItem(item.product.id, item.variant.id)}
-                    className="shrink-0 cursor-pointer text-brown-500/70 hover:text-danger"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <Tooltip label="Remove item">
+                    <button
+                      aria-label="Remove item"
+                      onClick={() => removeItem(item.product.id, item.variant.id)}
+                      className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </Tooltip>
                 </div>
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2 rounded border border-green-900/20">

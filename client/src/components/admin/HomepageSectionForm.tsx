@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { STATIC_PAGE_BLOCK_ICONS } from "@/lib/staticPageBlockIcons";
 import type {
   ApiCategory,
@@ -281,14 +282,16 @@ export function HomepageSectionForm({
                     />
                     Visible
                   </label>
-                  <button
-                    type="button"
-                    aria-label="Remove"
-                    onClick={() => removeBlock(i)}
-                    className="shrink-0 cursor-pointer text-brown-500 hover:text-danger"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <Tooltip label="Remove">
+                    <button
+                      type="button"
+                      aria-label="Remove"
+                      onClick={() => removeBlock(i)}
+                      className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </Tooltip>
                 </div>
               ))}
               {values.blocks.length === 0 && <p className="text-xs text-brown-500">None yet — add one above.</p>}

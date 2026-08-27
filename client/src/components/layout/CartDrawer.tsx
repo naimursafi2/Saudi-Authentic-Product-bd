@@ -6,6 +6,7 @@ import { useCart } from "@/context/CartContext";
 import { formatBDT } from "@/lib/utils";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { ButtonLink } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function CartDrawer() {
   const { items, lines, subtotal, isDrawerOpen, isLoading, closeDrawer, updateQuantity, removeItem } =
@@ -80,13 +81,15 @@ export function CartDrawer() {
                       >
                         {item.product.name}
                       </Link>
-                      <button
-                        aria-label="Remove item"
-                        onClick={() => removeItem(item.product.id, item.variant.id)}
-                        className="shrink-0 cursor-pointer text-brown-500/70 hover:text-danger"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <Tooltip label="Remove item">
+                        <button
+                          aria-label="Remove item"
+                          onClick={() => removeItem(item.product.id, item.variant.id)}
+                          className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </Tooltip>
                     </div>
                     <p className="text-xs text-brown-500">{item.variant.label}</p>
                     <div className="mt-1 flex items-center justify-between">

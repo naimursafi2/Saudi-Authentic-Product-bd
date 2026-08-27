@@ -328,7 +328,7 @@ export async function assignCustomRole(userId: string, roleId: string | null, ac
     resource: "User",
     resourceId: user._id.toString(),
     oldValue: { customRole: previous },
-    newValue: { customRole: role?._id.toString() ?? null },
+    newValue: { customRole: role?._id.toString() ?? null, name: user.name, roleName: role?.name },
     note: role
       ? `Assigned custom role ${role.key} to ${user.email}`
       : `Cleared custom role from ${user.email}`,

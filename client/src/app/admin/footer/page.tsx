@@ -12,6 +12,7 @@ import {
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { useConfirm } from "@/context/ConfirmDialogContext";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -162,22 +163,26 @@ export default function AdminFooterPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button
-                        aria-label="Move up"
-                        disabled={i === 0}
-                        onClick={() => moveColumn(column, "up")}
-                        className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
-                      >
-                        <ArrowUp size={14} />
-                      </button>
-                      <button
-                        aria-label="Move down"
-                        disabled={i === sorted.length - 1}
-                        onClick={() => moveColumn(column, "down")}
-                        className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
-                      >
-                        <ArrowDown size={14} />
-                      </button>
+                      <Tooltip label="Move up">
+                        <button
+                          aria-label="Move up"
+                          disabled={i === 0}
+                          onClick={() => moveColumn(column, "up")}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-brown-500 transition-colors duration-150 hover:bg-cream-300 hover:text-green-950 disabled:opacity-30"
+                        >
+                          <ArrowUp size={14} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Move down">
+                        <button
+                          aria-label="Move down"
+                          disabled={i === sorted.length - 1}
+                          onClick={() => moveColumn(column, "down")}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-brown-500 transition-colors duration-150 hover:bg-cream-300 hover:text-green-950 disabled:opacity-30"
+                        >
+                          <ArrowDown size={14} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -186,20 +191,24 @@ export default function AdminFooterPage() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      aria-label="Edit"
-                      onClick={() => setEditing(column)}
-                      className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      aria-label="Delete"
-                      onClick={() => handleDelete(column)}
-                      className="cursor-pointer text-brown-500 hover:text-danger"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    <Tooltip label="Edit">
+                      <button
+                        aria-label="Edit"
+                        onClick={() => setEditing(column)}
+                        className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip label="Delete">
+                      <button
+                        aria-label="Delete"
+                        onClick={() => handleDelete(column)}
+                        className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </Tooltip>
                   </td>
                 </tr>
               ))}

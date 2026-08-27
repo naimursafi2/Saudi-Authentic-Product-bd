@@ -175,7 +175,7 @@ export async function assignShopsToUser(userId: string, input: AssignShopsInput,
     resource: "User",
     resourceId: userId,
     oldValue: { assignedShops: before },
-    newValue: { assignedShops: input.shopIds },
+    newValue: { assignedShops: input.shopIds, name: user.name },
     note: `Shop assignment updated for ${user.email}`,
   });
 

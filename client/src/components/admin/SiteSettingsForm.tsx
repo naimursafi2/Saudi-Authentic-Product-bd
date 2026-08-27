@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { ApiSiteSettings, ApiSocialLink, SocialPlatform } from "@/types/api";
 
 export interface SiteSettingsFormValues {
@@ -209,14 +210,16 @@ export function SiteSettingsForm({
                 placeholder="https://..."
                 className={fieldClasses}
               />
-              <button
-                type="button"
-                aria-label="Remove social link"
-                onClick={() => removeSocialLink(i)}
-                className="shrink-0 cursor-pointer text-brown-500 hover:text-danger"
-              >
-                <Trash2 size={15} />
-              </button>
+              <Tooltip label="Remove social link">
+                <button
+                  type="button"
+                  aria-label="Remove social link"
+                  onClick={() => removeSocialLink(i)}
+                  className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </Tooltip>
             </div>
           ))}
           {values.socialLinks.length === 0 && (

@@ -155,7 +155,7 @@ export default function AdminSalaryPage() {
                       {payment.status === "pending" && (
                         <button
                           onClick={() => handleMarkPaid(payment)}
-                          className="cursor-pointer text-xs font-bold uppercase tracking-wide text-green-900 hover:underline"
+                          className="inline-flex cursor-pointer items-center rounded-full bg-success-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-green-900 transition-colors duration-150 hover:bg-success-soft-hover"
                         >
                           Mark Paid
                         </button>

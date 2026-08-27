@@ -13,6 +13,7 @@ import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { TaskForm, type TaskFormValues } from "@/components/admin/TaskForm";
 import type { ApiTask } from "@/types/hr";
 import type { ApiUser, Pagination } from "@/types/api";
@@ -147,21 +148,25 @@ export default function AdminTasksPage() {
                     <StatusBadge status={task.status} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      aria-label="Edit"
-                      onClick={() => setEditing(task)}
-                      className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    {canDelete && (
+                    <Tooltip label="Edit">
                       <button
-                        aria-label="Delete"
-                        onClick={() => handleDelete(task)}
-                        className="cursor-pointer text-brown-500 hover:text-danger"
+                        aria-label="Edit"
+                        onClick={() => setEditing(task)}
+                        className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
                       >
-                        <Trash2 size={15} />
+                        <Pencil size={15} />
                       </button>
+                    </Tooltip>
+                    {canDelete && (
+                      <Tooltip label="Delete">
+                        <button
+                          aria-label="Delete"
+                          onClick={() => handleDelete(task)}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </Tooltip>
                     )}
                   </td>
                 </tr>

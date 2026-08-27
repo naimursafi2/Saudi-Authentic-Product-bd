@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Trash2, Star } from "lucide-react";
 import { listAllReviews, deleteReview } from "@/lib/api/reviews";
 import { useConfirm } from "@/context/ConfirmDialogContext";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { AdminPagination } from "@/components/admin/AdminPagination";
@@ -88,13 +89,15 @@ export default function AdminReviewsPage() {
                       {new Date(review.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        aria-label="Delete"
-                        onClick={() => handleDelete(review)}
-                        className="cursor-pointer text-brown-500 hover:text-danger"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <Tooltip label="Delete">
+                        <button
+                          aria-label="Delete"
+                          onClick={() => handleDelete(review)}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </Tooltip>
                     </td>
                   </tr>
                 );

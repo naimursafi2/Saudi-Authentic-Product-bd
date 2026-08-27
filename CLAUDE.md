@@ -497,6 +497,55 @@ see everything, every other viewer (`co_admin`, `order_manager`, `employee`,
 regardless of any filter they pass — `/admin/audit-logs` is the read-only
 list view (reachable by every admin-portal role plus `order_manager`).
 
+Several `recordAuditLog()` call sites additionally stash a human name in
+`newValue` purely so the admin UI can display one — `user.service.ts`'s
+role/status/unlock/impersonate calls include `name`/`targetEmail` for the
+target account (the acting function already has that user document loaded,
+so this costs no extra query), and `role.service.ts#assignCustomRole` /
+`shop.service.ts` similarly include the affected user's `name`. This is
+presentation-only data, not a new source of truth — the record's real state
+still lives on the `User`/`Role`/`Shop` documents themselves.
+`pendingAction.service.ts`'s grant/deny entries include a best-effort `name`
+pulled from the pending action's own `payload` (most payloads already carry
+`name`/`productName`/`code`) plus, on grant, the underlying `resource` type
+returned by the action's apply-handler — both exist so `/admin/audit-logs`
+never has to show a bare "PendingAction" row. The stock-conflict grant note
+was also reworded to drop the raw conflicting-action ids from the sentence
+itself (`"N other pending request(s) still target the same variant."`) —
+the ids remain fully available in `newValue.conflictingActionIds` for
+anyone who needs to trace them, they're just not inlined into the
+human-readable note anymore.
+
+**`/admin/audit-logs`** (`app/admin/audit-logs/page.tsx`) translates every
+raw `action`/`resource` value before display — never render `log.action`
+or `log.resource` directly, and don't reintroduce a "PendingAction #764b74"
+resource cell or a mongo id in the Note column. Two explicit dictionaries
+do the translation: `DIRECT_ACTION_LABELS` for the ~35 literal actions
+listed above, and `GATED_ACTION_LABELS` for the nine `PendingActionType`s
+crossed with their `.request`/`.grant`/`.deny` suffix (`splitGatedAction()`
+detects the suffix; each of the 9×3 combinations is spelled out by hand
+rather than composed, since e.g. "Refund Requested" — the direct action —
+and "Refund Request Submitted" — the gated one — need to read differently
+even though they share a verb) — anything genuinely unmapped falls back to
+a humanized version of the raw string rather than failing silently.
+`actionTone()` colors the action badge by suffix first (`.grant` → success/
+green, `.deny` → danger/red, `.request` → pending/gold) and by keyword
+second for direct actions (delete/reject/cancel → red, approve/confirm/
+unlock → green, create/update/assign → blue, else neutral) — reusing the
+same `success-soft`/`danger-soft`/`gold-soft`/`info-soft` tokens as
+`StatusBadge.tsx` and the CRUD action chips above, not new colors.
+`resourceLabel()` pulls a display name from `newValue`/`oldValue` (`name`/
+`productName`/`code`/`roleName`, whichever is present) and re-labels a
+`PendingAction` resource to what it actually affected; the raw
+`resourceId` still renders, but only as a small muted `#a1b2c3` (last 6
+characters, full id in the `title` tooltip) beside the friendly name, never
+as the cell's headline — satisfying "available for debugging, not
+prominent" without deleting the id outright. `friendlyNote()` shows the
+backend's own `note` when present, and only synthesizes a sentence itself
+for the handful of actions that usually don't carry one (`user.role.update`,
+`user.status.update`, `user.impersonate.start`, and a generic sentence for
+any `.request`/`.grant`/`.deny` row that came through with no reviewer note).
+
 #### Models (`src/models`)
 
 `User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below).
@@ -2070,6 +2119,24 @@ button, "Delete" on `/admin/purchases`, "Deactivate"/"Reject" on
 wrapped in `components/ui/Tooltip.tsx` (`<Tooltip label="Edit">...`) — a
 pure-CSS hover/focus-reveal label that sits alongside, not instead of, the
 button's own `aria-label`.
+
+This is applied project-wide, not just inside `/admin` — every Edit/Delete/
+Approve/Reject/Remove-style action across every portal follows the same
+chip recipe: the admin CRUD tables (products, categories, coupons, roles,
+reviews, tasks, attendance, leave review, expenses, purchases + their cost
+editor, shops, employees, navigation/footer/homepage content management,
+site settings' social links, static/homepage section blocks), and the
+customer-facing/shared surfaces too — `components/account/AddressBook.tsx`
+(shared by the customer account, employee, delivery and admin profile
+pages, so one fix covers all four), `components/account/ProfileSection.tsx`'s
+"Remove Photo", `components/layout/CartDrawer.tsx` and the standalone
+`/cart` page's "Remove item", `components/checkout/CheckoutClient.tsx`'s
+"Remove coupon", and the registration form's inline address section in
+`components/account/AuthForms.tsx`. Reorder arrows (move up/down) keep a
+neutral hover (`hover:bg-cream-300`) rather than a color, since they aren't
+Edit/Delete/Approve; purely navigational or dismiss-style icons (nav links,
+modal close buttons, the wishlist heart toggle) are deliberately left alone
+— they're a different UI pattern, not a CRUD action on a record.
 
 **Testing**: Vitest + React Testing Library (`vitest.config.mts`,
 `vitest.setup.ts` — jsdom environment, `@/*` alias resolved to `src/`,

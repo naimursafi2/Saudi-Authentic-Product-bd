@@ -544,7 +544,7 @@ describe("Stock changes require Super Admin approval", () => {
 
       // The grant that raced another request left a trace in the audit log.
       const grantLog = await AuditLogModel.findOne({ action: "inventory.adjust.grant" });
-      expect(grantLog!.note).toMatch(/1 other pending stock request/);
+      expect(grantLog!.note).toMatch(/1 other pending request/);
 
       // The survivor is no longer in conflict with anything.
       const queue = await request(app)

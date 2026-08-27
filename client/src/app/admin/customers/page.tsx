@@ -176,7 +176,7 @@ export default function AdminCustomersPage() {
                       <div className="flex justify-end gap-2">
                         {canManageStatus && isLocked(customer) && (
                           <Button
-                            variant="ghost"
+                            variant="primary"
                             size="sm"
                             disabled={updatingId === customer._id}
                             onClick={() => handleUnlock(customer)}

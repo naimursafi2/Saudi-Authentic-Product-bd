@@ -6,6 +6,7 @@ import { addAddress, removeAddress, updateAddress } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { ApiAddress } from "@/types/api";
 
@@ -185,25 +186,29 @@ export function AddressBook({ addresses }: { addresses: ApiAddress[] }) {
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    aria-label="Edit address"
-                    onClick={() => {
-                      setError(null);
-                      setShowAddForm(false);
-                      setEditingId(address._id);
-                    }}
-                    className="cursor-pointer rounded p-1.5 text-brown-500/70 hover:bg-green-950/5 hover:text-green-950"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    aria-label="Remove address"
-                    onClick={() => handleRemove(address._id)}
-                    disabled={busyId === address._id}
-                    className="cursor-pointer rounded p-1.5 text-brown-500/70 hover:bg-danger-soft hover:text-danger disabled:opacity-50"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <Tooltip label="Edit address">
+                    <button
+                      aria-label="Edit address"
+                      onClick={() => {
+                        setError(null);
+                        setShowAddForm(false);
+                        setEditingId(address._id);
+                      }}
+                      className="inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </Tooltip>
+                  <Tooltip label="Remove address">
+                    <button
+                      aria-label="Remove address"
+                      onClick={() => handleRemove(address._id)}
+                      disabled={busyId === address._id}
+                      className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
               <p className="text-sm text-brown-600">

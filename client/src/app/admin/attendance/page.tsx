@@ -10,6 +10,7 @@ import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { ApiAttendance, AttendanceStatus } from "@/types/hr";
 import type { Pagination } from "@/types/api";
 
@@ -129,13 +130,15 @@ export default function AdminAttendancePage() {
                   </td>
                   <td className="max-w-[200px] truncate px-4 py-3 text-brown-600">{record.note ?? "—"}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      aria-label="Edit"
-                      onClick={() => setEditing(record)}
-                      className="cursor-pointer text-brown-500 hover:text-green-950"
-                    >
-                      <Pencil size={15} />
-                    </button>
+                    <Tooltip label="Edit">
+                      <button
+                        aria-label="Edit"
+                        onClick={() => setEditing(record)}
+                        className="inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    </Tooltip>
                   </td>
                 </tr>
               ))}

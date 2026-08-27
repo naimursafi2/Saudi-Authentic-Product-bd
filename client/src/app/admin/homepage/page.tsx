@@ -18,6 +18,7 @@ import {
 import { listCategories } from "@/lib/api/categories";
 import { ApiClientError } from "@/lib/api/client";
 import { useConfirm } from "@/context/ConfirmDialogContext";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -288,22 +289,26 @@ export default function AdminHomepagePage() {
                     <td className="px-4 py-3 text-brown-600">{slide.ctaLabel || "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          aria-label="Move up"
-                          disabled={i === 0}
-                          onClick={() => moveSlide(slide, "up")}
-                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
-                        >
-                          <ArrowUp size={14} />
-                        </button>
-                        <button
-                          aria-label="Move down"
-                          disabled={i === sortedSlides.length - 1}
-                          onClick={() => moveSlide(slide, "down")}
-                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
-                        >
-                          <ArrowDown size={14} />
-                        </button>
+                        <Tooltip label="Move up">
+                          <button
+                            aria-label="Move up"
+                            disabled={i === 0}
+                            onClick={() => moveSlide(slide, "up")}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-brown-500 transition-colors duration-150 hover:bg-cream-300 hover:text-green-950 disabled:opacity-30"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label="Move down">
+                          <button
+                            aria-label="Move down"
+                            disabled={i === sortedSlides.length - 1}
+                            onClick={() => moveSlide(slide, "down")}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-brown-500 transition-colors duration-150 hover:bg-cream-300 hover:text-green-950 disabled:opacity-30"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                        </Tooltip>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -316,20 +321,24 @@ export default function AdminHomepagePage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        aria-label="Edit"
-                        onClick={() => setEditingSlide(slide)}
-                        className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        aria-label="Delete"
-                        onClick={() => handleDeleteSlide(slide)}
-                        className="cursor-pointer text-brown-500 hover:text-danger"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <Tooltip label="Edit">
+                        <button
+                          aria-label="Edit"
+                          onClick={() => setEditingSlide(slide)}
+                          className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Delete">
+                        <button
+                          aria-label="Delete"
+                          onClick={() => handleDeleteSlide(slide)}
+                          className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </Tooltip>
                     </td>
                   </tr>
                 ))}
@@ -379,22 +388,26 @@ export default function AdminHomepagePage() {
                     <td className="max-w-xs truncate px-4 py-3 text-brown-600">{section.title || "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          aria-label="Move up"
-                          disabled={i === 0}
-                          onClick={() => moveSection(section, "up")}
-                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
-                        >
-                          <ArrowUp size={14} />
-                        </button>
-                        <button
-                          aria-label="Move down"
-                          disabled={i === sortedSections.length - 1}
-                          onClick={() => moveSection(section, "down")}
-                          className="cursor-pointer text-brown-500 hover:text-green-950 disabled:opacity-30"
-                        >
-                          <ArrowDown size={14} />
-                        </button>
+                        <Tooltip label="Move up">
+                          <button
+                            aria-label="Move up"
+                            disabled={i === 0}
+                            onClick={() => moveSection(section, "up")}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-brown-500 transition-colors duration-150 hover:bg-cream-300 hover:text-green-950 disabled:opacity-30"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label="Move down">
+                          <button
+                            aria-label="Move down"
+                            disabled={i === sortedSections.length - 1}
+                            onClick={() => moveSection(section, "down")}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-brown-500 transition-colors duration-150 hover:bg-cream-300 hover:text-green-950 disabled:opacity-30"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                        </Tooltip>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -403,23 +416,27 @@ export default function AdminHomepagePage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        aria-label="Edit"
-                        onClick={() => setEditingSection(section)}
-                        className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
-                      >
-                        <Pencil size={15} />
-                      </button>
+                      <Tooltip label="Edit">
+                        <button
+                          aria-label="Edit"
+                          onClick={() => setEditingSection(section)}
+                          className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                      </Tooltip>
                       {(section.type === "promoBanner" ||
                         section.type === "productShowcase" ||
                         section.type === "banner") && (
-                        <button
-                          aria-label="Delete"
-                          onClick={() => handleDeleteSection(section)}
-                          className="cursor-pointer text-brown-500 hover:text-danger"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <Tooltip label="Delete">
+                          <button
+                            aria-label="Delete"
+                            onClick={() => handleDeleteSection(section)}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </Tooltip>
                       )}
                     </td>
                   </tr>

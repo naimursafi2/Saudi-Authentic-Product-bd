@@ -195,13 +195,40 @@ form or state-management library — forms/data fetching are hand-rolled with
   and every approval-gate grant/deny) writes an append-only `AuditLog`
   entry (actor, role, action, resource, before/after values, optional
   note), visible at `/admin/audit-logs` — scoped to the viewer's own
-  actions unless they're admin/super_admin.
+  actions unless they're admin/super_admin. The page translates every raw
+  value before showing it: a colored badge with a plain-language label
+  instead of `product.stock.update.grant` ("Stock Update Approved"), the
+  affected product/coupon/user/shop's actual name instead of
+  `PendingAction #764b74`, and a friendly note (backend-provided, or
+  synthesized for the handful of actions that don't usually carry one) —
+  raw ids still exist for tracing but only as a small muted fragment next
+  to the friendly name, never as the headline.
 - **Employee portal** (`client/src/app/employee`, fully built):
   check-in/out + attendance history, tasks (filterable by type — packing,
   product counting, stock checking, warehouse, customer support, data entry,
   product preparation), a read-only Stock Levels page showing the same live
   per-variant counts the storefront does, leave requests, performance
-  history, salary/payment history, and a profile page (avatar + address).
+  history, salary/payment history (base + an optional daily allowance line
+  item, both entered manually the same way the rest of a payment is), and a
+  profile page (avatar, address, and — for staff only — a read-only NID
+  number/card-photo card; an admin sets both from `/admin/employees`).
+- **Printable order invoice** — a "Print Invoice" action on both
+  `/admin/orders`' order-detail view and the customer account portal's
+  Order History opens a clean, black-on-white invoice (company logo/name,
+  billed-to, itemized products, subtotal/shipping/discount/total, payment
+  status) with a "Print" button; print-only CSS isolates just that content
+  from the rest of the page, including the modal it's shown in.
+- **Consistent CRUD action styling** — every Edit/Update/Delete/Approve/
+  Reject/Remove-style action across every portal (admin, employee, delivery,
+  and customer-facing pages like the cart and checkout) renders as a
+  pill-shaped chip with a real background at rest — light blue for Edit,
+  light red for Delete/Reject/Remove, light green for Approve/Confirm/
+  Save — that deepens on hover, never bare colored text. Icon-only actions
+  also get a hover/focus-reveal tooltip alongside their `aria-label`.
+  `window.confirm()`/`window.prompt()`-then-proceed is gone everywhere too,
+  replaced by a shared, styled Confirm Dialog (`useConfirm()`) — fixing a
+  real bug where cancelling the "reason" prompt on Reject/Deny/Cancel
+  actions still went ahead and rejected/denied/cancelled the record anyway.
 - **Delivery portal** (`client/src/app/delivery`, fully built, `delivery_agent`
   role only — structurally excluded from `/admin`): a dashboard of assigned-
   order counts, an assigned-orders list with a detail view for marking an

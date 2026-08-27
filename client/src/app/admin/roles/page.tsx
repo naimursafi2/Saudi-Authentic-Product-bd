@@ -17,6 +17,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { Modal } from "@/components/admin/Modal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { RoleForm, type RoleFormValues } from "@/components/admin/RoleForm";
 import type { ApiPermissionGroup, ApiRole } from "@/types/api";
 
@@ -264,22 +265,26 @@ function RoleTable({
               </td>
               <td className="px-4 py-3 text-right">
                 {canEdit && role.key !== "SUPER_ADMIN" && (
-                  <button
-                    aria-label={`Edit ${role.name}`}
-                    onClick={() => onEdit(role)}
-                    className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
-                  >
-                    <Pencil size={15} />
-                  </button>
+                  <Tooltip label={`Edit ${role.name}`}>
+                    <button
+                      aria-label={`Edit ${role.name}`}
+                      onClick={() => onEdit(role)}
+                      className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  </Tooltip>
                 )}
                 {canDelete && (
-                  <button
-                    aria-label={`Delete ${role.name}`}
-                    onClick={() => onDelete(role)}
-                    className="cursor-pointer text-brown-500 hover:text-danger"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <Tooltip label={`Delete ${role.name}`}>
+                    <button
+                      aria-label={`Delete ${role.name}`}
+                      onClick={() => onDelete(role)}
+                      className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </Tooltip>
                 )}
               </td>
             </tr>

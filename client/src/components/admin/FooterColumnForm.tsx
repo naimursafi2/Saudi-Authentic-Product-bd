@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { ApiFooterColumn, ApiFooterLink } from "@/types/api";
 
 export interface FooterColumnFormValues {
@@ -129,14 +130,16 @@ export function FooterColumnForm({
                 placeholder="/path"
                 className={fieldClasses}
               />
-              <button
-                type="button"
-                aria-label="Remove link"
-                onClick={() => removeLink(i)}
-                className="shrink-0 cursor-pointer text-brown-500 hover:text-danger"
-              >
-                <Trash2 size={15} />
-              </button>
+              <Tooltip label="Remove link">
+                <button
+                  type="button"
+                  aria-label="Remove link"
+                  onClick={() => removeLink(i)}
+                  className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </Tooltip>
             </div>
           ))}
           {values.links.length === 0 && (

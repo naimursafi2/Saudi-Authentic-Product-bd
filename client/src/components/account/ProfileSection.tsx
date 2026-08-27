@@ -86,7 +86,7 @@ function AvatarUploader({ user }: { user: ApiUser }) {
             type="button"
             onClick={handleRemove}
             disabled={isUploading}
-            className="mt-1.5 flex cursor-pointer items-center gap-1 text-xs font-bold uppercase tracking-[0.06em] text-brown-500 hover:text-danger disabled:opacity-60"
+            className="mt-1.5 inline-flex cursor-pointer items-center gap-1 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-bold uppercase tracking-[0.06em] text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-60"
           >
             <Trash2 size={12} /> Remove Photo
           </button>

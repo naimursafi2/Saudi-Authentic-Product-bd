@@ -122,7 +122,7 @@ export async function updateUserRole(id: string, role: Role, actor: { id: string
     resource: "User",
     resourceId: id,
     oldValue: { role: previousRole },
-    newValue: { role },
+    newValue: { role, name: user.name },
   });
 
   return user;
@@ -146,7 +146,7 @@ export async function updateUserStatus(id: string, isActive: boolean, actor: { i
     resource: "User",
     resourceId: id,
     oldValue: { isActive: previousStatus },
-    newValue: { isActive },
+    newValue: { isActive, name: user.name },
   });
 
   return user;
@@ -181,7 +181,7 @@ export async function impersonateUser(id: string, actor: { id: string; role: Rol
     action: "user.impersonate.start",
     resource: "User",
     resourceId: id,
-    newValue: { targetEmail: target.email, targetRole: target.role },
+    newValue: { targetEmail: target.email, targetRole: target.role, name: target.name },
   });
 
   return { accessToken, user: target };
@@ -202,6 +202,7 @@ export async function unlockUserAccount(id: string, actor: { id: string; role: R
     action: "user.unlock",
     resource: "User",
     resourceId: id,
+    newValue: { name: user.name },
   });
 
   return user;

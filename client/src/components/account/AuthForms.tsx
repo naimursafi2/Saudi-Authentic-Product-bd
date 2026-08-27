@@ -323,7 +323,7 @@ export function AuthForms() {
                       setCityArea("");
                     }}
                     aria-label="Remove address"
-                    className="cursor-pointer text-brown-500 hover:text-danger"
+                    className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
                   >
                     <X size={14} />
                   </button>

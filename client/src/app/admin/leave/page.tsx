@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { ApiLeaveRequest, LeaveStatus } from "@/types/hr";
 import type { Pagination } from "@/types/api";
 
@@ -135,22 +136,26 @@ export default function AdminLeavePage() {
                   <td className="px-4 py-3 text-right">
                     {leave.status === "pending" && (
                       <div className="flex justify-end gap-3">
-                        <button
-                          aria-label="Approve"
-                          disabled={actioningId === leave._id}
-                          onClick={() => handleApprove(leave)}
-                          className="cursor-pointer text-green-900 hover:text-green-950 disabled:opacity-40"
-                        >
-                          <Check size={16} />
-                        </button>
-                        <button
-                          aria-label="Reject"
-                          disabled={actioningId === leave._id}
-                          onClick={() => handleReject(leave)}
-                          className="cursor-pointer text-danger hover:text-danger-strong disabled:opacity-40"
-                        >
-                          <X size={16} />
-                        </button>
+                        <Tooltip label="Approve">
+                          <button
+                            aria-label="Approve"
+                            disabled={actioningId === leave._id}
+                            onClick={() => handleApprove(leave)}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-success-soft p-1.5 text-green-900 transition-colors duration-150 hover:bg-success-soft-hover disabled:opacity-40"
+                          >
+                            <Check size={16} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label="Reject">
+                          <button
+                            aria-label="Reject"
+                            disabled={actioningId === leave._id}
+                            onClick={() => handleReject(leave)}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover disabled:opacity-40"
+                          >
+                            <X size={16} />
+                          </button>
+                        </Tooltip>
                       </div>
                     )}
                   </td>

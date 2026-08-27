@@ -14,6 +14,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { Modal } from "@/components/admin/Modal";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { ProductForm, type ProductFormValues } from "@/components/admin/ProductForm";
 import type { ApiProduct } from "@/types/api";
 import type { Pagination } from "@/types/api";
@@ -184,21 +185,25 @@ export default function AdminProductsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        aria-label="Edit"
-                        onClick={() => setEditing(product)}
-                        className="mr-3 cursor-pointer text-brown-500 hover:text-green-950"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      {(canDeleteDirectly || canRequestDelete) && (
+                      <Tooltip label="Edit">
                         <button
-                          aria-label={canDeleteDirectly ? "Delete" : "Request deletion"}
-                          onClick={() => handleDelete(product)}
-                          className="cursor-pointer text-brown-500 hover:text-danger"
+                          aria-label="Edit"
+                          onClick={() => setEditing(product)}
+                          className="mr-3 inline-flex cursor-pointer items-center justify-center rounded-full bg-info-soft p-1.5 text-info transition-colors duration-150 hover:bg-info-soft-hover"
                         >
-                          <Trash2 size={15} />
+                          <Pencil size={15} />
                         </button>
+                      </Tooltip>
+                      {(canDeleteDirectly || canRequestDelete) && (
+                        <Tooltip label={canDeleteDirectly ? "Delete" : "Request deletion"}>
+                          <button
+                            aria-label={canDeleteDirectly ? "Delete" : "Request deletion"}
+                            onClick={() => handleDelete(product)}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1.5 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </Tooltip>
                       )}
                     </td>
                   </tr>

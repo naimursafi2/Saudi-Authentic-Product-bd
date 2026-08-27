@@ -15,6 +15,15 @@ export interface PendingActionActor {
   role: Role;
 }
 
+/** Best-effort human label for a pending action's payload, for audit-log
+ * display — most payloads carry a `name`/`productName`/`code` field already
+ * (see each `createPendingAction()` call site); falls back to nothing rather
+ * than guessing when none is present. */
+function payloadLabel(payload: Record<string, unknown>): string | undefined {
+  const value = payload.name ?? payload.productName ?? payload.code;
+  return typeof value === "string" ? value : undefined;
+}
+
 export interface ApplyResult {
   resource: string;
   resourceId?: string;
@@ -215,9 +224,14 @@ export async function grantPendingAction(
   action.resultResourceId = result.resourceId;
   await action.save();
 
+  // Human-readable — the exact conflicting ids are still recoverable from
+  // `conflictingActionIds` below for anyone who needs to trace them; the
+  // note itself is what's shown to reviewers, so it stays plain-language.
   const conflictNote =
     conflicts.length > 0
-      ? `Granted while ${conflicts.length} other pending stock request(s) target the same variant: ${conflicts.join(", ")}`
+      ? `${conflicts.length} other pending request${conflicts.length === 1 ? "" : "s"} still target${
+          conflicts.length === 1 ? "s" : ""
+        } the same variant.`
       : undefined;
 
   await recordAuditLog({
@@ -226,7 +240,13 @@ export async function grantPendingAction(
     action: `${action.actionType}.grant`,
     resource: "PendingAction",
     resourceId: action._id.toString(),
-    newValue: { status: "granted", resultResourceId: result.resourceId, conflictingActionIds: conflicts },
+    newValue: {
+      status: "granted",
+      resultResourceId: result.resourceId,
+      conflictingActionIds: conflicts,
+      resource: result.resource,
+      name: payloadLabel(action.payload),
+    },
     note: [reviewNote, conflictNote].filter(Boolean).join(" — ") || undefined,
   });
 
@@ -264,7 +284,7 @@ export async function denyPendingAction(
     action: `${action.actionType}.deny`,
     resource: "PendingAction",
     resourceId: action._id.toString(),
-    newValue: { status: "denied" },
+    newValue: { status: "denied", name: payloadLabel(action.payload) },
     note: reviewNote,
   });
 

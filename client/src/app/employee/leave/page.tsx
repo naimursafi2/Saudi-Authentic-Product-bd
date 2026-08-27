@@ -128,7 +128,7 @@ export default function EmployeeLeavePage() {
                     {leave.status === "pending" && (
                       <button
                         onClick={() => handleCancel(leave._id)}
-                        className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-500 transition-colors hover:text-danger"
+                        className="inline-flex cursor-pointer items-center rounded-full bg-danger-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
                       >
                         Cancel
                       </button>
