@@ -149,39 +149,25 @@ export default function AdminDashboardPage() {
             })}
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
-              <SectionHeader icon={CalendarClock} title="Today's Attendance" viewAllHref="/admin/attendance" />
-              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                <Stat label="Checked In" value={dashboard.attendanceToday.totalCheckedIn} />
-                <Stat label="Present" value={dashboard.attendanceToday.present} />
-                <Stat label="Late" value={dashboard.attendanceToday.late} />
-                <Stat label="Half Day" value={dashboard.attendanceToday.half_day} />
-                <Stat label="Absent" value={dashboard.attendanceToday.absent} />
-                <Stat label="On Leave" value={dashboard.attendanceToday.leave} />
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
-              <SectionHeader icon={TrendingUp} title="Top Products (30d)" viewAllHref="/admin/reports" />
-              {dashboard.sales.topProducts.length === 0 ? (
-                <p className="text-sm text-brown-500">No sales in this period yet.</p>
-              ) : (
-                <ul className="flex flex-col gap-1">
-                  {dashboard.sales.topProducts.map((p) => (
-                    <li
-                      key={p._id}
-                      className="flex items-center justify-between gap-3 border-b border-brown-600/10 py-2.5 text-sm last:border-none"
-                    >
-                      <span className="min-w-0 truncate text-green-950">{p.name}</span>
-                      <span className="shrink-0 text-brown-500">
-                        {p.quantitySold} sold &middot; {formatBDT(p.revenueBDT)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          <div className="rounded-lg border border-brown-600/10 bg-surface p-6">
+            <SectionHeader icon={TrendingUp} title="Top Products (30d)" viewAllHref="/admin/reports" />
+            {dashboard.sales.topProducts.length === 0 ? (
+              <p className="text-sm text-brown-500">No sales in this period yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {dashboard.sales.topProducts.map((p) => (
+                  <li
+                    key={p._id}
+                    className="flex items-center justify-between gap-3 border-b border-brown-600/10 py-2.5 text-sm last:border-none"
+                  >
+                    <span className="min-w-0 truncate text-green-950">{p.name}</span>
+                    <span className="shrink-0 text-brown-500">
+                      {p.quantitySold} sold &middot; {formatBDT(p.revenueBDT)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -241,15 +227,6 @@ export default function AdminDashboardPage() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded bg-cream-200 p-3 text-center">
-      <span className="block text-lg font-semibold text-green-950">{value}</span>
-      <span className="block text-[11px] uppercase tracking-wide text-brown-500">{label}</span>
     </div>
   );
 }

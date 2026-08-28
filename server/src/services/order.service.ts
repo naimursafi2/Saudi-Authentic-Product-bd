@@ -6,11 +6,10 @@ import type { InventoryLogReason } from "../models/InventoryLog.model";
 import { ApiError } from "../utils/ApiError";
 import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { computeShippingFee } from "../constants/shipping";
-import { recordStockChange } from "./inventory.service";
-import { notifyBackInStockSubscribers } from "./productAlert.service";
+import { consumeStockForSale, restockFromSale } from "./inventory.service";
 import { sendOrderConfirmationEmail, sendDeliveryOtpEmail } from "./email.service";
 import { sendSms } from "../config/sms";
-import { notifyNewOrder, notifyLowStock, notifyDeliveryFailed } from "./notification.service";
+import { notifyNewOrder, notifyDeliveryFailed } from "./notification.service";
 import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
 import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_STATUSES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
 import { DELIVERY_OTP_TTL_MINUTES, MAX_DELIVERY_OTP_ATTEMPTS } from "../constants/security";
@@ -51,37 +50,31 @@ function pushStatusHistory(order: IOrder, status: OrderStatus, actor: OrderActor
   });
 }
 
-/** Restocks every item on an order and writes an inventory audit-trail entry per variant. */
-async function restockOrderItems(order: IOrder, reason: InventoryLogReason) {
+/**
+ * Restocks every item on an order — and, per item, credits the exact
+ * Purchase batch(es) it was originally drawn from back to their
+ * `remainingQuantity`, so a later sale's FIFO draw sees the same batches
+ * available again (see `inventory.service.ts#restockFromSale`).
+ */
+async function restockOrderItems(order: IOrder, reason: Extract<InventoryLogReason, "order_cancelled" | "order_returned">) {
   await Promise.all(
-    order.items.map(async (item) => {
-      const before = await ProductModel.findOne(
-        { _id: item.product, "variants._id": item.variantId },
-        { "variants.$": 1 }
-      );
-      const previousStock = before?.variants[0]?.stock ?? 0;
-
-      const updated = await ProductModel.findOneAndUpdate(
-        { _id: item.product, "variants._id": item.variantId },
-        { $inc: { "variants.$.stock": item.quantity } },
-        { new: true }
-      );
-      const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
-      const newStock = variant?.stock ?? 0;
-      await recordStockChange({
-        productId: item.product.toString(),
-        variantId: item.variantId,
-        variantLabel: item.variantLabel,
-        delta: item.quantity,
-        balanceAfter: newStock,
+    order.items.map((item) =>
+      restockFromSale(
+        {
+          product: item.product.toString(),
+          variantId: item.variantId,
+          variantLabel: item.variantLabel,
+          quantity: item.quantity,
+          batchConsumptions: item.batchConsumptions.map((c) => ({
+            purchase: c.purchase.toString(),
+            quantity: c.quantity,
+            unitCostBDT: c.unitCostBDT,
+          })),
+        },
         reason,
-        note: `Order ${order.orderNumber} ${reason === "order_cancelled" ? "cancelled" : "returned"}`,
-      });
-
-      if (previousStock <= 0 && newStock > 0) {
-        await notifyBackInStockSubscribers(item.product.toString(), item.variantId);
-      }
-    })
+        order.orderNumber
+      )
+    )
   );
 }
 
@@ -115,6 +108,11 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
       unitPriceBDT: variant.priceBDT,
       quantity: line.quantity,
       lineTotalBDT: lineTotal,
+      // Filled in once stock is actually drawn against real batch history,
+      // below — a line hasn't been costed yet at pricing time.
+      unitLandedCostBDT: 0,
+      costBasisKnown: false,
+      batchConsumptions: [],
     });
   }
 
@@ -154,40 +152,30 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
     await applyCouponUsage(appliedCoupon._id.toString(), appliedCoupon.usageLimit);
   }
 
-  // Decrement stock for each purchased variant and record an audit trail entry.
+  // Decrement stock for each purchased variant. `consumeStockForSale`
+  // resolves the sale against real Purchase-batch history (FIFO), writes the
+  // InventoryLog trail itself, and hands back what this specific sale
+  // actually cost to land — frozen onto the order item below, since a
+  // batch's own cost/remaining-quantity keeps changing after this moment.
   await Promise.all(
-    items.map(async (item) => {
-      const updated = await ProductModel.findOneAndUpdate(
-        { _id: item.product, "variants._id": item.variantId },
-        { $inc: { "variants.$.stock": -item.quantity } },
-        { new: true }
-      );
-      const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
-      await recordStockChange({
+    order.items.map(async (item, index) => {
+      const consumption = await consumeStockForSale({
         productId: item.product.toString(),
         variantId: item.variantId,
         variantLabel: item.variantLabel,
-        delta: -item.quantity,
-        balanceAfter: variant?.stock ?? 0,
-        reason: "order_placed",
-        note: `Order ${orderNumber}`,
+        quantity: item.quantity,
+        orderNumber,
       });
-
-      // Alert only on the crossing, not on every further sale below the line,
-      // so a persistently low variant doesn't email staff on every order.
-      if (updated && variant) {
-        const before = variant.stock + item.quantity;
-        if (before > variant.lowStockThreshold && variant.stock <= variant.lowStockThreshold) {
-          void notifyLowStock({
-            productName: updated.name,
-            variantLabel: variant.label,
-            stock: variant.stock,
-            threshold: variant.lowStockThreshold,
-          });
-        }
-      }
+      order.items[index].unitLandedCostBDT = consumption.unitLandedCostBDT;
+      order.items[index].costBasisKnown = consumption.costBasisKnown;
+      order.items[index].batchConsumptions = consumption.consumptions.map((c) => ({
+        purchase: new Types.ObjectId(c.purchase),
+        quantity: c.quantity,
+        unitCostBDT: c.unitCostBDT,
+      }));
     })
   );
+  await order.save();
 
   // Fire-and-forget — sendOrderConfirmationEmail already swallows its own
   // errors, and a real SMTP round-trip is too slow to make the customer

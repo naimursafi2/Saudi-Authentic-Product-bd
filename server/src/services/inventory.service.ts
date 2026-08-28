@@ -1,8 +1,10 @@
 import { ProductModel } from "../models/Product.model";
 import { InventoryLogModel, type IInventoryLog, type InventoryLogReason } from "../models/InventoryLog.model";
+import { PurchaseModel } from "../models/Purchase.model";
 import { ApiError } from "../utils/ApiError";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
 import { notifyBackInStockSubscribers } from "./productAlert.service";
+import { notifyLowStock } from "./notification.service";
 import type { Role } from "../constants/roles";
 
 /**
@@ -47,6 +49,8 @@ export interface RecordStockChangeInput {
   reason: InventoryLogReason;
   note?: string;
   actor?: string;
+  purchaseBatch?: string;
+  unitCostBDT?: number;
 }
 
 /** Low-level audit-log write, called after the stock number itself has already changed. */
@@ -60,7 +64,292 @@ export async function recordStockChange(input: RecordStockChangeInput): Promise<
     reason: input.reason,
     note: input.note,
     actor: input.actor,
+    purchaseBatch: input.purchaseBatch,
+    unitCostBDT: input.unitCostBDT,
   });
+}
+
+// -- Landed-cost sale consumption ---------------------------------------
+//
+// A sale's actual profit depends on what the specific units sold actually
+// cost to land, which can differ batch to batch (see CLAUDE.md's
+// "Purchasing: shops, batches & flexible landed costs"). This is the one
+// place a sale's stock decrement is resolved against real Purchase-batch
+// history — `order.service.ts#createOrder` calls it instead of writing the
+// `$inc`/`InventoryLog` pair itself, the same centralization
+// `applyStockDelta` already gives every other kind of stock write.
+
+export interface BatchConsumption {
+  purchase: string;
+  quantity: number;
+  unitCostBDT: number;
+}
+
+export interface SaleConsumptionResult {
+  /** Quantity-weighted across whichever batch(es) were drawn from — frozen onto the order item, never recomputed later. */
+  unitLandedCostBDT: number;
+  /** False only when no purchase-batch history existed at all for this variant, so `unitLandedCostBDT` is 0 rather than a real figure. */
+  costBasisKnown: boolean;
+  /** Which batches (and how much of each) this sale actually drew from — carried onto the order item so a later cancellation/return can credit the exact same batches back (see `restockFromSale`). */
+  consumptions: BatchConsumption[];
+}
+
+/**
+ * The weighted-average landed unit cost across every batch ever *received*
+ * for a variant (not just those with quantity still remaining) — the same
+ * figure `purchase.service.ts#getProductCostHistory` reports as
+ * `averageUnitCostBDT`. Used as the fallback cost basis for a sale that
+ * outruns its batches' remaining quantity: pre-existing stock recorded
+ * before this system existed, or stock added by a manual adjustment, still
+ * gets a reasonable costing instead of blocking the sale or silently costing
+ * at zero.
+ */
+async function getAverageUnitCostBDT(productId: string, variantId: string): Promise<number> {
+  const batches = await PurchaseModel.find({ product: productId, variantId, status: "received" });
+  if (batches.length === 0) return 0;
+  const totalQuantity = batches.reduce((sum, b) => sum + b.quantity, 0);
+  if (totalQuantity <= 0) return 0;
+  const totalLandedCostBDT = batches.reduce((sum, b) => sum + b.totalLandedCostBDT, 0);
+  return totalLandedCostBDT / totalQuantity;
+}
+
+/**
+ * Draws `quantity` units of one order line's cost basis from the variant's
+ * received Purchase batches, oldest-received-first (FIFO), decrementing each
+ * batch's `remainingQuantity` with a guarded atomic update (mirroring
+ * `coupon.service.ts#applyCouponUsage`'s `$lt`/`$gte` guard pattern) so two
+ * concurrent sales can never draw the same unit from a batch twice even
+ * without a multi-document transaction — a batch that loses that race is
+ * simply skipped and its shortfall is absorbed by the next batch or the
+ * average-cost fallback below, not by throwing.
+ *
+ * Also performs the actual `Product.variants[].stock` decrement (one `$inc`
+ * per batch portion, so `InventoryLog.balanceAfter` stays a true step-wise
+ * running total) and the low-stock-crossing check, replacing what
+ * `order.service.ts#createOrder` used to do directly — this keeps stock
+ * writes and their audit trail in one place regardless of how many batches
+ * one line item's quantity happens to span.
+ */
+export async function consumeStockForSale(input: {
+  productId: string;
+  variantId: string;
+  variantLabel: string;
+  quantity: number;
+  orderNumber: string;
+}): Promise<SaleConsumptionResult> {
+  const before = await ProductModel.findById(input.productId).select("name variants");
+  const variantBefore = before?.variants.find((v) => v._id?.toString() === input.variantId);
+  const previousStock = variantBefore?.stock ?? 0;
+  const threshold = variantBefore?.lowStockThreshold ?? 0;
+  const productName = before?.name ?? "";
+
+  const consumptions: BatchConsumption[] = [];
+  let remaining = input.quantity;
+  let costSum = 0;
+  let latestStock = previousStock;
+
+  async function decrementLiveStock(take: number): Promise<void> {
+    const updated = await ProductModel.findOneAndUpdate(
+      { _id: input.productId, "variants._id": input.variantId },
+      { $inc: { "variants.$.stock": -take } },
+      { new: true }
+    );
+    const variant = updated?.variants.find((v) => v._id?.toString() === input.variantId);
+    latestStock = variant?.stock ?? latestStock - take;
+  }
+
+  const batches = await PurchaseModel.find({
+    product: input.productId,
+    variantId: input.variantId,
+    status: "received",
+    remainingQuantity: { $gt: 0 },
+  }).sort({ receivedAt: 1, createdAt: 1 });
+
+  for (const batch of batches) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, batch.remainingQuantity);
+    if (take <= 0) continue;
+
+    const decremented = await PurchaseModel.updateOne(
+      { _id: batch._id, remainingQuantity: { $gte: take } },
+      { $inc: { remainingQuantity: -take } }
+    );
+    if (decremented.modifiedCount === 0) continue;
+
+    await decrementLiveStock(take);
+    await recordStockChange({
+      productId: input.productId,
+      variantId: input.variantId,
+      variantLabel: input.variantLabel,
+      delta: -take,
+      balanceAfter: latestStock,
+      reason: "order_placed",
+      note: `Order ${input.orderNumber} (batch ${batch.reference})`,
+      purchaseBatch: batch._id.toString(),
+      unitCostBDT: batch.unitCostBDT,
+    });
+
+    consumptions.push({ purchase: batch._id.toString(), quantity: take, unitCostBDT: batch.unitCostBDT });
+    costSum += take * batch.unitCostBDT;
+    remaining -= take;
+  }
+
+  let costBasisKnown = consumptions.length > 0;
+
+  if (remaining > 0) {
+    const fallbackUnitCost = await getAverageUnitCostBDT(input.productId, input.variantId);
+    await decrementLiveStock(remaining);
+    await recordStockChange({
+      productId: input.productId,
+      variantId: input.variantId,
+      variantLabel: input.variantLabel,
+      delta: -remaining,
+      balanceAfter: latestStock,
+      reason: "order_placed",
+      note: `Order ${input.orderNumber} (${
+        fallbackUnitCost > 0 ? "no batch remaining — average of prior batches" : "no purchase-batch history"
+      })`,
+      unitCostBDT: fallbackUnitCost > 0 ? fallbackUnitCost : undefined,
+    });
+
+    costSum += remaining * fallbackUnitCost;
+    if (fallbackUnitCost > 0) costBasisKnown = true;
+  }
+
+  if (previousStock > threshold && latestStock <= threshold) {
+    void notifyLowStock({ productName, variantLabel: input.variantLabel, stock: latestStock, threshold });
+  }
+
+  return {
+    unitLandedCostBDT: input.quantity > 0 ? costSum / input.quantity : 0,
+    costBasisKnown,
+    consumptions,
+  };
+}
+
+/**
+ * The reverse of `consumeStockForSale` — an order being cancelled/returned
+ * credits its stock, and its exact source batches, back. `Product.variants[]
+ * .stock` is restored in one `$inc` (the whole item quantity is always
+ * genuinely back in stock together, regardless of how many batches it was
+ * originally drawn from); each batch's `remainingQuantity` is credited back
+ * individually so a later sale's FIFO draw sees the same batches available
+ * again, oldest-first, exactly as if the sale had never happened. The
+ * portion that had no batch to draw from originally (an "unknown cost"
+ * consumption) has nothing to credit back — it was never subtracted from any
+ * batch's `remainingQuantity` in the first place.
+ */
+export async function restockFromSale(
+  item: { product: string; variantId: string; variantLabel: string; quantity: number; batchConsumptions: BatchConsumption[] },
+  reason: Extract<InventoryLogReason, "order_cancelled" | "order_returned">,
+  orderNumber: string
+): Promise<void> {
+  const before = await ProductModel.findOne(
+    { _id: item.product, "variants._id": item.variantId },
+    { "variants.$": 1 }
+  );
+  const previousStock = before?.variants[0]?.stock ?? 0;
+
+  const updated = await ProductModel.findOneAndUpdate(
+    { _id: item.product, "variants._id": item.variantId },
+    { $inc: { "variants.$.stock": item.quantity } },
+    { new: true }
+  );
+  const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
+  const newStock = variant?.stock ?? 0;
+
+  const actionLabel = reason === "order_cancelled" ? "cancelled" : "returned";
+
+  if (item.batchConsumptions.length > 0) {
+    for (const consumption of item.batchConsumptions) {
+      await PurchaseModel.updateOne(
+        { _id: consumption.purchase },
+        { $inc: { remainingQuantity: consumption.quantity } }
+      );
+      await recordStockChange({
+        productId: item.product,
+        variantId: item.variantId,
+        variantLabel: item.variantLabel,
+        delta: consumption.quantity,
+        balanceAfter: newStock,
+        reason,
+        note: `Order ${orderNumber} ${actionLabel}`,
+        purchaseBatch: consumption.purchase,
+        unitCostBDT: consumption.unitCostBDT,
+      });
+    }
+  } else {
+    await recordStockChange({
+      productId: item.product,
+      variantId: item.variantId,
+      variantLabel: item.variantLabel,
+      delta: item.quantity,
+      balanceAfter: newStock,
+      reason,
+      note: `Order ${orderNumber} ${actionLabel}`,
+    });
+  }
+
+  if (previousStock <= 0 && newStock > 0) {
+    await notifyBackInStockSubscribers(item.product, item.variantId);
+  }
+}
+
+/**
+ * Stock value at its actual landed cost, not a guessed/list price —
+ * `remainingQuantity × unitCostBDT` summed across every received batch, per
+ * variant and in total. A variant's live stock can exceed the sum of its
+ * batches' remaining quantity (pre-existing stock from before this system
+ * existed, or a manual adjustment) — that portion is valued at the same
+ * average-cost fallback `consumeStockForSale` uses, so the reported total
+ * still reconciles against `Product.variants[].stock` rather than silently
+ * under-counting.
+ */
+export async function getInventoryValuation() {
+  const products = await ProductModel.find({ isActive: true }).select("name slug variants");
+
+  const rows = await Promise.all(
+    products.flatMap((product) =>
+      product.variants.map(async (variant) => {
+        const variantId = variant._id!.toString();
+        const batches = await PurchaseModel.find({
+          product: product._id,
+          variantId,
+          status: "received",
+        });
+
+        const batchRemainingTotal = batches.reduce((sum, b) => sum + b.remainingQuantity, 0);
+        const batchValueBDT = batches.reduce((sum, b) => sum + b.remainingQuantity * b.unitCostBDT, 0);
+
+        const unallocatedQuantity = Math.max(0, variant.stock - batchRemainingTotal);
+        const averageUnitCostBDT =
+          batches.length > 0
+            ? batches.reduce((sum, b) => sum + b.totalLandedCostBDT, 0) /
+              Math.max(1, batches.reduce((sum, b) => sum + b.quantity, 0))
+            : 0;
+        const unallocatedValueBDT = unallocatedQuantity * averageUnitCostBDT;
+
+        return {
+          productId: product._id.toString(),
+          productName: product.name,
+          productSlug: product.slug,
+          variantId,
+          variantLabel: variant.label,
+          stock: variant.stock,
+          batchTrackedQuantity: batchRemainingTotal,
+          unallocatedQuantity,
+          averageUnitCostBDT,
+          inventoryValueBDT: batchValueBDT + unallocatedValueBDT,
+        };
+      })
+    )
+  );
+
+  const filtered = rows.filter((row) => row.stock > 0);
+  return {
+    variants: filtered,
+    totalInventoryValueBDT: filtered.reduce((sum, row) => sum + row.inventoryValueBDT, 0),
+  };
 }
 
 /**

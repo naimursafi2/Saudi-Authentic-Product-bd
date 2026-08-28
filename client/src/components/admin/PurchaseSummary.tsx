@@ -42,6 +42,22 @@ export function PurchaseSummary({ purchase }: { purchase: ApiPurchase }) {
             {purchase.quantity} {purchase.unit}
           </dd>
         </div>
+        {purchase.status === "received" && (
+          <>
+            <div className="flex items-center justify-between">
+              <dt className="text-brown-600">Sold</dt>
+              <dd className="text-green-950">
+                {purchase.soldQuantity} {purchase.unit}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-brown-600">Remaining</dt>
+              <dd className="text-green-950">
+                {purchase.remainingQuantity} {purchase.unit}
+              </dd>
+            </div>
+          </>
+        )}
       </dl>
 
       <div className="mt-3 rounded bg-brand-deep px-4 py-3">

@@ -41,6 +41,15 @@ router.get(
   purchaseController.getPurchase
 );
 
+// Batch-level traceability — every stock movement and order that drew on
+// this specific batch (see "Batch-Level Tracking" in CLAUDE.md).
+router.get(
+  "/:id/traceability",
+  requirePermission("purchases.view"),
+  validate({ params: mongoIdParamSchema }),
+  purchaseController.getPurchaseTraceability
+);
+
 /**
  * Create. Accepts multipart so cost items supplied up front can each carry a
  * receipt image (`costProof0`, `costProof1`, ...) alongside the JSON-encoded

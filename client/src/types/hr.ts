@@ -2,20 +2,6 @@
 
 import type { ApiAuditLog } from "./api";
 
-export type AttendanceStatus = "present" | "late" | "half_day" | "absent" | "leave";
-
-export interface ApiAttendance {
-  _id: string;
-  employee: string | { _id: string; name: string; email: string };
-  date: string;
-  checkIn?: string;
-  checkOut?: string;
-  status: AttendanceStatus;
-  note?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export type LeaveType = "sick" | "casual" | "annual" | "unpaid" | "other";
 export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
 
@@ -155,6 +141,35 @@ export interface RevenueVsExpensePoint {
   profitBDT: number;
 }
 
+/** One bucket of the Purchase/Landed-Cost gross-profit report — net selling revenue minus real batch-level cost of goods sold, see `finance.service.ts#getGrossProfitTimeSeries`. */
+export interface GrossProfitPoint {
+  period: string;
+  netSellingRevenueBDT: number;
+  costOfGoodsSoldBDT: number;
+  grossProfitBDT: number;
+  orders: number;
+  /** How many orders in this bucket had at least one item with no purchase-batch cost history — the figure is still a real total, just a partial one. */
+  ordersWithUnknownCostBasis: number;
+}
+
+export interface InventoryValuationRow {
+  productId: string;
+  productName: string;
+  productSlug: string;
+  variantId: string;
+  variantLabel: string;
+  stock: number;
+  batchTrackedQuantity: number;
+  unallocatedQuantity: number;
+  averageUnitCostBDT: number;
+  inventoryValueBDT: number;
+}
+
+export interface InventoryValuation {
+  variants: InventoryValuationRow[];
+  totalInventoryValueBDT: number;
+}
+
 export interface DashboardRecentOrder {
   _id: string;
   orderNumber: string;
@@ -169,15 +184,6 @@ export interface AdminDashboard {
   pendingLeaves: number;
   lowStockCount: number;
   outOfStockCount: number;
-  attendanceToday: {
-    date: string;
-    totalCheckedIn: number;
-    present: number;
-    late: number;
-    half_day: number;
-    absent: number;
-    leave: number;
-  };
   totalCustomers: number;
   totalProducts: number;
   totalStaff: number;
@@ -186,7 +192,6 @@ export interface AdminDashboard {
 }
 
 export interface EmployeeDashboard {
-  todayAttendance: ApiAttendance | null;
   pendingTaskCount: number;
   latestSalaryPayment: ApiSalaryPayment | null;
 }

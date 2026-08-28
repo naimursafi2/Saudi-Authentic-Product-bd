@@ -4,28 +4,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  CalendarCheck,
   CalendarClock,
   CheckCircle2,
-  Clock,
   ListChecks,
-  LogIn,
-  LogOut as CheckOutIcon,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { getEmployeeDashboard } from "@/lib/api/reports";
-import { checkIn, checkOut } from "@/lib/api/attendance";
 import { listMyTasks } from "@/lib/api/tasks";
 import { listMyLeaves } from "@/lib/api/leaves";
 import { listMyPerformanceReviews } from "@/lib/api/performance";
-import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { formatBDT, cn } from "@/lib/utils";
 import { TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { StarRating } from "@/components/ui/StarRating";
-import { Button } from "@/components/ui/Button";
 import type { EmployeeDashboard, ApiTask, ApiLeaveRequest, ApiPerformanceReview } from "@/types/hr";
 
 function greeting() {
@@ -43,8 +36,6 @@ export default function EmployeeDashboardPage() {
   const [latestReview, setLatestReview] = useState<ApiPerformanceReview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [isActing, setIsActing] = useState(false);
 
   function load() {
     setIsLoading(true);
@@ -67,32 +58,6 @@ export default function EmployeeDashboardPage() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(load, []);
-
-  async function handleCheckIn() {
-    setActionError(null);
-    setIsActing(true);
-    try {
-      await checkIn();
-      load();
-    } catch (err) {
-      setActionError(err instanceof ApiClientError ? err.message : "Could not check in.");
-    } finally {
-      setIsActing(false);
-    }
-  }
-
-  async function handleCheckOut() {
-    setActionError(null);
-    setIsActing(true);
-    try {
-      await checkOut();
-      load();
-    } catch (err) {
-      setActionError(err instanceof ApiClientError ? err.message : "Could not check out.");
-    } finally {
-      setIsActing(false);
-    }
-  }
 
   if (isLoading) {
     return (
@@ -118,13 +83,6 @@ export default function EmployeeDashboardPage() {
   });
 
   const statCards = [
-    {
-      href: "/employee/attendance",
-      icon: Clock,
-      label: "Today's Attendance",
-      value: dashboard.todayAttendance ? dashboard.todayAttendance.status.replace("_", " ") : "Not checked in",
-      capitalize: true,
-    },
     {
       href: "/employee/tasks",
       icon: ListChecks,
@@ -181,7 +139,7 @@ export default function EmployeeDashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statCards.map((card) => (
           <Link
             key={card.label}
@@ -192,9 +150,7 @@ export default function EmployeeDashboardPage() {
               <card.icon size={16} />
             </span>
             <span>
-              <span className={cn("block text-lg font-semibold text-green-950", card.capitalize && "capitalize")}>
-                {card.value}
-              </span>
+              <span className="block text-lg font-semibold text-green-950">{card.value}</span>
               <span className="block text-xs text-brown-500">{card.label}</span>
             </span>
           </Link>
@@ -202,65 +158,7 @@ export default function EmployeeDashboardPage() {
       </div>
 
       {/* Detail cards */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Attendance */}
-        <div className="flex flex-col rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 font-serif text-lg text-green-950">
-              <CalendarCheck size={18} className="text-green-900" /> Today&apos;s Attendance
-            </h2>
-            {dashboard.todayAttendance && <StatusBadge status={dashboard.todayAttendance.status} />}
-          </div>
-
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-cream-200 p-3 text-center">
-              <span className="block text-[11px] font-bold uppercase tracking-wide text-brown-500">Checked In</span>
-              <span className="mt-1 block text-sm font-semibold text-green-950">
-                {dashboard.todayAttendance?.checkIn
-                  ? new Date(dashboard.todayAttendance.checkIn).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "—"}
-              </span>
-            </div>
-            <div className="rounded-lg bg-cream-200 p-3 text-center">
-              <span className="block text-[11px] font-bold uppercase tracking-wide text-brown-500">Checked Out</span>
-              <span className="mt-1 block text-sm font-semibold text-green-950">
-                {dashboard.todayAttendance?.checkOut
-                  ? new Date(dashboard.todayAttendance.checkOut).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "—"}
-              </span>
-            </div>
-          </div>
-
-          {actionError && <p className="mb-3 text-sm text-danger">{actionError}</p>}
-
-          <div className="mt-auto flex gap-3">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleCheckIn}
-              disabled={isActing || !!dashboard.todayAttendance?.checkIn}
-              className="flex-1"
-            >
-              <LogIn size={14} /> Check In
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCheckOut}
-              disabled={isActing || !dashboard.todayAttendance?.checkIn || !!dashboard.todayAttendance?.checkOut}
-              className="flex-1"
-            >
-              <CheckOutIcon size={14} /> Check Out
-            </Button>
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Open Tasks */}
         <div className="flex flex-col rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <div className="mb-4 flex items-center justify-between">

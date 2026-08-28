@@ -125,19 +125,29 @@ form or state-management library — forms/data fetching are hand-rolled with
   (percentage/fixed discounts, scheduling window, minimum order amount,
   usage limit — reachable by co_admin too, with large-percentage discounts
   routed through the approval-gate system below), customers, reviews,
-  employees, attendance, leave, tasks (categorized by task type),
+  employees, leave, tasks (categorized by task type),
   performance, salary & payments (admin/super_admin only), inventory (stock
   adjustments + audit log), purchases (purchase batches with unlimited
-  custom cost items and automatic landed-/unit-cost maths), shops (sourcing
-  outlets plus per-staff shop assignment), reports (sales summary, a
-  daily/weekly/monthly sales report with CSV export and browser-print-to-PDF,
-  and a per-delivery-agent performance table — assigned/delivered/failed
-  counts, success rate, average delivery time), finance (revenue/
-  expense/investment/profit-loss summary plus a day/week/month
-  revenue-vs-expense/profit table with CSV export, admin/super_admin only),
+  custom cost items and automatic landed-/unit-cost maths — every sale
+  draws on these batches FIFO-oldest-first, freezing the actual landed cost
+  of the units sold onto the order for real gross-profit reporting, with a
+  batch-traceability drill-down showing every stock movement and order that
+  drew on it — the storefront is single-shop, so there is no per-outlet
+  scoping), reports (sales summary, a daily/weekly/monthly sales report with CSV
+  export and a real server-generated PDF export, and a per-delivery-agent
+  performance table — assigned/delivered/failed counts, success rate,
+  average delivery time), finance (revenue/expense/investment/profit-loss
+  summary, a day/week/month revenue-vs-expense/profit table, a
+  day/week/month gross profit table sourced from real per-sale landed cost,
+  and a live inventory-valuation table — all admin/super_admin only),
   investments (append-only investor ledger, admin/super_admin can view,
-  super_admin can record), expenses (co_admin can submit — auto-confirmed
-  for admin/super_admin, pending confirmation otherwise), approvals (the
+  super_admin can record), expenses (co_admin/admin/super_admin submit —
+  auto-confirmed for admin/super_admin, pending confirmation otherwise;
+  organized into a monthly archive with a print-to-PDF export per month;
+  editing a settled expense is Super Admin only directly, everyone else —
+  Employee included, who otherwise only has read access — can submit an
+  edit request reviewed exclusively by Super Admin through the same
+  approval queue as every other gated action), approvals (the
   Grant-Based Approval Workflow queue plus editable thresholds, super_admin
   only), audit logs (read-only sensitive-action history, scoped to the
   viewer's own actions for everyone except admin/super_admin), homepage
@@ -227,10 +237,12 @@ form or state-management library — forms/data fetching are hand-rolled with
   raw ids still exist for tracing but only as a small muted fragment next
   to the friendly name, never as the headline.
 - **Employee portal** (`client/src/app/employee`, fully built):
-  check-in/out + attendance history, tasks (filterable by type — packing,
+  tasks (filterable by type — packing,
   product counting, stock checking, warehouse, customer support, data entry,
   product preparation), a read-only Stock Levels page showing the same live
-  per-variant counts the storefront does, leave requests, performance
+  per-variant counts the storefront does, a read-only Expenses view with a
+  "Request Edit" action (reviewed exclusively by Super Admin), leave
+  requests, performance
   history, salary/payment history (base + an optional daily allowance line
   item, both entered manually the same way the rest of a payment is), and a
   profile page (avatar, address, and — for staff only — a read-only NID
@@ -298,7 +310,7 @@ form or state-management library — forms/data fetching are hand-rolled with
   investment, total confirmed expenses (by category), and net profit/loss —
   all admin/super_admin only.
 - **Purchasing with fully flexible additional costs** — every purchase is
-  recorded as its own batch (shop, optional catalogue product/variant,
+  recorded as its own batch (optional catalogue product/variant,
   supplier, quantity, product cost) and carries **any number of custom cost
   items**, each just a name you type yourself, an amount, an optional note
   and an optional receipt photo. There is deliberately **no fixed list of
@@ -314,10 +326,9 @@ form or state-management library — forms/data fetching are hand-rolled with
   stock **through the existing Super-Admin approval gate**, exactly like
   every other stock change; a batch with no catalogue link (packaging,
   consumables) is simply marked received. Once received, a batch's cost
-  breakdown is immutable — a correction is a new batch. Super Admin sees and
-  manages everything; Co-Admin is scoped server-side to the shops assigned
-  to them, on reads and writes alike, and sees nothing at all until someone
-  assigns them one.
+  breakdown is immutable — a correction is a new batch. The storefront is a
+  single shop, so there is no per-outlet ownership scoping — anyone holding
+  `purchases.view` sees every batch.
 - **Homepage content management** — admin-editable hero slides (image,
   plus a title/subtitle/CTA pair kept only as an internal admin-table label
   — the storefront hero is image-only, see below) and a fixed set of nine
@@ -555,9 +566,8 @@ machine.
   whose cost vocabularies share nothing), totals recomputing as costs are
   added and removed, per-batch history with a weighted average unit cost,
   receipt through the stock approval gate for both Super Admin and Admin, an
-  unlinked batch receiving without touching stock, a received batch refusing
-  further cost edits, and shop scoping — a scoped viewer failing closed with
-  no assignment and unable to widen scope with a `?shop=` filter; and the
+  unlinked batch receiving without touching stock, and a received batch
+  refusing further cost edits; and the
   campaign system — the full Draft to Submit to Approve/Reject lifecycle for
   Co-Admin/Admin vs. a Super Admin's direct path, per-channel dispatch
   (email success/failure counting, graceful SMS-not-configured skipping,
@@ -657,9 +667,6 @@ missing/malformed):
   there is no edit, reversal or delete, and the intended correction is a new
   batch. A wrong received quantity is fixed through the normal inventory
   adjustment gate, and the purchase keeps the number it was received with.
-- Shop assignment is per user and additive only — there is no per-shop deny
-  list and no "every shop except one"; unrestricted access is all-or-nothing
-  via the `shops.manage` permission.
 - Two queued stock changes to the same variant are flagged for the reviewer
   but not locked — both still apply in grant order (deltas compose; absolute
   updates are last-grant-wins). Nothing blocks the grant or auto-supersedes

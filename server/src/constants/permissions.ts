@@ -47,9 +47,7 @@ export const PERMISSIONS = [
   "inventory.logs.view",
   "inventory.manage",
 
-  // -- Purchasing & shops --
-  "shops.view",
-  "shops.manage",
+  // -- Purchasing --
   "purchases.view",
   "purchases.create",
   "purchases.edit",
@@ -61,8 +59,6 @@ export const PERMISSIONS = [
   "employees.impersonate",
 
   // -- HR --
-  "attendance.view",
-  "attendance.manage",
   "leave.view",
   "leave.manage",
   "tasks.view",
@@ -99,6 +95,8 @@ export const PERMISSIONS = [
   "expenses.view",
   "expenses.create",
   "expenses.approve",
+  "expenses.requestEdit",
+  "expenses.edit",
   "refunds.view",
   "refunds.request",
   "refunds.review",
@@ -168,10 +166,8 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
     ],
   },
   {
-    group: "Purchasing & Shops",
+    group: "Purchasing",
     permissions: [
-      { key: "shops.view", label: "View shops" },
-      { key: "shops.manage", label: "Create, edit & assign shops" },
       { key: "purchases.view", label: "View purchase batches & their costs" },
       { key: "purchases.create", label: "Record purchase batches" },
       { key: "purchases.edit", label: "Edit purchases & their cost items" },
@@ -189,8 +185,6 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
   {
     group: "HR",
     permissions: [
-      { key: "attendance.view", label: "View attendance" },
-      { key: "attendance.manage", label: "Edit attendance records" },
       { key: "leave.view", label: "View leave requests" },
       { key: "leave.manage", label: "Approve or reject leave" },
       { key: "tasks.view", label: "View all tasks" },
@@ -239,6 +233,8 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
       { key: "expenses.view", label: "View expenses" },
       { key: "expenses.create", label: "Submit expenses" },
       { key: "expenses.approve", label: "Confirm or reject expenses" },
+      { key: "expenses.requestEdit", label: "Request an edit to an expense" },
+      { key: "expenses.edit", label: "Directly edit or delete any expense; approve/reject edit requests" },
       { key: "refunds.view", label: "View refunds" },
       { key: "refunds.request", label: "Request a refund" },
       { key: "refunds.review", label: "Review refund requests" },
@@ -293,7 +289,11 @@ export const SENSITIVE_PERMISSIONS: Permission[] = [
 export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Permission[]> = {
   customer: ["refunds.request", "refunds.view", "returns.request", "returns.view"],
 
-  employee: ["orders.view", "inventory.view", "auditLogs.view"],
+  // `expenses.view`/`expenses.requestEdit` (not `expenses.create`) — an
+  // Employee can see expenses and request a correction on one, but still
+  // cannot submit a brand-new expense; that stays Co-Admin/Admin/Super Admin
+  // only, unchanged.
+  employee: ["orders.view", "inventory.view", "expenses.view", "expenses.requestEdit", "auditLogs.view"],
 
   delivery_agent: ["orders.deliver", "auditLogs.view"],
 
@@ -325,16 +325,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "inventory.view",
     "inventory.logs.view",
     "inventory.manage",
-    // Purchasing: a Co-Admin records purchases and their cost items, but only
-    // for the shops assigned to them (purchase.service.ts scopes every read
-    // and write to `User.assignedShops`) and never deletes one.
-    "shops.view",
+    // Purchasing: a Co-Admin records purchases and their cost items, but
+    // never deletes one.
     "purchases.view",
     "purchases.create",
     "purchases.edit",
     "employees.view",
-    "attendance.view",
-    "attendance.manage",
     "leave.view",
     "leave.manage",
     "tasks.view",
@@ -355,6 +351,10 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "reports.view",
     "expenses.view",
     "expenses.create",
+    // A Co-Admin cannot directly edit a confirmed expense — only *request*
+    // an edit, reviewed exclusively by Super Admin through the same
+    // Grant-Based Approval Workflow as `expense.confirm`.
+    "expenses.requestEdit",
     "refunds.view",
     "refunds.request",
     "returns.view",
@@ -384,16 +384,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "inventory.view",
     "inventory.logs.view",
     "inventory.manage",
-    "shops.view",
-    "shops.manage",
     "purchases.view",
     "purchases.create",
     "purchases.edit",
     "purchases.delete",
     "employees.view",
     "employees.manage",
-    "attendance.view",
-    "attendance.manage",
     "leave.view",
     "leave.manage",
     "tasks.view",
@@ -420,6 +416,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "expenses.view",
     "expenses.create",
     "expenses.approve",
+    // Same as Co-Admin: even Admin does not edit a confirmed expense
+    // directly — that stays Super Admin only, matching this project's
+    // existing "Admin is gated too" convention for high-trust corrections
+    // (stock changes, product deletion, purchase receipts).
+    "expenses.requestEdit",
     "refunds.view",
     "refunds.request",
     "refunds.review",

@@ -9,7 +9,6 @@ import { CategoryModel } from "../models/Category.model";
 import { ProductModel } from "../models/Product.model";
 import { HomepageSectionModel } from "../models/HomepageSection.model";
 import { HeroSlideModel } from "../models/HeroSlide.model";
-import { ShopModel } from "../models/Shop.model";
 import { slugify } from "../utils/slugify";
 
 const CATEGORIES = [
@@ -550,25 +549,6 @@ async function seed() {
     console.log(`${heroSlideCount} homepage hero slides created (rest already existed).`);
   } else {
     console.log("Cloudinary not configured — skipped hero slide seeding.");
-  }
-
-  // -- A default shop, so purchase batches can be recorded straight away.
-  // Purchases require a shop, and shops are Super-Admin/Admin-created, so
-  // seeding one keeps the module usable immediately after `npm run seed`.
-  const superAdmin = await UserModel.findOne({ role: "super_admin" });
-  if (superAdmin) {
-    const existingShop = await ShopModel.findOne({ code: "MAIN" });
-    if (!existingShop) {
-      await ShopModel.create({
-        name: "Main Shop",
-        code: "MAIN",
-        location: "Dhaka, Bangladesh",
-        createdBy: superAdmin._id,
-      });
-      console.log("Default shop created (code: MAIN).");
-    } else {
-      console.log("Default shop already exists.");
-    }
   }
 
   console.log("Seeding complete.");

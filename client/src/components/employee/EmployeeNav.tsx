@@ -8,17 +8,17 @@ import {
   CalendarClock,
   TrendingUp,
   Wallet,
-  CalendarCheck,
   UserCircle,
   Boxes,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/employee", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/employee/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/employee/tasks", label: "My Tasks", icon: ListChecks },
   { href: "/employee/stock", label: "Stock Levels", icon: Boxes },
+  { href: "/employee/expenses", label: "Expenses", icon: Receipt },
   { href: "/employee/leave", label: "Leave", icon: CalendarClock },
   { href: "/employee/performance", label: "Performance", icon: TrendingUp },
   { href: "/employee/salary", label: "Salary", icon: Wallet },

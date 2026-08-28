@@ -1,12 +1,13 @@
 import { PurchaseModel, type IPurchase } from "../models/Purchase.model";
-import { ShopModel } from "../models/Shop.model";
 import { ProductModel } from "../models/Product.model";
+import { InventoryLogModel } from "../models/InventoryLog.model";
+import { OrderModel } from "../models/Order.model";
 import { ApiError } from "../utils/ApiError";
 import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
 import { recordAuditLog } from "./auditLog.service";
 import { applyPurchaseStock } from "./inventory.service";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
-import { assertShopAccess, resolveShopScope, type ShopActor } from "./shop.service";
+import type { Role } from "../constants/roles";
 import type {
   CostItemInput,
   CreatePurchaseInput,
@@ -16,7 +17,10 @@ import type {
 
 const PROOF_FOLDER = "saudi-authentic-product/purchase-proofs";
 
-export type PurchaseActor = ShopActor;
+export interface PurchaseActor {
+  id: string;
+  role: Role;
+}
 
 export type ReceiveResult =
   | { kind: "received"; purchase: IPurchase }
@@ -34,16 +38,15 @@ function generateReference(): string {
 }
 
 const POPULATE = [
-  { path: "shop", select: "name code isActive" },
   { path: "product", select: "name slug images" },
+  { path: "category", select: "name slug" },
   { path: "recordedBy", select: "name email" },
   { path: "costItems.addedBy", select: "name email" },
 ];
 
-async function loadPurchase(id: string, actor: PurchaseActor): Promise<IPurchase> {
+async function loadPurchase(id: string): Promise<IPurchase> {
   const purchase = await PurchaseModel.findById(id);
   if (!purchase) throw ApiError.notFound("Purchase not found");
-  await assertShopAccess(actor, purchase.shop.toString());
   return purchase;
 }
 
@@ -74,7 +77,7 @@ function assertEditable(purchase: IPurchase): void {
 }
 
 async function resolveVariant(productId: string, variantId: string) {
-  const product = await ProductModel.findById(productId).select("name variants");
+  const product = await ProductModel.findById(productId).select("name variants categories");
   if (!product) throw ApiError.notFound("Product not found");
   const variant = product.variants.find((v) => v._id?.toString() === variantId);
   if (!variant) throw ApiError.notFound("Variant not found");
@@ -111,17 +114,18 @@ export async function createPurchase(
   actor: PurchaseActor,
   proofFiles: Express.Multer.File[] = []
 ): Promise<IPurchase> {
-  const shop = await ShopModel.findById(input.shop);
-  if (!shop) throw ApiError.notFound("Shop not found");
-  if (!shop.isActive) throw ApiError.badRequest("This shop is inactive");
-  await assertShopAccess(actor, shop._id.toString());
-
   let itemName = input.itemName ?? "";
   let variantLabel: string | undefined;
+  // A batch's category defaults to its linked product's own first category —
+  // it's a reporting field, not a second source of truth (see Purchase.model.ts) —
+  // but an explicit `category` on the input always wins, which is also how a
+  // batch with no catalogue link (packaging, consumables) gets one at all.
+  let category = input.category;
   if (input.product && input.variantId) {
     const { product, variant } = await resolveVariant(input.product, input.variantId);
     variantLabel = variant.label;
     if (!itemName) itemName = `${product.name} - ${variant.label}`;
+    if (!category) category = product.categories[0]?.toString();
   }
 
   // Cost items supplied at creation time may each carry a proof image; the
@@ -131,10 +135,10 @@ export async function createPurchase(
 
   const purchase = await PurchaseModel.create({
     reference: generateReference(),
-    shop: shop._id,
     product: input.product,
     variantId: input.variantId,
     variantLabel,
+    category,
     itemName,
     supplierName: input.supplierName,
     purchasedAt: input.purchasedAt,
@@ -144,6 +148,7 @@ export async function createPurchase(
     costItems,
     note: input.note,
     status: "draft",
+    remainingQuantity: 0,
     recordedBy: actor.id,
     recordedByRole: actor.role,
   });
@@ -156,7 +161,6 @@ export async function createPurchase(
     resourceId: purchase._id.toString(),
     newValue: {
       reference: purchase.reference,
-      shop: shop.code,
       quantity: purchase.quantity,
       productCostBDT: purchase.productCostBDT,
       costItemCount: purchase.costItems.length,
@@ -167,17 +171,8 @@ export async function createPurchase(
   return populated(purchase._id.toString());
 }
 
-export async function listPurchases(filter: ListPurchasesQuery, actor: PurchaseActor) {
+export async function listPurchases(filter: ListPurchasesQuery) {
   const query: Record<string, unknown> = {};
-
-  const scope = await resolveShopScope(actor);
-  if (scope !== null) {
-    // A scoped actor asking for one specific shop still only gets it if that
-    // shop is in their assignment — the filter narrows, it never widens.
-    query.shop = filter.shop && scope.includes(filter.shop) ? filter.shop : { $in: scope };
-  } else if (filter.shop) {
-    query.shop = filter.shop;
-  }
 
   if (filter.product) query.product = filter.product;
   if (filter.status) query.status = filter.status;
@@ -210,8 +205,7 @@ export async function listPurchases(filter: ListPurchasesQuery, actor: PurchaseA
   };
 }
 
-export async function getPurchase(id: string, actor: PurchaseActor): Promise<IPurchase> {
-  await loadPurchase(id, actor);
+export async function getPurchase(id: string): Promise<IPurchase> {
   return populated(id);
 }
 
@@ -220,7 +214,7 @@ export async function updatePurchase(
   input: UpdatePurchaseInput,
   actor: PurchaseActor
 ): Promise<IPurchase> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
   assertEditable(purchase);
 
   const before = {
@@ -264,7 +258,7 @@ export async function addCostItem(
   actor: PurchaseActor,
   proofFile?: Express.Multer.File
 ): Promise<IPurchase> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
   assertEditable(purchase);
 
   const proof = proofFile
@@ -301,7 +295,7 @@ export async function updateCostItem(
   actor: PurchaseActor,
   proofFile?: Express.Multer.File
 ): Promise<IPurchase> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
   assertEditable(purchase);
 
   const item = purchase.costItems.find((cost) => cost._id?.toString() === costId);
@@ -339,7 +333,7 @@ export async function removeCostItem(
   costId: string,
   actor: PurchaseActor
 ): Promise<IPurchase> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
   assertEditable(purchase);
 
   const item = purchase.costItems.find((cost) => cost._id?.toString() === costId);
@@ -397,7 +391,7 @@ export async function receivePurchase(
   actor: PurchaseActor,
   note?: string
 ): Promise<ReceiveResult> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
 
   if (purchase.status === "received") throw ApiError.badRequest("This purchase is already received");
   if (purchase.status === "cancelled") throw ApiError.badRequest("This purchase was cancelled");
@@ -408,6 +402,7 @@ export async function receivePurchase(
   if (!purchase.product || !purchase.variantId) {
     purchase.status = "received";
     purchase.receivedAt = new Date();
+    purchase.remainingQuantity = purchase.quantity;
     await purchase.save();
     await recordReceiptAudit(purchase, actor, "Received (no catalogue stock linked)");
     return { kind: "received_without_stock", purchase: await populated(id) };
@@ -423,6 +418,9 @@ export async function receivePurchase(
     purchase.status = "received";
     purchase.receivedAt = new Date();
     purchase.stockPendingActionId = undefined;
+    // The batch's full quantity becomes available for FIFO sale-consumption
+    // the moment it actually lands — see `inventory.service.ts#consumeStockForSale`.
+    purchase.remainingQuantity = purchase.quantity;
     await purchase.save();
     await recordReceiptAudit(purchase, actor, "Stock applied immediately");
     return { kind: "received", purchase: await populated(id) };
@@ -456,7 +454,7 @@ export async function receivePurchase(
 }
 
 export async function cancelPurchase(id: string, actor: PurchaseActor): Promise<IPurchase> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
   if (purchase.status === "received") {
     throw ApiError.badRequest("A received purchase cannot be cancelled — its stock has already landed");
   }
@@ -477,7 +475,7 @@ export async function cancelPurchase(id: string, actor: PurchaseActor): Promise<
 }
 
 export async function deletePurchase(id: string, actor: PurchaseActor): Promise<void> {
-  const purchase = await loadPurchase(id, actor);
+  const purchase = await loadPurchase(id);
   if (purchase.status === "received") {
     throw ApiError.badRequest(
       "A received purchase is part of the cost history and cannot be deleted. Its stock has already been applied."
@@ -500,15 +498,54 @@ export async function deletePurchase(id: string, actor: PurchaseActor): Promise<
 }
 
 /**
+ * Batch-level traceability: every `InventoryLog` entry this specific batch
+ * was drawn on or credited back from (`InventoryLog.purchaseBatch`), and
+ * every order that drew from it (via `Order.items[].batchConsumptions`) —
+ * "how much was sold from this batch, in which orders, and when." Both are
+ * read straight off their own collections rather than a denormalized copy on
+ * the purchase itself, so they can never drift from the real ledger.
+ */
+export async function getPurchaseTraceability(id: string) {
+  const purchase = await loadPurchase(id);
+
+  const [movements, orders] = await Promise.all([
+    InventoryLogModel.find({ purchaseBatch: purchase._id })
+      .populate("actor", "name")
+      .sort({ createdAt: -1 }),
+    OrderModel.find({ "items.batchConsumptions.purchase": purchase._id })
+      .select("orderNumber status createdAt items")
+      .sort({ createdAt: -1 }),
+  ]);
+
+  const relatedOrders = orders.map((order) => {
+    const consumedQuantity = order.items.reduce(
+      (sum, item) =>
+        sum +
+        item.batchConsumptions
+          .filter((c) => c.purchase.toString() === purchase._id.toString())
+          .reduce((qty, c) => qty + c.quantity, 0),
+      0
+    );
+    return {
+      orderId: order._id.toString(),
+      orderNumber: order.orderNumber,
+      status: order.status,
+      createdAt: order.createdAt,
+      quantityDrawn: consumedQuantity,
+    };
+  });
+
+  return { movements, relatedOrders };
+}
+
+/**
  * Per-product landed-cost history: every received batch of a product, newest
  * first, with the unit cost each one actually worked out to. Kept per batch
  * rather than averaged into a single number stored on the product, so a price
  * rise between shipments stays visible instead of being smoothed away.
  */
-export async function getProductCostHistory(productId: string, actor: PurchaseActor) {
+export async function getProductCostHistory(productId: string) {
   const query: Record<string, unknown> = { product: productId, status: "received" };
-  const scope = await resolveShopScope(actor);
-  if (scope !== null) query.shop = { $in: scope };
 
   const purchases = await PurchaseModel.find(query).populate(POPULATE).sort({ purchasedAt: -1 });
 
@@ -545,6 +582,7 @@ registerPendingActionHandler("purchase.receive", async (payload, reviewer) => {
   purchase.status = "received";
   purchase.receivedAt = new Date();
   purchase.stockPendingActionId = undefined;
+  purchase.remainingQuantity = purchase.quantity;
   await purchase.save();
 
   return { resource: "Purchase", resourceId: purchaseId };

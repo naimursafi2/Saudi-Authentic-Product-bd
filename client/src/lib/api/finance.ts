@@ -4,12 +4,13 @@ import type {
   ApiInvestment,
   ApiRefund,
   ExpenseCategory,
+  ExpenseMonthSummary,
   ExpenseStatus,
   FinanceSummary,
   RefundReasonCategory,
   RefundStatus,
 } from "@/types/api";
-import type { RevenueVsExpensePoint } from "@/types/hr";
+import type { GrossProfitPoint, InventoryValuation, RevenueVsExpensePoint } from "@/types/hr";
 
 // -- Investments --
 
@@ -60,15 +61,28 @@ export async function createExpense(payload: CreateExpensePayload, cashMemoFile?
 }
 
 export async function listExpenses(
-  params: { status?: ExpenseStatus; category?: ExpenseCategory; page?: number; limit?: number } = {}
+  params: {
+    status?: ExpenseStatus;
+    category?: ExpenseCategory;
+    /** `"YYYY-MM"` — one archived monthly period. */
+    month?: string;
+    page?: number;
+    limit?: number;
+  } = {}
 ) {
   const search = new URLSearchParams();
   if (params.status) search.set("status", params.status);
   if (params.category) search.set("category", params.category);
+  if (params.month) search.set("month", params.month);
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();
   return api.get<{ expenses: ApiExpense[] }>(`/expenses${qs ? `?${qs}` : ""}`);
+}
+
+/** Every calendar month with at least one expense, newest first — the monthly archive index. */
+export async function getExpenseMonths() {
+  return api.get<{ months: ExpenseMonthSummary[] }>("/expenses/months");
 }
 
 export async function confirmExpense(id: string, note?: string) {
@@ -77,6 +91,30 @@ export async function confirmExpense(id: string, note?: string) {
 
 export async function rejectExpense(id: string, note?: string) {
   return api.patch<{ expense: ApiExpense }>(`/expenses/${id}/reject`, { note });
+}
+
+export interface EditExpenseFields {
+  category?: ExpenseCategory;
+  amountBDT?: number;
+  incurredAt?: string;
+  reason?: string;
+  otherCategoryDetail?: string;
+  note?: string;
+}
+
+/** Direct edit — `expenses.edit` only (Super Admin). */
+export async function updateExpense(id: string, changes: EditExpenseFields) {
+  return api.patch<{ expense: ApiExpense }>(`/expenses/${id}`, changes);
+}
+
+/** `expenses.edit` only (Super Admin). */
+export async function deleteExpense(id: string) {
+  return api.delete<null>(`/expenses/${id}`);
+}
+
+/** `expenses.requestEdit` (Employee/Co-Admin/Admin) — parks the change for exclusive Super Admin review via the existing pending-actions queue. */
+export async function requestExpenseEdit(id: string, changes: EditExpenseFields, reason: string) {
+  return api.post<{ pendingActionId: string }>(`/expenses/${id}/edit-request`, { changes, reason });
 }
 
 // -- Refunds --
@@ -128,4 +166,17 @@ export async function getRevenueVsExpense(groupBy: "day" | "week" | "month", fro
   if (from) search.set("from", from);
   if (to) search.set("to", to);
   return api.get<{ timeSeries: RevenueVsExpensePoint[] }>(`/finance/revenue-vs-expense?${search.toString()}`);
+}
+
+/** The Purchase/Landed-Cost system's own profit report — net selling revenue minus real batch-level cost of goods sold. */
+export async function getGrossProfit(groupBy: "day" | "week" | "month", from?: string, to?: string) {
+  const search = new URLSearchParams({ groupBy });
+  if (from) search.set("from", from);
+  if (to) search.set("to", to);
+  return api.get<{ timeSeries: GrossProfitPoint[] }>(`/finance/gross-profit?${search.toString()}`);
+}
+
+/** Live stock valued at its actual landed cost, not a guessed/list price. */
+export async function getInventoryValuation() {
+  return api.get<InventoryValuation>("/finance/inventory-valuation");
 }

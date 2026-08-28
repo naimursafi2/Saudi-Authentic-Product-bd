@@ -6,7 +6,7 @@ import * as purchaseService from "../services/purchase.service";
 import type { ListPurchasesQuery } from "../validators/purchase.validator";
 
 function actorOf(req: Request) {
-  return { id: req.user!.id, role: req.user!.role, permissions: req.user!.permissions };
+  return { id: req.user!.id, role: req.user!.role };
 }
 
 /** multer's `.any()` gives `Express.Multer.File[]`; normalise the untyped case. */
@@ -16,12 +16,12 @@ function filesOf(req: Request): Express.Multer.File[] {
 
 export const listPurchases = catchAsync(async (req: Request, res: Response) => {
   const filter = req.query as unknown as ListPurchasesQuery;
-  const { purchases, pagination } = await purchaseService.listPurchases(filter, actorOf(req));
+  const { purchases, pagination } = await purchaseService.listPurchases(filter);
   sendSuccess(res, 200, "Purchases fetched", { purchases }, { pagination });
 });
 
 export const getPurchase = catchAsync(async (req: Request, res: Response) => {
-  const purchase = await purchaseService.getPurchase(paramStr(req.params.id), actorOf(req));
+  const purchase = await purchaseService.getPurchase(paramStr(req.params.id));
   sendSuccess(res, 200, "Purchase fetched", { purchase });
 });
 
@@ -107,9 +107,11 @@ export const deletePurchase = catchAsync(async (req: Request, res: Response) => 
 });
 
 export const getProductCostHistory = catchAsync(async (req: Request, res: Response) => {
-  const history = await purchaseService.getProductCostHistory(
-    paramStr(req.params.productId),
-    actorOf(req)
-  );
+  const history = await purchaseService.getProductCostHistory(paramStr(req.params.productId));
   sendSuccess(res, 200, "Cost history fetched", history);
+});
+
+export const getPurchaseTraceability = catchAsync(async (req: Request, res: Response) => {
+  const traceability = await purchaseService.getPurchaseTraceability(paramStr(req.params.id));
+  sendSuccess(res, 200, "Batch traceability fetched", traceability);
 });

@@ -28,6 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
   "refund.request": "Refund request",
   "refund.approve": "Refund approval",
   "expense.confirm": "Expense confirmation",
+  "expense.edit": "Expense edit request",
 };
 
 function personName(person: ApiPendingAction["requestedBy"]): string {
@@ -85,6 +86,16 @@ function PayloadSummary({ action }: { action: ApiPendingAction }) {
       return <span>Refund #{String(p.refundId ?? "").slice(-6)}</span>;
     case "expense.confirm":
       return <span>Expense #{String(p.expenseId ?? "").slice(-6)}</span>;
+    case "expense.edit": {
+      const changes = (p.changes ?? {}) as Record<string, unknown>;
+      const fields = Object.keys(changes);
+      return (
+        <span>
+          {String(p.code ?? `Expense #${String(p.expenseId ?? "").slice(-6)}`)} — changing{" "}
+          {fields.length > 0 ? fields.join(", ") : "no fields"}
+        </span>
+      );
+    }
     default:
       return <span>—</span>;
   }

@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ApiPurchase, ProductCostHistory, PurchaseStatus } from "@/types/api";
+import type { ApiPurchase, ProductCostHistory, PurchaseStatus, PurchaseTraceability } from "@/types/api";
 
 /**
  * A single custom cost on a purchase: whatever the person recording it wants
@@ -14,7 +14,6 @@ export interface CostItemPayload {
 }
 
 export interface CreatePurchasePayload {
-  shop: string;
   product?: string;
   variantId?: string;
   itemName?: string;
@@ -28,7 +27,6 @@ export interface CreatePurchasePayload {
 }
 
 export interface ListPurchasesParams {
-  shop?: string;
   product?: string;
   status?: PurchaseStatus;
   search?: string;
@@ -38,7 +36,6 @@ export interface ListPurchasesParams {
 
 export async function listPurchases(params: ListPurchasesParams = {}) {
   const search = new URLSearchParams();
-  if (params.shop) search.set("shop", params.shop);
   if (params.product) search.set("product", params.product);
   if (params.status) search.set("status", params.status);
   if (params.search) search.set("search", params.search);
@@ -59,7 +56,6 @@ export async function getPurchase(id: string) {
  */
 export async function createPurchase(payload: CreatePurchasePayload) {
   const form = new FormData();
-  form.set("shop", payload.shop);
   if (payload.product) form.set("product", payload.product);
   if (payload.variantId) form.set("variantId", payload.variantId);
   if (payload.itemName) form.set("itemName", payload.itemName);
@@ -137,4 +133,9 @@ export async function deletePurchase(id: string) {
 
 export async function getProductCostHistory(productId: string) {
   return api.get<ProductCostHistory>(`/purchases/product/${productId}`);
+}
+
+/** Every stock movement and order that drew on this specific batch. */
+export async function getPurchaseTraceability(id: string) {
+  return api.get<PurchaseTraceability>(`/purchases/${id}/traceability`);
 }

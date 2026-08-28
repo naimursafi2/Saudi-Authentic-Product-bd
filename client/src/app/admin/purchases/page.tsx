@@ -11,7 +11,6 @@ import {
   receivePurchase,
   type CostItemPayload,
 } from "@/lib/api/purchases";
-import { listShops } from "@/lib/api/shops";
 import { listProducts } from "@/lib/api/products";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
@@ -26,7 +25,7 @@ import { PurchaseCostEditor, CostItemForm } from "@/components/admin/PurchaseCos
 import { PurchaseSummary } from "@/components/admin/PurchaseSummary";
 import { Button } from "@/components/ui/Button";
 import { ActionButton } from "@/components/ui/ActionButton";
-import type { ApiProduct, ApiPurchase, ApiShop, Pagination, PurchaseStatus } from "@/types/api";
+import type { ApiProduct, ApiPurchase, Pagination, PurchaseStatus } from "@/types/api";
 
 const fieldClasses =
   "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
@@ -40,10 +39,6 @@ const STATUS_FILTERS: { value: PurchaseStatus | ""; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-function shopName(shop: ApiPurchase["shop"]): string {
-  return typeof shop === "string" ? shop : shop.name;
-}
-
 export default function AdminPurchasesPage() {
   const { hasPermission } = useAuth();
   const confirmDialog = useConfirm();
@@ -52,10 +47,8 @@ export default function AdminPurchasesPage() {
   const canDelete = hasPermission("purchases.delete");
 
   const [purchases, setPurchases] = useState<ApiPurchase[]>([]);
-  const [shops, setShops] = useState<ApiShop[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
-  const [shopFilter, setShopFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseStatus | "">("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +63,6 @@ export default function AdminPurchasesPage() {
     listPurchases({
       page,
       limit: 20,
-      shop: shopFilter || undefined,
       status: statusFilter || undefined,
     })
       .then(({ data, pagination: pg }) => {
@@ -83,13 +75,7 @@ export default function AdminPurchasesPage() {
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(load, [page, shopFilter, statusFilter]);
-
-  useEffect(() => {
-    listShops()
-      .then(({ data }) => setShops(data.shops))
-      .catch(() => setShops([]));
-  }, []);
+  useEffect(load, [page, statusFilter]);
 
   async function openDetail(purchase: ApiPurchase) {
     setDetail(purchase);
@@ -172,21 +158,6 @@ export default function AdminPurchasesPage() {
 
       <div className="mb-4 flex flex-wrap gap-3">
         <select
-          value={shopFilter}
-          onChange={(e) => {
-            setShopFilter(e.target.value);
-            setPage(1);
-          }}
-          className={`${fieldClasses} max-w-[220px]`}
-        >
-          <option value="">All shops</option>
-          {shops.map((shop) => (
-            <option key={shop._id} value={shop._id}>
-              {shop.name}
-            </option>
-          ))}
-        </select>
-        <select
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value as PurchaseStatus | "");
@@ -222,7 +193,6 @@ export default function AdminPurchasesPage() {
               <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
                 <th className="px-4 py-3">Reference</th>
                 <th className="px-4 py-3">Item</th>
-                <th className="px-4 py-3">Shop</th>
                 <th className="px-4 py-3">Qty</th>
                 <th className="px-4 py-3">Landed cost</th>
                 <th className="px-4 py-3">Unit cost</th>
@@ -244,7 +214,6 @@ export default function AdminPurchasesPage() {
                       {purchase.costItems.length === 1 ? "" : "s"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-brown-600">{shopName(purchase.shop)}</td>
                   <td className="px-4 py-3 text-brown-600">
                     {purchase.quantity} {purchase.unit}
                   </td>
@@ -267,7 +236,6 @@ export default function AdminPurchasesPage() {
 
       {isCreating && (
         <PurchaseForm
-          shops={shops}
           onClose={() => setIsCreating(false)}
           onSaved={(purchase) => {
             setIsCreating(false);
@@ -282,7 +250,6 @@ export default function AdminPurchasesPage() {
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Field label="Item" value={detail.itemName} />
-              <Field label="Shop" value={shopName(detail.shop)} />
               <Field label="Supplier" value={detail.supplierName ?? "-"} />
               <Field label="Purchased" value={new Date(detail.purchasedAt).toLocaleDateString()} />
               <Field label="Variant" value={detail.variantLabel ?? "Not linked to stock"} />
@@ -346,16 +313,13 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 function PurchaseForm({
-  shops,
   onClose,
   onSaved,
 }: {
-  shops: ApiShop[];
   onClose: () => void;
   onSaved: (purchase: ApiPurchase) => void;
 }) {
   const [products, setProducts] = useState<ApiProduct[]>([]);
-  const [shop, setShop] = useState("");
   const [productId, setProductId] = useState("");
   const [variantId, setVariantId] = useState("");
   const [itemName, setItemName] = useState("");
@@ -387,7 +351,6 @@ function PurchaseForm({
     setIsSubmitting(true);
     try {
       const { data } = await createPurchase({
-        shop,
         product: productId || undefined,
         variantId: productId ? variantId : undefined,
         itemName: itemName.trim() || undefined,
@@ -411,17 +374,6 @@ function PurchaseForm({
     <Modal title="Record Purchase" onClose={onClose} wide>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className={labelClasses}>Shop *</label>
-            <select required value={shop} onChange={(e) => setShop(e.target.value)} className={fieldClasses}>
-              <option value="">Select a shop</option>
-              {shops.map((option) => (
-                <option key={option._id} value={option._id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className={labelClasses}>Supplier</label>
             <input

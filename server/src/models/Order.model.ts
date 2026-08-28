@@ -7,6 +7,19 @@ export type { OrderStatus };
 export type DeliveryMethod = "standard" | "express";
 export type PaymentMethod = "cod" | "bkash" | "nagad";
 
+/**
+ * One order item's draw against a specific Purchase batch's cost basis —
+ * recorded at sale time so a later cancellation/return can credit the exact
+ * batch(es) it came from (see `inventory.service.ts#consumeStockForSale`/
+ * `restockFromSale`). Empty when the item's cost fell back to the average of
+ * prior batches or is entirely unknown (`IOrderItem.costBasisKnown: false`).
+ */
+export interface IOrderItemBatchConsumption {
+  purchase: Types.ObjectId;
+  quantity: number;
+  unitCostBDT: number;
+}
+
 export interface IOrderItem {
   product: Types.ObjectId;
   productName: string;
@@ -15,6 +28,20 @@ export interface IOrderItem {
   unitPriceBDT: number;
   quantity: number;
   lineTotalBDT: number;
+  /**
+   * The actual landed cost per unit at the moment this item was sold —
+   * quantity-weighted across whichever Purchase batch(es) FIFO consumption
+   * drew from, per CLAUDE.md's "Purchasing: shops, batches & flexible landed
+   * costs". **Frozen at sale time, never recomputed** — a batch's own
+   * `unitCostBDT` is itself derived-on-read from its cost items, and a
+   * variant's batches are consumed and replenished continuously, so this is
+   * the only place "what this specific unit actually cost when it sold" is
+   * preserved for historical profit reporting.
+   */
+  unitLandedCostBDT: number;
+  /** False when no purchase-batch history existed for this variant at sale time, so `unitLandedCostBDT` is 0 rather than a real figure — profit reporting should treat this item's cost as unknown, not zero. */
+  costBasisKnown: boolean;
+  batchConsumptions: IOrderItemBatchConsumption[];
 }
 
 export interface IShippingAddress {
@@ -79,7 +106,20 @@ export interface IOrder extends Document {
   updatedAt: Date;
   /** Derived, never stored — see `computeEstimatedDeliveryDate()`. Undefined once the order is delivered or in a terminal/branch status. */
   estimatedDeliveryDate?: Date;
+  // -- Profit virtuals (computed on read, never stored — see below) --
+  costOfGoodsSoldBDT: number;
+  grossProfitBDT: number;
+  costBasisFullyKnown: boolean;
 }
+
+const orderItemBatchConsumptionSchema = new Schema<IOrderItemBatchConsumption>(
+  {
+    purchase: { type: Schema.Types.ObjectId, ref: "Purchase", required: true },
+    quantity: { type: Number, required: true, min: 1 },
+    unitCostBDT: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
 
 const orderItemSchema = new Schema<IOrderItem>(
   {
@@ -90,6 +130,9 @@ const orderItemSchema = new Schema<IOrderItem>(
     unitPriceBDT: { type: Number, required: true, min: 0 },
     quantity: { type: Number, required: true, min: 1 },
     lineTotalBDT: { type: Number, required: true, min: 0 },
+    unitLandedCostBDT: { type: Number, default: 0, min: 0 },
+    costBasisKnown: { type: Boolean, default: false },
+    batchConsumptions: { type: [orderItemBatchConsumptionSchema], default: [] },
   },
   { _id: false }
 );
@@ -195,6 +238,41 @@ orderSchema.virtual("estimatedDeliveryDate").get(function estimatedDeliveryDate(
   const date = new Date(this.createdAt);
   date.setDate(date.getDate() + ESTIMATED_DELIVERY_DAYS[this.deliveryMethod]);
   return date;
+});
+
+/**
+ * Profit is **derived on every read, never stored** — the same reasoning as
+ * `computeCouponStatus()`/Purchase's own cost virtuals: `unitLandedCostBDT`
+ * is frozen per item at sale time (see `IOrderItem` above), but the totals
+ * built from it should never go stale relative to the items they sum.
+ *
+ * `costOfGoodsSoldBDT` sums each item's frozen unit landed cost × quantity.
+ * `grossProfitBDT` is net selling revenue (subtotal minus the order-level
+ * discount, deliberately excluding the shipping fee — shipping is a pass-
+ * through logistics charge, not merchandise revenue) minus COGS.
+ * `costBasisFullyKnown` is false if any item's cost fell back to "unknown"
+ * (no purchase-batch history existed for that variant at sale time), so a
+ * profit report can flag the figure as a partial/estimated total rather than
+ * silently treating a missing cost as zero profit-negative.
+ */
+// These three virtuals run on every Order `toJSON`, including on a
+// **partially-selected** populated subdocument (e.g. `refund.service.ts`/
+// `returnRequest.service.ts` populate `order` with just `"orderNumber
+// totalBDT status"` for a list view) — `this.items`/`this.subtotalBDT`/
+// `this.discountBDT` can legitimately be `undefined` in that case, so each
+// virtual must degrade to a safe default rather than throwing.
+orderSchema.virtual("costOfGoodsSoldBDT").get(function costOfGoodsSoldBDT(this: IOrder) {
+  return (this.items ?? []).reduce((sum, item) => sum + item.unitLandedCostBDT * item.quantity, 0);
+});
+
+orderSchema.virtual("grossProfitBDT").get(function grossProfitBDT(this: IOrder) {
+  const netSellingRevenueBDT = (this.subtotalBDT ?? 0) - (this.discountBDT ?? 0);
+  const cogs = (this.items ?? []).reduce((sum, item) => sum + item.unitLandedCostBDT * item.quantity, 0);
+  return netSellingRevenueBDT - cogs;
+});
+
+orderSchema.virtual("costBasisFullyKnown").get(function costBasisFullyKnown(this: IOrder) {
+  return (this.items ?? []).every((item) => item.costBasisKnown);
 });
 
 export const OrderModel: Model<IOrder> = model<IOrder>("Order", orderSchema);

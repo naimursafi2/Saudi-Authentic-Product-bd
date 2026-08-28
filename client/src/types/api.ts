@@ -65,9 +65,6 @@ export interface ApiUser {
   lockedUntil?: string;
   addresses: ApiAddress[];
   staffMeta?: ApiStaffMeta;
-  /** Shops this staff member may record/view purchases for. Ids as returned
-   * by `GET /users`; populated shop documents from `GET /shops/users/:id`. */
-  assignedShops?: (string | ApiShop)[];
   createdAt: string;
   updatedAt: string;
 }
@@ -428,7 +425,9 @@ export type PendingActionType =
   | "inventory.adjust"
   | "refund.request"
   | "refund.approve"
-  | "expense.confirm";
+  | "expense.confirm"
+  | "expense.edit"
+  | "purchase.receive";
 export type PendingActionStatus = "pending" | "granted" | "denied";
 
 export interface ApiPendingAction {
@@ -521,8 +520,21 @@ export interface ApiExpense {
   confirmedAt?: string;
   reviewNote?: string;
   linkedRefund?: string;
+  /** Set once this record has been edited — directly by a Super Admin, or via an approved edit request. */
+  lastEditedAt?: string;
+  lastEditedBy?: string | { _id: string; name: string; email: string };
+  /** True when `lastEditedAt`/`lastEditedBy` were set by an approved `expense.edit` request rather than a direct edit. */
+  lastEditViaRequest: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One archived calendar month's worth of expenses — see "Monthly Expense Pages / Archive". */
+export interface ExpenseMonthSummary {
+  /** `"YYYY-MM"` */
+  month: string;
+  totalBDT: number;
+  count: number;
 }
 
 export type RefundReasonCategory = "damaged" | "wrong_item" | "not_as_described" | "changed_mind" | "other";
@@ -589,19 +601,7 @@ export interface FinanceSummary {
   expensesByCategory: Record<ExpenseCategory, number>;
 }
 
-// -- Purchasing: shops, purchase batches & flexible landed costs --
-
-export interface ApiShop {
-  _id: string;
-  name: string;
-  code: string;
-  location?: string;
-  note?: string;
-  isActive: boolean;
-  createdBy: string | { _id: string; name: string; email: string };
-  createdAt: string;
-  updatedAt: string;
-}
+// -- Purchasing: purchase batches & flexible landed costs --
 
 /** One free-text cost attached to a purchase. There is no category enum here
  * on purpose — see `server/src/models/Purchase.model.ts`. */
@@ -620,10 +620,10 @@ export type PurchaseStatus = "draft" | "awaiting_stock_approval" | "received" | 
 export interface ApiPurchase {
   _id: string;
   reference: string;
-  shop: string | { _id: string; name: string; code: string; isActive: boolean };
   product?: string | { _id: string; name: string; slug: string; images: ApiProductImage[] };
   variantId?: string;
   variantLabel?: string;
+  category?: string | { _id: string; name: string; slug: string };
   itemName: string;
   supplierName?: string;
   purchasedAt: string;
@@ -635,14 +635,42 @@ export interface ApiPurchase {
   status: PurchaseStatus;
   stockPendingActionId?: string;
   receivedAt?: string;
+  /** How many of `quantity` units haven't been drawn on by a sale yet — `0` until the batch is `received`. */
+  remainingQuantity: number;
   recordedBy: string | { _id: string; name: string; email: string };
   recordedByRole: Role;
   /** Derived server-side on every read (Mongoose virtuals) — never stored. */
   additionalCostBDT: number;
   totalLandedCostBDT: number;
   unitCostBDT: number;
+  /** `quantity - remainingQuantity` once received, `0` before that. */
+  soldQuantity: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PurchaseInventoryMovement {
+  _id: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string;
+  note?: string;
+  actor?: { _id: string; name: string };
+  unitCostBDT?: number;
+  createdAt: string;
+}
+
+export interface PurchaseRelatedOrder {
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  createdAt: string;
+  quantityDrawn: number;
+}
+
+export interface PurchaseTraceability {
+  movements: PurchaseInventoryMovement[];
+  relatedOrders: PurchaseRelatedOrder[];
 }
 
 export interface ProductCostHistory {
@@ -650,14 +678,6 @@ export interface ProductCostHistory {
   totalQuantity: number;
   totalLandedCostBDT: number;
   averageUnitCostBDT: number;
-}
-
-export interface ApiUserShopAssignment {
-  _id: string;
-  name: string;
-  email: string;
-  role: Role;
-  assignedShops: ApiShop[];
 }
 
 // -- Customer Messaging / Campaign Management --

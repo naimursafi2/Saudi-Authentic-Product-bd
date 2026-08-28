@@ -2,9 +2,7 @@ import { OrderModel } from "../models/Order.model";
 import { ProductModel } from "../models/Product.model";
 import { UserModel } from "../models/User.model";
 import { TaskModel } from "../models/Task.model";
-import { AttendanceModel } from "../models/Attendance.model";
 import { SalaryPaymentModel } from "../models/SalaryPayment.model";
-import { getTodaySummary } from "./attendance.service";
 import { countPendingLeaves } from "./leave.service";
 import { countLowStockProducts, countOutOfStockProducts } from "./inventory.service";
 import { listAuditLogs } from "./auditLog.service";
@@ -80,7 +78,6 @@ export async function getAdminDashboard(viewer: { id: string; role: Role }) {
     pendingLeaves,
     lowStockCount,
     outOfStockCount,
-    attendanceToday,
     totalCustomers,
     totalProducts,
     totalStaff,
@@ -91,7 +88,6 @@ export async function getAdminDashboard(viewer: { id: string; role: Role }) {
     countPendingLeaves(),
     countLowStockProducts(),
     countOutOfStockProducts(),
-    getTodaySummary(),
     UserModel.countDocuments({ role: "customer" }),
     ProductModel.countDocuments({ isActive: true }),
     UserModel.countDocuments({
@@ -106,7 +102,6 @@ export async function getAdminDashboard(viewer: { id: string; role: Role }) {
     pendingLeaves,
     lowStockCount,
     outOfStockCount,
-    attendanceToday,
     totalCustomers,
     totalProducts,
     totalStaff,
@@ -213,14 +208,10 @@ export async function getDeliveryAgentPerformance() {
 
 /** Snapshot backing an individual employee's own dashboard. */
 export async function getEmployeeDashboard(employeeId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const [todayAttendance, pendingTaskCount, latestSalaryPayment] = await Promise.all([
-    AttendanceModel.findOne({ employee: employeeId, date: today }),
+  const [pendingTaskCount, latestSalaryPayment] = await Promise.all([
     TaskModel.countDocuments({ assignedTo: employeeId, status: { $ne: "done" } }),
     SalaryPaymentModel.findOne({ employee: employeeId }).sort({ year: -1, month: -1 }),
   ]);
 
-  return { todayAttendance, pendingTaskCount, latestSalaryPayment };
+  return { pendingTaskCount, latestSalaryPayment };
 }

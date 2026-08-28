@@ -32,11 +32,12 @@ export async function recordAuditLog(input: RecordAuditLogInput): Promise<void> 
  * security boundary, not just a UI default.
  */
 export async function listAuditLogs(
-  filter: { resource?: string; page: number; limit: number },
+  filter: { resource?: string; resourceId?: string; page: number; limit: number },
   viewer: { id: string; role: Role }
 ) {
   const query: Record<string, unknown> = {};
   if (filter.resource) query.resource = filter.resource;
+  if (filter.resourceId) query.resourceId = filter.resourceId;
 
   const canViewAll = viewer.role === "admin" || viewer.role === "super_admin";
   if (!canViewAll) query.actor = viewer.id;

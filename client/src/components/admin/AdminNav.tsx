@@ -10,7 +10,6 @@ import {
   Users,
   Star,
   UserCog,
-  CalendarCheck,
   CalendarClock,
   ListChecks,
   TrendingUp,
@@ -78,7 +77,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/reviews", label: "Reviews", icon: Star, permissions: ["reviews.view"] },
   { href: "/admin/employees", label: "Employees", icon: UserCog, permissions: ["employees.view"] },
   { href: "/admin/roles", label: "Roles & Permissions", icon: KeyRound, permissions: ["roles.view"] },
-  { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck, permissions: ["attendance.view"] },
   { href: "/admin/leave", label: "Leave Requests", icon: CalendarClock, permissions: ["leave.view"] },
   { href: "/admin/tasks", label: "Tasks", icon: ListChecks, permissions: ["tasks.view"] },
   { href: "/admin/performance", label: "Performance", icon: TrendingUp, permissions: ["performance.view"] },
@@ -90,12 +88,6 @@ const NAV_ITEMS: NavItem[] = [
     permissions: ["inventory.logs.view", "inventory.manage"],
   },
   { href: "/admin/purchases", label: "Purchases", icon: Truck, permissions: ["purchases.view"] },
-  // "Shops" is intentionally hidden from the nav: the project has no offline/
-  // physical shops in use today (just the one seeded default shop), so the
-  // link is unused clutter. The route, page and API are untouched — a
-  // `shops.manage` user can still reach /admin/shops directly, and it can be
-  // re-added here with no other change once multiple shops are actually
-  // configured.
   { href: "/admin/reports", label: "Reports", icon: BarChart3, permissions: ["reports.view"] },
   { href: "/admin/finance", label: "Finance", icon: Landmark, permissions: ["finance.view"] },
   { href: "/admin/investments", label: "Investments", icon: PiggyBank, permissions: ["investments.view"] },

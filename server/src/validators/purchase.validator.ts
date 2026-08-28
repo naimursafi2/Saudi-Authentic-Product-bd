@@ -18,9 +18,14 @@ export const costItemSchema = z.object({
 
 export const createPurchaseSchema = z
   .object({
-    shop: objectId,
     product: objectId.optional(),
     variantId: z.string().trim().optional(),
+    /**
+     * Defaults to the linked product's own first category when omitted (see
+     * `purchase.service.ts#createPurchase`) — only needed explicitly for a
+     * batch with no catalogue link, or to override the default.
+     */
+    category: objectId.optional(),
     itemName: z.string().trim().max(200).optional(),
     supplierName: z.string().trim().max(160).optional(),
     purchasedAt: z.coerce.date().optional().default(() => new Date()),
@@ -40,9 +45,10 @@ export const createPurchaseSchema = z
     path: ["variantId"],
   });
 
-/** Spelled out, not `.partial()`-derived — see the note in shop.validator.ts. */
+/** Spelled out, not `.partial()`-derived — see the `updateHeroSlideSchema` note in CLAUDE.md for why a defaulted field must never be derived this way. */
 export const updatePurchaseSchema = z.object({
   supplierName: z.string().trim().max(160).optional(),
+  category: objectId.optional(),
   itemName: z.string().trim().min(1).max(200).optional(),
   purchasedAt: z.coerce.date().optional(),
   quantity: z.coerce.number().int().min(1).optional(),
@@ -52,7 +58,6 @@ export const updatePurchaseSchema = z.object({
 });
 
 export const listPurchasesQuerySchema = z.object({
-  shop: objectId.optional(),
   product: objectId.optional(),
   status: z.enum(PURCHASE_STATUSES).optional(),
   search: z.string().trim().max(120).optional(),

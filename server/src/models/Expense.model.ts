@@ -51,6 +51,19 @@ export interface IExpense extends Document {
   reviewNote?: string;
   /** Set when this expense was auto-created by an approved refund. */
   linkedRefund?: Types.ObjectId;
+  /**
+   * Lightweight, display-only edit metadata — "was this record edited, when,
+   * and by whom" for the UI. The actual before/after field values live in
+   * `AuditLog` (see `expense.service.ts#updateExpenseDirect`/the
+   * `expense.edit` grant handler), not duplicated here — this is the same
+   * "presentation-only data, not a new source of truth" convention
+   * `user.service.ts`'s audit-log `name`/`targetEmail` stash already follows.
+   */
+  lastEditedAt?: Date;
+  /** Whoever's action actually changed the record — a direct Super Admin edit, or the Super Admin who granted an edit request. */
+  lastEditedBy?: Types.ObjectId;
+  /** True when the edit was applied through an approved `expense.edit` request rather than a direct edit. */
+  lastEditViaRequest: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -84,6 +97,9 @@ const expenseSchema = new Schema<IExpense>(
     confirmedAt: { type: Date },
     reviewNote: { type: String, trim: true, maxlength: 500 },
     linkedRefund: { type: Schema.Types.ObjectId, ref: "Refund" },
+    lastEditedAt: { type: Date },
+    lastEditedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    lastEditViaRequest: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

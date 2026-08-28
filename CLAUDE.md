@@ -49,7 +49,6 @@ Register every new router in `routes/index.ts`.
 | `/products` | public list/get by slug; admin get-by-id; create/update (up to 6 images + JSON-encoded `categories`/`variants`/`highlights`/`existingImages`); delete | create/update/admin-get: `admin`,`super_admin`,`co_admin`; delete: `co_admin`,`super_admin` (`admin` excluded entirely). Content fields apply immediately and are audit-logged; the **stock** fields inside create/update are approval-gated for everyone but `super_admin` — see "Stock-change approval gate" below |
 | `/orders` | customer creates/lists own (`/mine`); public `GET /track` (order number + email); staff lists all + updates status via the generic pipeline endpoint; delivery-agent self-scoped endpoints (`GET /assigned-to-me`, `PATCH /:id/delivery-status`, `POST /:id/send-delivery-otp`, `POST /:id/verify-otp`, `PATCH /:id/delivery-failed`); order-manager/co-admin `PATCH /:id/assign-agent`; `GET /:id` ownership/staff/assigned-agent-checked in controller | list-all/status-update/assign-agent: `admin`,`super_admin`,`co_admin`,`order_manager` (+`employee` for list only); delivery-agent-only endpoints: `delivery_agent` only, self-scoped; `/track` is public (mounted before the router's `authenticate`) — see "Order status pipeline & delivery" below |
 | `/reviews` | public: recent reviews, reviews by product; customer creates one review per product they have a `delivered` order for (optionally with up to 4 photos, multipart) — see "Product Reviews" below; staff lists all/hides-or-unhides (`PATCH /:id/visibility`)/deletes | list-all/visibility/delete: `admin`,`super_admin`,`co_admin` |
-| `/attendance` | self check-in/check-out/`mine`; staff: today summary, list all, update record | admin ops: `admin`,`super_admin`,`co_admin` |
 | `/leaves` | employee creates/lists own/cancels; staff lists all + approves/rejects | review/list-all: `admin`,`super_admin`,`co_admin` |
 | `/tasks` | employee lists own (`/mine`) + updates own status; staff creates/lists (filterable by `type`)/updates/deletes; every task has a required `type` (packing/product_counting/stock_checking/warehouse/customer_support/data_entry/product_preparation) for task-based access categorization | create/list/update: `admin`,`super_admin`,`co_admin`; delete: `admin`,`super_admin` |
 | `/performance-reviews` | employee lists own reviews; staff creates/lists | create/list: `admin`,`super_admin`,`co_admin` |
@@ -67,12 +66,11 @@ Register every new router in `routes/index.ts`.
 | `/pending-actions` | `GET /`, `PATCH /:id/grant`, `PATCH /:id/deny` — the Grant-Based Approval Workflow queue | `super_admin` only |
 | `/approval-settings` | `GET /`, `PATCH /` (singleton) — the Super-Admin-editable numeric thresholds the approval gate checks against | `super_admin` only |
 | `/investments` | `GET /` (list), `POST /` (create) — append-only partner investment ledger, no update/delete route | list: `admin`,`super_admin`; create: `super_admin` only |
-| `/expenses` | `GET /`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject` | list/create: `co_admin`,`admin`,`super_admin` (co_admin scoped to own submissions); confirm/reject: `admin`,`super_admin` only |
+| `/expenses` | `GET /` (supports `?month=YYYY-MM`), `GET /months` (monthly archive index), `POST /`, `PATCH /:id/confirm`, `PATCH /:id/reject`, `PATCH /:id` (direct edit), `DELETE /:id`, `POST /:id/edit-request` — see "Expense Management: monthly archive & edit requests" below | list: `expenses.view` (`co_admin` scoped to own submissions, `employee` sees everything read-only, `admin`/`super_admin` see everything); create: `expenses.create` (`co_admin`,`admin`,`super_admin`); confirm/reject: `expenses.approve` (`admin`,`super_admin`); direct edit/delete: `expenses.edit` (`super_admin` only); edit-request: `expenses.requestEdit` (`employee`,`co_admin`,`admin`) |
 | `/refunds` | `GET /`, `POST /`, `PATCH /:id/review`, `PATCH /:id/reject`, `PATCH /:id/approve` | create: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` (`co_admin`'s request is gated, see below); list: `customer`,`order_manager`,`co_admin`,`admin`,`super_admin` — a `customer` viewer is force-scoped server-side to their own refunds (same pattern as `co_admin`'s own-submissions scoping), which is what powers the account portal's per-order refund status; review/reject: `order_manager`,`admin`,`super_admin`; approve: `admin`,`super_admin` |
 | `/returns` | `POST /` (customer requests a return/exchange on their own `delivered` order), `GET /`, `PATCH /:id/review` — see "Return / Exchange Requests" below | create: `returns.request` (customer only, by default); list: `returns.view` (a `customer` viewer is force-scoped to their own requests, same pattern as `/refunds`); review: `returns.review` (`order_manager`,`co_admin`,`admin`,`super_admin` by default) |
-| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot; `GET /revenue-vs-expense` — day/week/month revenue-vs-expense-vs-profit buckets, see "Sales Analytics & Reports" below | `finance.view` (`admin`,`super_admin` by default) — `co_admin` finance visibility is off by default per the spec |
-| `/shops` | `GET /` (scoped list), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` and `PATCH /users/:userId` (a staff member's shop assignment) | list: `shops.view`; create/update/delete/assign: `shops.manage` (`admin`,`super_admin` by default). A caller without `shops.manage` only ever sees the shops in their own `User.assignedShops` — see "Purchasing: shops, batches & flexible landed costs" below |
-| `/purchases` | `GET /`, `GET /:id`, `POST /` (multipart), `PATCH /:id`, `PATCH /:id/receive`, `PATCH /:id/cancel`, `DELETE /:id`, the cost-item endpoints `POST /:id/costs` / `PATCH /:id/costs/:costId` / `DELETE /:id/costs/:costId`, and `GET /product/:productId` (per-product landed-cost history) | view: `purchases.view`; create: `purchases.create`; edit/costs/receive/cancel: `purchases.edit`; delete: `purchases.delete` (`co_admin` deliberately lacks it). Every read and write is additionally shop-scoped |
+| `/finance` | `GET /summary` — combined revenue/investment/expense/profit-loss snapshot; `GET /revenue-vs-expense` — day/week/month revenue-vs-expense-vs-profit buckets; `GET /gross-profit` — day/week/month net-selling-revenue-vs-cost-of-goods-sold-vs-gross-profit buckets, sourced from each sold item's real frozen landed cost (see "Sale-time FIFO batch consumption & profit" below); `GET /inventory-valuation` — live stock valued at its actual landed cost, see "Sales Analytics & Reports" below | `finance.view` (`admin`,`super_admin` by default) — `co_admin` finance visibility is off by default per the spec |
+| `/purchases` | `GET /`, `GET /:id`, `GET /:id/traceability` (every stock movement and order that drew on this specific batch), `POST /` (multipart), `PATCH /:id`, `PATCH /:id/receive`, `PATCH /:id/cancel`, `DELETE /:id`, the cost-item endpoints `POST /:id/costs` / `PATCH /:id/costs/:costId` / `DELETE /:id/costs/:costId`, and `GET /product/:productId` (per-product landed-cost history) | view: `purchases.view`; create: `purchases.create`; edit/costs/receive/cancel: `purchases.edit`; delete: `purchases.delete` (`co_admin` deliberately lacks it) |
 | `/roles` | `GET /permissions` (the permission catalogue, grouped + labelled), `GET /` (all roles with assigned-user counts), `POST /`, `PATCH /:id`, `DELETE /:id`, plus `GET /users/:userId` (one user's effective permissions) and `PATCH /users/:userId` (assign/clear a custom role) | read: `roles.view`; author roles: `roles.manage`; assign a role to a person: `employees.manage` — see "Roles & permissions" below for the guards the service adds on top |
 | `/campaigns` | `GET /channel-status`, `GET /audience-preview`, `GET /`, `GET /:id`, `POST /` (multipart, optional banner image), `PATCH /:id`, `DELETE /:id`, `POST /:id/submit`, `PATCH /:id/approve`, `PATCH /:id/reject`, `POST /:id/send-now`, `PATCH /:id/pause`, `PATCH /:id/resume` | view/audience-preview/channel-status: `campaigns.view`; create/submit: `campaigns.create`; edit: `campaigns.edit`; delete: `campaigns.delete` (`super_admin` only by default); approve/reject: `campaigns.approve` (`super_admin` only); send-now/pause/resume: `campaigns.send` (`super_admin` only) — see "Customer Messaging / Campaign Management System" below |
 | `/notifications` | `GET /mine`, `PATCH /:id/read`, `PATCH /mark-all-read` — a customer's own website-notification inbox | just `authenticate`, self-scoped to `req.user.id` — same as `/users/me/*` |
@@ -381,7 +379,7 @@ redundant for the same crossing event.
 
 **Admin Dashboard additions** (`report.service.ts#getAdminDashboard`, now
 takes the viewer's `{id, role}`): two new widgets alongside the existing
-stat cards / Today's Attendance / Top Products —
+stat cards / Top Products —
 - **Recent Orders** (`getRecentOrders(5)`) — the 5 most recent orders,
   newest first, each linking to `/admin/orders?viewOrder=<id>` (a new
   `viewOrder` query param on `/admin/orders`, read the same way the
@@ -406,55 +404,71 @@ elsewhere — `ActionButton`'s tones, `StatusBadge`'s palette) picked by what
 the metric means rather than being uniformly neutral — Revenue is
 `success`, Orders/Customers are `info`, Active Products/Low Stock/Pending
 Leaves are `gold`, Out of Stock is `danger` (the one metric that's always
-actionable and never fine to ignore). The four section cards below the
-stat grid (Attendance, Top Products, Recent Orders, Recent Activities)
+actionable and never fine to ignore). The three section cards below the
+stat grid (Top Products, Recent Orders, Recent Activities)
 share one `SectionHeader` (icon + heading + an optional "View all" link to
 the relevant full admin page) instead of each hand-rolling its own heading
 markup. No new colors or components were introduced — this is a
 reorganization of the existing design tokens, not a new visual language.
 
-**CSV / "PDF" export** (`lib/csvExport.ts#downloadCsv`): a small
-hand-rolled, dependency-free CSV generator (comma-joined rows, a Blob URL,
-a synthetic `<a download>` click) — no library needed for this, confirmed
-during the initial audit for this feature. Used by the Sales Report and the
-Revenue-vs-Expense table's "CSV" buttons. There is still no PDF-generation
-library anywhere in this project (see Known Limitations); "export as PDF"
-on the Sales Report is the same browser-print convention `OrderInvoice.tsx`
-already established — a `.print-area` class (`globals.css`, a generic
-version of that component's own `#invoice-print-area` rule) isolates the
-report table at print time, and the button just calls `window.print()`,
-letting the visitor's own browser's "Save as PDF" print destination do the
-actual PDF creation. The Reports print view renders a `.print-header`
-(the site name plus "Report date: ..."), the existing "Period: from – to"
-line, the report table itself, and a `.print-footer` (site name plus
-`SiteSettings.contactEmail`/`contactPhone`, whichever is set) — deliberately
-plain (no card border/shadow/rounded corners/brand colors; see "Print
-pagination" below) since a printed report should read as simple,
-professional paper, not a copy of the on-screen card. The groupBy dropdown
-and the CSV/Print buttons are marked `print:hidden` so only the report
-content itself appears on the printed page. `AdminReportsPage`'s Print
-action also stamps `document.title` with `{ReportLabel}_Sales_Report_
-YYYY-MM-DD` (e.g. `Daily_Sales_Report_2026-08-27` — the label tracks
-whichever of Daily/Weekly/Monthly is currently selected; local date,
-generated fresh at the moment Print is clicked) before calling
+**CSV export** (`lib/csvExport.ts#downloadCsv`): a small hand-rolled,
+dependency-free CSV generator (comma-joined rows, a Blob URL, a synthetic
+`<a download>` click) — no library needed for this, confirmed during the
+initial audit for this feature. Used by the Sales Report and the
+Revenue-vs-Expense/Gross-Profit tables' "CSV" buttons.
+
+**Sales Report PDF export** (`services/salesReportPdf.service.ts`, `GET
+/reports/sales-timeseries/pdf`, `reports.view`): a **real PDF file,
+generated server-side** with `pdfkit` — a lightweight, pure-Node drawing
+library (no headless-browser dependency), added specifically because a
+structured/tabular report benefits from being drawn directly rather than
+captured as a pixel copy of a web page via the browser's own
+print-to-PDF, which hands off to the OS print spooler and a driver
+("Microsoft Print to PDF" on Windows) that no webpage can control or name.
+This **supersedes an earlier `window.print()`-based version** of this
+specific export — the mechanism described below (`.print-area`/
+`document.title`/deferred `window.print()`) is still very much alive and
+still the right tool elsewhere (see `OrderInvoice.tsx`'s invoice print and
+the Expenses monthly-report print further below), just no longer how the
+Sales Report itself produces a PDF. `renderSalesReportPdf()` mirrors the
+on-screen report's structure — company header + report date, title, period
+line, Period/Revenue/Orders table, footer — at the same `0.75in` margin on
+every side (`54pt ≈ 0.75in` at PDF's `72pt`/inch). The frontend
+(`lib/api/reports.ts#getSalesReportPdf`, `AdminReportsPage#handleExportPdf`)
+fetches the PDF as a blob and downloads it directly via `downloadBlob()`
+with a filename generated from the browser's local clock at the moment
+Export is clicked (`DD-MM-YYYY.pdf`) — a real file download's name is
+fully client-controlled, unlike a print dialog's merely-suggested one, so
+there's no `document.title` trick needed for this specific export anymore.
+
+**The general browser-print mechanism** (`.print-area`/`.print-header`/
+`.print-footer` in `globals.css`, plus the `document.title` +
+deferred-`window.print()` filename trick) is still exactly as it was and
+still backs every OTHER print output in this project — `OrderInvoice.tsx`'s
+invoice print, and the Expenses monthly report (see "Expense Management:
+monthly archive & edit requests" above). A caller stamps `document.title`
+with a meaningful filename (e.g. `Daily_Sales_Report_2026-08-27` was the
+Sales Report's own convention before its PDF export moved to the real-PDF
+path above; `August_2026_Expenses` is the Expenses page's) before calling
 `window.print()`, then restores the original title right after —
-`document.title` is the only web API Chrome's "Save as PDF" destination
-reads for its suggested filename, so this is the only way to make that
-filename meaningful instead of the page's own title. **`window.print()`
-itself is deferred one macrotask via `setTimeout(..., 100)`, not called in
-the same synchronous tick as the `document.title` assignment** — setting
-the title and immediately calling `window.print()` is a known Chrome race:
-the title mutation is dispatched to the browser chrome (which is what the
-print/PDF subsystem actually reads for the suggested filename)
-asynchronously, and an immediate `window.print()` can open the dialog
-before that dispatch is processed, so the dialog captures the *previous*
-title and the suggested filename comes out blank. The restore-title line
-lives inside the same deferred callback, after `window.print()` (which
-still blocks until the dialog closes), so it's unaffected by the delay.
-`PrintInvoiceButton`/`OrderInvoice.tsx` does **not** do this — its own
-`window.print()` call is a plain, unmodified call, since an invoice's
-filename isn't part of any request this project has actually implemented;
-don't assume the two share this behavior without checking.
+`document.title` is the only web API Chrome's "Save as PDF" print
+destination reads for its suggested filename, so this is the only way to
+make that filename meaningful instead of the page's own title.
+**`window.print()` itself must be deferred one macrotask via
+`setTimeout(..., 100)`, never called in the same synchronous tick as the
+`document.title` assignment** — setting the title and immediately calling
+`window.print()` is a known Chrome race: the title mutation is dispatched
+to the browser chrome (which is what the print/PDF subsystem actually
+reads for the suggested filename) asynchronously, and an immediate
+`window.print()` can open the dialog before that dispatch is processed, so
+the dialog captures the *previous* title and the suggested filename comes
+out blank. The restore-title line lives inside the same deferred callback,
+after `window.print()` (which still blocks until the dialog closes), so
+it's unaffected by the delay. `PrintInvoiceButton`/`OrderInvoice.tsx` does
+**not** do this — its own `window.print()` call is a plain, unmodified
+call, since an invoice's filename isn't part of any request this project
+has actually implemented; don't assume every print call site shares this
+behavior without checking.
 
 **Print pagination** (`globals.css`'s `@media print` rules for
 `#invoice-print-area` and `.print-area`): hides everything outside the
@@ -831,10 +845,10 @@ Several `recordAuditLog()` call sites additionally stash a human name in
 `newValue` purely so the admin UI can display one — `user.service.ts`'s
 role/status/unlock/impersonate calls include `name`/`targetEmail` for the
 target account (the acting function already has that user document loaded,
-so this costs no extra query), and `role.service.ts#assignCustomRole` /
-`shop.service.ts` similarly include the affected user's `name`. This is
-presentation-only data, not a new source of truth — the record's real state
-still lives on the `User`/`Role`/`Shop` documents themselves.
+so this costs no extra query), and `role.service.ts#assignCustomRole`
+similarly includes the affected user's `name`. This is presentation-only
+data, not a new source of truth — the record's real state still lives on
+the `User`/`Role` documents themselves.
 `pendingAction.service.ts`'s grant/deny entries include a best-effort `name`
 pulled from the pending action's own `payload` (most payloads already carry
 `name`/`productName`/`code`) plus, on grant, the underlying `resource` type
@@ -879,7 +893,7 @@ any `.request`/`.grant`/`.deny` row that came through with no reviewer note).
 #### Models (`src/models`)
 
 `User` (bcrypt password, `role` enum — `customer`,`employee`,`delivery_agent`,`co_admin`,`order_manager`,`admin`,`super_admin` — `tokenVersion` for logout-all/invalidation, embedded `addresses[]`, optional `staffMeta`, plus the security fields `failedLoginAttempts`/`lockedUntil`/`lastSeenAt`/`twoFactorEnabled`/`twoFactorSecret`/`twoFactorPendingSecret`/`twoFactorRecoveryCodes` — see "Security hardening" below), `Category`, `Product` (embedded `variants[]` with per-variant price/stock/SKU, auto-derived `minPriceBDT`, text-indexed), `Order` (embedded item/shipping snapshots, `statusHistory[]` with actor/role per entry, optional `couponCode`/`discountBDT`, `assignedAgent`/OTP fields/`deliveryNotes`/`failureReason` — see "Order status pipeline & delivery" below), `Coupon` (code, discount type/value, order window, optional usage limit — see "Coupons" below), `Review` (one per customer per product, with an optional `images[]` of up
-to 4 Cloudinary photos — see "Product Reviews" below), `Attendance`, `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Shop`/`Purchase` (see "Purchasing: shops, batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below), `ProductAlert` (a customer's Price Drop / Back-in-Stock subscription, see "Price Drop & Back-in-Stock Alerts" above), `ReturnRequest` (a customer's Return/Exchange request, see "Return / Exchange Requests" above).
+to 4 Cloudinary photos — see "Product Reviews" below), `LeaveRequest`, `Task` (required `type` field categorizing task-based access — see "Order status pipeline & delivery" below for the sibling roles this supports), `PerformanceReview`, `SalaryPayment`, `InventoryLog` (audit trail for stock changes — order placed/cancelled/returned/manual adjustment), `HeroSlide`, `HomepageSection` (see "Homepage content management" below), `SiteSettings` (singleton — site name/logo/announcement/contact/footer tagline, plus an embedded `socialLinks[]` of `{platform, url}`, `platform` one of a fixed enum), `NavLink`, `FooterColumn` (see "Navigation & footer content management" below), `StaticPage` (see "Static page content management" below), `Role` (a named permission bundle — the seven built-ins plus any custom roles, see "Roles & permissions" above), `PendingAction`/`ApprovalSettings` (see "Approval-gate system & audit logging" above), `AuditLog` (general sensitive-action trail, see above), `Investment`/`Expense`/`Refund` (see "Finance module" below), `Purchase` (see "Purchasing: batches & flexible landed costs" below), `Campaign`/`Notification` (see "Customer Messaging / Campaign Management System" below), `ProductAlert` (a customer's Price Drop / Back-in-Stock subscription, see "Price Drop & Back-in-Stock Alerts" above), `ReturnRequest` (a customer's Return/Exchange request, see "Return / Exchange Requests" above).
 
 #### Finance module (Investment, Expense, Refund, Profit/Loss)
 
@@ -918,8 +932,11 @@ breakdown.
   `super_admin` grant (not a direct `admin` confirm) can confirm it — the
   direct-confirm endpoint itself enforces this (`confirmExpense()` 403s an
   `admin` attempting to confirm an over-threshold expense outside the grant
-  flow). Confirmed expenses are immutable — no edit/delete route exists once
-  `status: "confirmed"`. `recordedBy` is always the original submitter —
+  flow). A confirmed expense is otherwise-final financial history — it is
+  never edited directly except by a `super_admin`, and never at all by
+  anyone else without going through the edit-request/approval flow below
+  (see "Expense Management: monthly archive & edit requests"). `recordedBy`
+  is always the original submitter —
   never overwritten by the reviewer, who is tracked separately as
   `confirmedBy` — so `/admin/expenses`'s "Requested By" column always shows
   who actually asked for the money, not who approved it.
@@ -936,6 +953,74 @@ breakdown.
   pasted external link — and `/admin/expenses` shows a paperclip link to
   whichever one is set, so staff can view the receipt either way when
   reviewing a pending expense.
+
+  **Monthly archive** (`expense.service.ts#getExpenseMonthSummaries`, `GET
+  /expenses/months`): one row per calendar month that has at least one
+  expense — `{month: "YYYY-MM", totalBDT, count}` — computed live via a
+  `$dateToString`/`$group` aggregation over `Expense.incurredAt`, newest
+  month first, respecting the same `co_admin`-scoping `listExpenses` already
+  applies. There is no separately-maintained "period" record to set up for a
+  new month — it simply appears in this list the first time an expense is
+  recorded against it, and a past month stays archived (still returned, at
+  its own totals) indefinitely. `GET /expenses?month=YYYY-MM` (a
+  `[start-of-month, start-of-next-month)` range on `incurredAt`) fetches one
+  archived month's own entries. `/admin/expenses` (and `/employee/expenses`,
+  see below) render this as a row of month pills above the table, defaulting
+  to the newest month; a **Print** button (`.print-area`/`.print-header`
+  reusing the exact print mechanism `/admin/reports`'s Sales Report
+  established — see "Print pagination" above) is enabled only once a
+  specific month is selected, since "print the currently selected period"
+  only makes sense for a bounded one. The report header always reads
+  "EXPENSES"; the suggested save filename is stamped via the same
+  `document.title` + deferred-`window.print()` trick as the Sales Report
+  (e.g. `August_2026_Expenses`), and `@page{margin:0.75in}`/`break-inside:
+  avoid` (both already global, not month-specific CSS) keep it to the same
+  one-or-two-page-per-month shape.
+
+  **Editing** (`expense.service.ts#updateExpenseDirect`/
+  `requestExpenseEdit`, the `expense.edit` `PendingAction` type): editing a
+  settled expense follows the exact same "only Super Admin acts directly,
+  everyone else requests a grant" shape as the stock-change gate, product
+  deletion, and purchase receiving elsewhere in this codebase — not a
+  bespoke rule invented for expenses. `PATCH /expenses/:id`/`DELETE
+  /expenses/:id` (`expenses.edit`, `super_admin` only by default — **not**
+  even `admin`) edit or delete any expense directly, recording the
+  field-level before/after diff on `AuditLog` (mirroring `product.service.ts
+  #diffProductFields`'s convention) and stamping `Expense.lastEditedAt`/
+  `lastEditedBy`/`lastEditViaRequest: false` for cheap inline display —
+  `AuditLog` remains the actual history of previous values, per this
+  project's "presentation-only data, not a new source of truth" rule (see
+  `user.service.ts`'s audit-log `name`/`targetEmail` stash for the same
+  pattern). `POST /expenses/:id/edit-request` (`expenses.requestEdit` —
+  `employee`, `co_admin`, and `admin` all hold it, since none of them get
+  direct `expenses.edit` either) parks `{expenseId, changes, code:
+  "<category> · <amount> BDT · <reason>"}` — `code` specifically, since
+  `pendingAction.service.ts#payloadLabel()`/the frontend's `extractName()`
+  mirror already look for that key, so the request shows a friendly name in
+  the audit log and `/admin/approvals` for free — as an `expense.edit`
+  pending action, reviewed **exclusively by Super Admin** through the
+  existing `/pending-actions/:id/grant`|`/deny` queue, same as every other
+  gated action type; nothing else in the RBAC/approval system needed to
+  change. Both the direct-edit and edit-request paths re-validate the
+  "other" category still has an `otherCategoryDetail` and reject a no-op
+  change (`{}` diff) rather than silently no-op-ing. `employee` additionally
+  gained a plain `expenses.view` (unscoped — an Employee never submits an
+  expense, so self-scoping would leave them with nothing to ever request an
+  edit on, unlike `co_admin`'s own-submissions scoping) purely so this flow
+  has something to act on; it grants no create/confirm/direct-edit access.
+
+  Frontend: one shared `components/finance/ExpensesManager.tsx` backs both
+  `/admin/expenses` (Co-Admin/Admin/Super Admin) and `/employee/expenses`
+  (Employee, read-only + edit requests) — every capability difference
+  between the two portals (create, confirm/reject, direct edit/delete vs.
+  request-edit, print) comes entirely from `hasPermission(...)` on the
+  signed-in user, not a prop, the same "no per-portal duplication" pattern
+  `ProfileSection`/`AddressBook` already follow. A per-row **History**
+  action opens that expense's own `AuditLog` trail (`GET /audit-logs?
+  resource=Expense&resourceId=...` — `resourceId` is a new optional filter
+  on the existing endpoint, general-purpose for any resource, not
+  Expense-specific) via the shared `auditLogDisplay.tsx` helpers, so it
+  reads identically to the full `/admin/audit-logs` page.
 - **`Refund`** (`models/Refund.model.ts`, `services/refund.service.ts`) —
   the Refund & Return Workflow: `reasonCategory`
   (`damaged`/`wrong_item`/`not_as_described`/`changed_mind`/`other` —
@@ -972,7 +1057,7 @@ breakdown.
   admin page uses — the endpoint force-scopes a `customer` viewer to their
   own refunds server-side, so no per-order lookup endpoint was needed.
 
-#### Purchasing: shops, batches & flexible landed costs
+#### Purchasing: batches & flexible landed costs
 
 Every purchase is recorded as its own batch with its own cost breakdown, so
 the real cost of the goods on the shelf is a fact the system can answer rather
@@ -1042,35 +1127,153 @@ the stock history. A purchase with **no** catalogue link has no stock to move
 and is simply marked received — that is the path for packaging, consumables
 and anything else not in the catalogue.
 
-**Shop scoping** (`Shop` model, `User.assignedShops[]`,
-`shop.service.ts#resolveShopScope`): `super_admin` — and any role holding
-`shops.manage`, which is `admin` by default — sees and manages every shop.
-Everyone else, Co-Admin included, is scoped server-side to the shops listed in
-their own `User.assignedShops`, on every read *and* every write: a shop filter
-in the query string narrows that scope but can never widen it, and recording a
-purchase against an unassigned shop is a 403. The scope **fails closed** —
-returning an empty array is meaningful and different from "no restriction", so
-a staff member nobody has assigned a shop to sees nothing rather than
-everything. A shop can't be deleted while purchases reference it or staff are
-assigned to it (deactivate it instead), because those purchases carry the cost
-history the module exists to preserve. `npm run seed` creates one default shop
-(code `MAIN`) so the module is usable immediately.
+**There is no shop/outlet concept.** This storefront operates as a single
+online shop, and every purchase batch is simply owned by whoever holds
+`purchases.view`/`purchases.edit`/`purchases.delete` — no per-record
+ownership scoping. A `Shop` model, `User.assignedShops[]`, and a
+`/admin/shops` multi-shop management page existed earlier in this project's
+history (batches were scoped to whichever shops a Co-Admin was assigned)
+but were removed once the business was confirmed to be single-shop —
+**do not reintroduce shop scoping** without a fresh decision to do so; if
+multi-outlet purchasing is ever needed again, that is new work, not a
+revert.
 
-Frontend: `/admin/purchases` is the batch list (shop/status filters, a row per
+Frontend: `/admin/purchases` is the batch list (a status filter, a row per
 batch showing landed cost and unit cost) with a detail modal carrying
 `PurchaseSummary` (the maths spelled out, not reduced to one number) and
-`PurchaseCostEditor` (add/edit/remove costs, view receipts). `/admin/shops` is
-shop CRUD plus the per-staff assignment picker. Both are nav-gated by
-`purchases.view` / `shops.view`; as everywhere else in this project that is
-visibility polish, and `requirePermission(...)` plus the shop scope on the
-route are the real boundary.
+`PurchaseCostEditor` (add/edit/remove costs, view receipts). Nav-gated by
+`purchases.view`; as everywhere else in this project that is visibility
+polish, and `requirePermission(...)` on the route is the real boundary.
 
-**Deliberately not wired into `/finance`.** `getFinanceSummary` derives its
-expense total from confirmed `Expense` documents; auto-logging a purchase
-there as well would double-count anything a user also recorded as an expense.
-Purchase costs are landed-cost accounting for a batch, and the finance summary
-is operational spend — joining them is a decision for whoever owns the
-finance model, not a side effect of this module.
+**`getFinanceSummary`'s expense total is still not wired to purchase
+costs** — it still derives purely from confirmed `Expense` documents;
+auto-logging a purchase there as well would double-count anything a user
+also recorded as an expense, and that decision (see "Known limitations")
+is unchanged by the section below. What *is* now wired to real purchase
+costs is a different concern: what a *sale's* actual cost of goods sold
+was, and what unsold stock is actually worth — see immediately below.
+
+#### Sale-time FIFO batch consumption & profit
+
+The Purchase Batch / Landed Cost system exists to answer "what did the
+units we actually sold cost to land," not just "what did a batch cost to
+buy" — this is the piece that connects the two. It is **global**: every
+product/category goes through the exact same consumption path in
+`inventory.service.ts`, with no per-category branching anywhere.
+
+**`inventory.service.ts#consumeStockForSale`** is the one place a sale's
+stock decrement is resolved against real batch history, called by
+`order.service.ts#createOrder` in place of a plain `$inc`. For each order
+line it draws the sold quantity from the variant's `received` Purchase
+batches **oldest-received-first (FIFO)**, decrementing each batch's
+`remainingQuantity` with a guarded atomic update
+(`{remainingQuantity: {$gte: take}}` + `$inc`, the same `$lt`/`$gte`-guard
+pattern `coupon.service.ts#applyCouponUsage` already uses for usage-limit
+safety) — so two concurrent sales can never double-draw the same unit of a
+batch even without a multi-document transaction (this codebase's test
+database is a standalone `mongodb-memory-server`, not a replica set, so real
+multi-document transactions aren't available in tests; every write here is
+instead a single-document atomic update, matching the project's existing
+no-transactions convention exactly). A batch that loses that race is simply
+skipped, and its shortfall is absorbed by the next batch or the
+average-cost fallback below — never a thrown error. It also performs the
+actual `Product.variants[].stock` decrement itself (one `$inc` per batch
+portion, so `InventoryLog.balanceAfter` stays a true step-wise running
+total) and the low-stock-crossing check, centralizing what used to be
+inline in `order.service.ts`.
+
+A sale that outruns its batches' remaining quantity (or a variant with no
+batch history at all — pre-existing stock from before this system existed,
+or stock added by a manual adjustment) falls back to the **weighted average
+landed cost across every batch ever received** for that variant (the same
+figure `getProductCostHistory`'s `averageUnitCostBDT` reports). Only when
+*no* batch has ever been received for that variant does the cost fall back
+to `0` with `costBasisKnown: false` — this is the safe default/migration
+strategy for pre-existing products and stock recorded before this system
+existed: sales are never blocked for lack of cost history, they are simply
+flagged as not-yet-costed rather than silently treated as zero-profit.
+
+**`Order.model.ts`'s `IOrderItem` freezes the result at sale time** —
+`unitLandedCostBDT` (quantity-weighted across whichever batch(es) were
+drawn from), `costBasisKnown`, and `batchConsumptions[]` (which batch(es),
+and how much of each, this specific line actually drew from). This has to
+be frozen, not derived-on-read like every other cost figure in this
+codebase (`computeCouponStatus()`, Purchase's own cost virtuals) — a
+batch's `remainingQuantity` and even its own `unitCostBDT` keep changing
+after the sale (further cost items added, further sales drawing on it), so
+"what this unit cost when it sold" is a historical fact that would silently
+rewrite itself if it were recomputed later. `Order.model.ts` then derives
+`costOfGoodsSoldBDT`/`grossProfitBDT`/`costBasisFullyKnown` as ordinary
+virtuals **on top of** those frozen per-item fields — deriving the roll-up
+is safe and kept live, only the per-item unit cost itself needs to be
+frozen. `grossProfitBDT` is net selling revenue (`subtotalBDT -
+discountBDT`, deliberately excluding the shipping fee, which is logistics
+pass-through rather than merchandise revenue) minus the sum of each item's
+frozen `unitLandedCostBDT × quantity`. These three virtuals default safely
+(`this.items ?? []`, etc.) so they don't throw when `Order` is populated
+with a partial field selection, e.g. `refund.service.ts`/
+`returnRequest.service.ts` populating `order` with just
+`"orderNumber totalBDT status"` for a list view.
+
+**Cancelling or returning an order reverses the exact same batches** —
+`restockFromSale` (also in `inventory.service.ts`, replacing what used to
+be inline in `order.service.ts#restockOrderItems`) credits each
+`batchConsumptions` entry's quantity back onto that batch's
+`remainingQuantity`, so a later sale's FIFO draw sees the same batches
+available again, oldest-first, exactly as if the original sale had never
+happened. The portion that had no batch to draw from originally (a
+fully-unknown-cost consumption) has nothing to credit back — it was never
+subtracted from any batch in the first place. `Product.variants[].stock`
+itself is restored in one `$inc` per item regardless of how many batches it
+was drawn from, since the whole quantity is genuinely back in stock
+together.
+
+**`GET /finance/gross-profit?groupBy=day|week|month`**
+(`finance.service.ts#getGrossProfitTimeSeries`) buckets net selling revenue
+vs. cost of goods sold vs. gross profit the same way
+`getRevenueVsExpenseTimeSeries` buckets revenue vs. expense — same
+`status`/date-range match as `getSalesTimeSeries`, so the two line up
+period-for-period. Each bucket also reports `ordersWithUnknownCostBasis`,
+so a period containing a sale with no cost history reads as a flagged
+partial total rather than silently understating cost (and therefore
+overstating profit). **`GET /finance/inventory-valuation`**
+(`inventory.service.ts#getInventoryValuation`, re-exported from
+`finance.service.ts`) values live stock at `remainingQuantity ×
+unitCostBDT` summed across every variant's received batches — a variant's
+live stock in excess of its batches' tracked remaining quantity
+(pre-existing/manually-adjusted stock) is valued at the same
+average-cost fallback `consumeStockForSale` uses, so the reported total
+still reconciles against `Product.variants[].stock` rather than silently
+under-counting. Both endpoints are `finance.view`-gated exactly like the
+rest of `/finance` (`co_admin` excluded by default). Rendered on
+`/admin/finance` below the existing Revenue vs Expense table — a Gross
+Profit table (with its own groupBy selector and CSV export, same pattern
+as the Sales Report) and an Inventory Valuation table.
+
+**`GET /purchases/:id/traceability`** (`purchases.view`, shop-scoped like
+every other purchase route) is a batch's own drill-down: every
+`InventoryLog` entry that references it (`InventoryLog.purchaseBatch` —
+both the `order_placed` draws and the `order_cancelled`/`order_returned`
+credits back) and every order that ever drew on it, with how many units
+each one took. Both are read straight from their own collections rather
+than a denormalized copy on the purchase itself, so they can never drift
+from the real ledger. `Purchase.model.ts`'s `remainingQuantity` (set to
+`quantity` the moment a batch is marked `received`, decremented/incremented
+by the consumption/restock functions above) and its `soldQuantity` virtual
+(`quantity - remainingQuantity`, `0` before receipt) are shown on
+`PurchaseSummary.tsx` once a batch is `received`. `Purchase.model.ts` also
+gained an optional `category` field (auto-filled from the linked product's
+own first category when omitted, freely overridable, and the only way to
+tag a non-catalogue batch at all) — a reporting field, not a second source
+of truth for a product's own `categories[]`.
+
+**This whole path is category-and-product-agnostic by construction** —
+`consumeStockForSale`/`restockFromSale`/`getInventoryValuation` key
+everything off `{product, variantId}`, the same identity every other part
+of the catalogue already uses, with no product-type or category branching
+anywhere in the code. A dates variant, a watch variant, and a variant in a
+category that doesn't exist yet all flow through the identical FIFO
+consumption, profit, and valuation logic with no code change.
 
 #### Customer Messaging / Campaign Management System
 
@@ -1553,8 +1756,8 @@ routes call `requirePermission("orders.manage")` rather than listing roles,
 and a role's permission list lives in the database. The seven built-in roles
 are unchanged and their seeded permission sets reproduce the old role matrix
 exactly, so the conventions below still describe what each role can do — they
-are now data rather than hardcoded route arguments. Convention: co_admin can run day-to-day HR (attendance/
-leave/tasks/performance) but never touches salary, staff role/status, or
+are now data rather than hardcoded route arguments. Convention: co_admin can run day-to-day HR (leave/
+tasks/performance) but never touches salary, staff role/status, or
 deletes — those are admin/super_admin only. `order_manager` gets Admin Portal
 access scoped to Orders only (verify/dispatch/assign — see "Order status
 pipeline & delivery" below); `delivery_agent` never reaches `/admin` at all
@@ -1789,7 +1992,8 @@ locking in the `order_manager`/`delivery_agent` role strings), plus
 HTTP-through-Mongoose integration specs (`auth`, `emailVerification`,
 `catalog`, `order`, `orderStatus`, `task`, `coupon`, `approvalGate`,
 `stockApproval`, `finance`, `security`, `notification`, `siteSettings`,
-`heroSlide`, `permissions`, `purchase`, `staffHr`, `campaign`) run against an
+`heroSlide`, `permissions`, `purchase`, `landedCost`, `staffHr`, `campaign`,
+`expenseEdit`) run against an
 actual in-memory MongoDB via `mongodb-memory-server`
 (`tests/integration/setup.ts` starts/stops it and wipes collections between
 tests; `tests/integration/helpers.ts` creates a DB-backed user and signs a
@@ -1840,10 +2044,21 @@ arbitrarily-named cost items — including two batches whose cost vocabularies
 share nothing — totals recomputing as costs are added and removed, per-batch
 history with a weighted average unit cost, the receipt path through the stock
 approval gate for both `super_admin` and `admin`, an unlinked batch receiving
-without touching stock, a received batch refusing further cost edits, shop
-scoping including a scoped viewer failing closed with no assignment and being
-unable to widen scope with a `?shop=` filter, and the RBAC matrix),
-`staffHr.integration.test.ts` (an NID number set at creation and corrected
+without touching stock, a received batch refusing further cost edits, and the
+RBAC matrix), `landedCost.integration.test.ts` (a sold item's landed unit cost frozen onto
+the order matching the spec's own worked example — 100 units @ ৳1,000 +
+৳5,000 shipping + ৳2,000 customs = ৳1,070/unit, sold at ৳1,500 with a ৳100
+coupon for a ৳330 gross profit; a batch's `remainingQuantity`/`soldQuantity`
+decrementing on sale and being restored exactly on cancellation; FIFO
+consumption spanning two batches with different unit costs without either
+batch's own cost being disturbed; the zero/`costBasisKnown: false` fallback
+for a variant with no purchase-batch history at all; the weighted-average
+fallback once a batch's remaining quantity is exhausted; the
+`/finance/inventory-valuation` and `/finance/gross-profit` endpoints against
+real batch data, the latter's `finance.view` gate; and
+`/purchases/:id/traceability` returning the exact orders and stock
+movements that drew on one batch), `staffHr.integration.test.ts` (an NID
+number set at creation and corrected
 via `staff-meta`, an NID image upload replacing — and deleting — the
 previous one, a non-HR role 403ing on both, and a salary payment's
 `dailyAllowanceBDT` defaulting to 0 when omitted, being visible in the
@@ -1854,6 +2069,19 @@ Order-Manager review to Admin approval — including the above-threshold
 grant path — asserting the order transitions to `"refunded"` and a linked
 `Expense` is auto-logged, plus a customer-initiated request proving
 `GET /refunds` scopes a customer to only their own),
+`expenseEdit.integration.test.ts` (the monthly archive grouping by
+`incurredAt` newest-first with an accurate per-month total and a
+`?month=` filter; a `co_admin`'s archive scoped to their own submissions
+while an `employee` sees every expense read-only and still can't submit a
+new one; a `super_admin`'s direct edit recording the field-level diff on
+`AuditLog`; that `admin`/`co_admin`/`employee` all 403 on direct edit and
+delete; an employee's edit request sitting inert until a `super_admin`
+grants it — with an `admin`'s own grant attempt 403ing, since only
+`approvals.manage` reviews the queue — applying the change and stamping
+`lastEditViaRequest: true`; a denied request leaving the record completely
+untouched; the "other" category's required-detail validation enforced both
+at submission and at grant time; and that a customer/anonymous caller is
+rejected outright),
 `security.integration.test.ts` (lockout after N failed attempts + admin
 unlock + counter reset, TOTP enrolment/login-challenge/recovery-code
 single-use, secret-and-recovery-code non-leakage through `GET /auth/me`,
@@ -1933,14 +2161,14 @@ app/delivery/...     Delivery Agent portal (role-guarded, self-scoped to own ass
 components/ui/       Shared primitives: Button, ProductCard, SectionHeading, ProductVisual, etc.
 components/<domain>/ Feature components (checkout/, product/, shop/, admin/, employee/, delivery/, home/, account/)
 context/              AuthContext, CartContext, WishlistContext (React context, "use client")
-lib/api/              One file per backend resource (products.ts, orders.ts, attendance.ts, ...),
+lib/api/              One file per backend resource (products.ts, orders.ts, leaves.ts, ...),
                       all built on lib/api/client.ts's `api.get/post/patch/delete/postForm/patchForm`
 lib/mappers.ts        Converts raw API shapes (types/api.ts, types/hr.ts) into the
                       storefront view-model shapes (types/product.ts) components consume
 lib/hooks/            useProducts, useCategories, useProductsByIds (cart/wishlist resolution)
 lib/roles.ts          Frontend copy of backend's role constants (apps don't share code — keep in sync manually)
 types/api.ts          Types mirroring backend Product/Order/User/Review/Category/HeroSlide/HomepageSection/SiteSettings JSON
-types/hr.ts            Types mirroring backend Attendance/Leave/Task/Performance/Salary/Inventory/Reports JSON
+types/hr.ts            Types mirroring backend Leave/Task/Performance/Salary/Inventory/Reports JSON
 types/product.ts       Storefront view-model types (Product, Category, ProductVariant, ProductVisual, CartLine)
 ```
 
@@ -2017,7 +2245,7 @@ modal forms via `Modal.tsx`, `PageHeader`, `StatusBadge`,
 `AdminPagination`) — none are placeholders:
 
 `/admin` (dashboard: revenue/orders/customers/active-products/low-stock/
-pending-leaves stat cards, today's attendance, top products), `/admin/products`
+pending-leaves stat cards, top products), `/admin/products`
 (a new product from `admin`/`co_admin` submits for Super Admin approval
 instead of publishing — see "Product creation approval gate" above; delete
 button is role-aware — hidden for `admin`, "Request deletion" for
@@ -2035,16 +2263,11 @@ campaigns; approve/reject/send/pause/resume/delete stay `super_admin` only —
 see "Customer Messaging / Campaign Management System" above),
 `/admin/customers` (now with live Total/Verified/Unverified/Active/Inactive
 stat cards), `/admin/reviews`,
-`/admin/employees` (each staff row has an **Access** action — assign a custom role, review the person's effective permissions), `/admin/roles` (Roles & Permissions management — create/edit/delete custom roles, assign permissions; visible with `roles.view`, editable with `roles.manage`), `/admin/attendance`, `/admin/leave`, `/admin/tasks`,
+`/admin/employees` (each staff row has an **Access** action — assign a custom role, review the person's effective permissions), `/admin/roles` (Roles & Permissions management — create/edit/delete custom roles, assign permissions; visible with `roles.view`, editable with `roles.manage`), `/admin/leave`, `/admin/tasks`,
 `/admin/performance`, `/admin/salary` (nav-hidden from co_admin),
 `/admin/inventory`, `/admin/purchases` (purchase batches + their fully
-custom cost breakdowns — see "Purchasing: shops, batches & flexible landed
-costs" above), `/admin/shops` (shops + per-staff shop assignment; the
-assignment picker needs `shops.manage` — **not linked from `AdminNav`**,
-since the project has no offline/physical shops in use beyond the one
-seeded default; the page, route and API are unchanged and still reachable
-directly by a `shops.manage`/`shops.view` holder, and the link can be
-restored with no other change once multiple shops are actually in use),
+custom cost breakdowns — see "Purchasing: batches & flexible landed
+costs" above),
 `/admin/reports`, `/admin/finance` (revenue/expense/
 investment/profit-loss summary, nav-hidden from co_admin),
 `/admin/investments` (nav-hidden from co_admin), `/admin/expenses`
@@ -2109,13 +2332,16 @@ Grant-Based Approval Workflow's review step.
 #### Employee portal (`app/employee`) — fully built, not stubbed
 
 Guarded by `RoleGuard allowed={["employee"]}` in `app/employee/layout.tsx`:
-`/employee` (dashboard), `/employee/attendance` (check-in/out + history),
+`/employee` (dashboard),
 `/employee/tasks` (a `type` filter dropdown plus a type badge on each task,
 alongside the existing priority badge/status dropdown), `/employee/stock`
 (read-only live per-variant stock with a search box, backed by `GET
 /inventory/stock` — supports the `stock_checking`/`warehouse` task types;
 the same live numbers the storefront shows, with a "Stock Out" badge at
-zero, and no way to change them from here), `/employee/leave`,
+zero, and no way to change them from here), `/employee/expenses`
+(read-only view of every expense plus a "Request Edit" action — see
+"Expense Management: monthly archive & edit requests" above; the same
+shared `ExpensesManager` component `/admin/expenses` uses), `/employee/leave`,
 `/employee/performance`, `/employee/salary`, `/employee/profile` (avatar +
 address — the `ProfileSection`/`AddressBook` components were already
 generic/backend-supported for every role, this page just adds the missing
@@ -2865,7 +3091,7 @@ itself uses `px-3.5 py-1.5` and `shrink-0`/`whitespace-nowrap` so the
 icon+label pair stays a comfortable, unbroken tap target at any width.
 
 This covers every `/admin/*` table's row actions: products, categories,
-coupons, roles, tasks, attendance (Edit only — no delete), homepage (hero
+coupons, roles, tasks, homepage (hero
 slides and sections, each with their own Edit/Delete pair), navigation,
 footer, purchases (the in-progress cost-item "Remove" control), reviews
 (Delete only), product Q&A (Delete, alongside the existing text "Answer"/
@@ -3033,13 +3259,15 @@ catch-all rewrite here.
   never hardcoded.
 - **Never add a fixed category/type enum to `Purchase.costItems[]`.** Cost
   names are free text so that any product's cost structure fits without a
-  code change — see "Purchasing: shops, batches & flexible landed costs".
+  code change — see "Purchasing: batches & flexible landed costs".
   The fixed-taxonomy model is `Expense.category`, which is a separate
   concern; don't merge the two or copy one's enum into the other.
-- Any new read or write over `Purchase`/`Shop` must go through
-  `shop.service.ts#resolveShopScope` (or `assertShopAccess`) rather than
-  querying the collections directly — that single function is where the
-  "Co-Admin only sees assigned shops" boundary lives, and it fails closed.
+- **Do not reintroduce a `Shop`/multi-shop-outlet model.** This is a
+  single-shop storefront by deliberate decision — a multi-shop system
+  (`Shop`, `User.assignedShops`, `/admin/shops`) existed and was removed;
+  `Purchase` and everything else in the app is unscoped by outlet. If
+  multi-outlet purchasing is ever genuinely needed, that's a fresh design
+  decision to raise with the user, not something to restore from history.
 - Call `recordAuditLog()` (`services/auditLog.service.ts`) for any new
   sensitive action outside what `InventoryLog`/`Order.statusHistory` already
   cover (role/status changes, financial approvals, settings changes,
@@ -3091,12 +3319,18 @@ catch-all rewrite here.
   swap manually (creating a new order, adjusting stock) outside this
   endpoint. Only `type: "return"` moves the underlying order (to
   `"returned"`).
-- **No true PDF or Excel (.xlsx) export exists.** CSV export (`lib/
-  csvExport.ts`) is hand-rolled and needs no dependency; "export as PDF" on
-  the Sales Report is the browser's own print-to-PDF, not a generated file
-  (see "Sales Analytics & Reports" above) — there is still no PDF-generation
-  or spreadsheet library anywhere in this project. Reach for CSV (which
-  Excel opens natively) if a real file is needed.
+- **No true Excel (.xlsx) export exists** — CSV export (`lib/csvExport.ts`)
+  is hand-rolled and needs no dependency; reach for it (Excel opens CSV
+  natively) if a spreadsheet is needed, since there is no spreadsheet
+  library anywhere in this project. **PDF export is a mix of both
+  approaches, deliberately** — the Sales Report generates a real PDF file
+  server-side via `pdfkit` (`services/salesReportPdf.service.ts`, see
+  "Sales Analytics & Reports" above); the Expenses monthly report and
+  `OrderInvoice.tsx`'s invoice still use the browser's own print-to-PDF
+  (`window.print()` against a `.print-area`), not a generated file. Which
+  one a given export uses is a per-feature decision already made, not
+  something to "fix" toward one approach — check the relevant section above
+  before assuming either pattern applies to a new export.
 
 - **Test coverage is basic, not comprehensive** — the backend has unit specs
   plus a small set of integration tests (auth, catalog, order, orderStatus,
@@ -3174,10 +3408,6 @@ catch-all rewrite here.
   wrong quantity, the stock it added is corrected through the normal
   `POST /inventory/adjust` gate, and the purchase record keeps the number it
   was received with.
-- **Shop assignment is per user and additive only** — there is no per-shop
-  deny list and no way to give someone every shop *except* one; unrestricted
-  access is all-or-nothing via `shops.manage`. Same shape as the custom-role
-  limitation above.
 - **Cart/wishlist don't persist server-side or cross-device** — they're
   `localStorage`-only (see "Cart & wishlist are client-side only" above).
 - **No `frontend/src/middleware.ts`** — route protection is entirely

@@ -3,7 +3,11 @@ import * as financeController from "../controllers/finance.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
-import { financeSummaryQuerySchema, revenueVsExpenseQuerySchema } from "../validators/finance.validator";
+import {
+  financeSummaryQuerySchema,
+  grossProfitQuerySchema,
+  revenueVsExpenseQuerySchema,
+} from "../validators/finance.validator";
 
 const router = Router();
 
@@ -22,6 +26,19 @@ router.get(
   requirePermission("finance.view"),
   validate({ query: revenueVsExpenseQuerySchema }),
   financeController.getRevenueVsExpense
+);
+router.get(
+  "/gross-profit",
+  authenticate,
+  requirePermission("finance.view"),
+  validate({ query: grossProfitQuerySchema }),
+  financeController.getGrossProfit
+);
+router.get(
+  "/inventory-valuation",
+  authenticate,
+  requirePermission("finance.view"),
+  financeController.getInventoryValuation
 );
 
 export default router;
