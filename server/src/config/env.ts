@@ -97,13 +97,26 @@ export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);
 
 export const isSmsConfigured = Boolean(env.SMS_API_URL && env.SMS_API_KEY && env.SMS_SENDER_ID);
 
-export const isBkashConfigured = Boolean(
-  env.BKASH_BASE_URL &&
-  env.BKASH_USERNAME &&
-  env.BKASH_PASSWORD &&
-  env.BKASH_APP_KEY &&
-  env.BKASH_APP_SECRET,
-);
+/** Every variable bKash needs. All five must be set for the gateway to work. */
+export const BKASH_ENV_KEYS = [
+  "BKASH_BASE_URL",
+  "BKASH_USERNAME",
+  "BKASH_PASSWORD",
+  "BKASH_APP_KEY",
+  "BKASH_APP_SECRET",
+] as const;
+
+/**
+ * Which of the five are still unset. Reported to staff (never publicly) so a
+ * half-configured gateway names the missing variables instead of silently
+ * behaving as if bKash simply doesn't exist — only the variable *names* are
+ * ever returned, never their values.
+ */
+export function missingBkashEnvKeys(): string[] {
+  return BKASH_ENV_KEYS.filter((key) => !env[key]);
+}
+
+export const isBkashConfigured = missingBkashEnvKeys().length === 0;
 
 /**
  * `CLIENT_ORIGIN` may be a single origin or a comma-separated list (e.g. a

@@ -12,6 +12,17 @@ export async function getPaymentConfig() {
   return api.get<{ providers: { bkash: boolean } }>("/payments/config");
 }
 
+/**
+ * Staff-only. Explains why bKash may be missing from checkout, naming the
+ * unset server environment variables (never their values). Requires
+ * `payments.view`.
+ */
+export async function getGatewayStatus() {
+  return api.get<{ bkash: { configured: boolean; missingKeys: string[] } }>(
+    "/payments/gateway-status"
+  );
+}
+
 /** Starts a bKash payment for one of the signed-in customer's own orders. */
 export async function createBkashPayment(orderId: string) {
   return api.post<{ payment: ApiCreatedPayment }>("/payments/bkash/create", { orderId });

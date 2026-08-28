@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard } from "lucide-react";
-import { listPayments } from "@/lib/api/payments";
+import { CreditCard, TriangleAlert } from "lucide-react";
+import { getGatewayStatus, listPayments } from "@/lib/api/payments";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -34,6 +34,13 @@ export default function AdminPaymentsPage() {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | "">("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gateway, setGateway] = useState<{ configured: boolean; missingKeys: string[] } | null>(null);
+
+  useEffect(() => {
+    getGatewayStatus()
+      .then(({ data }) => setGateway(data.bkash))
+      .catch(() => setGateway(null));
+  }, []);
 
   function load() {
     setIsLoading(true);
@@ -56,6 +63,23 @@ export default function AdminPaymentsPage() {
         title="Payments"
         description="bKash gateway transactions, read-only. Every status here comes from bKash itself — verification is automatic, so there is nothing to confirm by hand."
       />
+
+      {gateway && !gateway.configured && (
+        <div className="mb-4 flex gap-3 rounded-lg border border-gold-500/40 bg-gold-soft p-4">
+          <TriangleAlert size={18} className="mt-0.5 shrink-0 text-gold-700" />
+          <div className="text-sm text-gold-700">
+            <p className="font-semibold">bKash is not configured, so it is hidden at checkout.</p>
+            <p className="mt-1">
+              Customers currently see only Cash on Delivery. To switch bKash on, set{" "}
+              {gateway.missingKeys.length === 0
+                ? "the bKash credentials"
+                : gateway.missingKeys.join(", ")}{" "}
+              in the server&apos;s <span className="font-mono text-xs">.env</span> file and restart the
+              API. The values come from your bKash merchant account.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <select

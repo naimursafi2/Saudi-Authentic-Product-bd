@@ -23,6 +23,16 @@ export interface IRole extends Document {
   name: string;
   description?: string;
   permissions: string[];
+  /**
+   * System roles only — every default permission this role has ever been
+   * seeded with, whether or not it still holds it.
+   *
+   * This is what lets `ensureSystemRoles()` grant a *newly introduced*
+   * permission to an already-seeded role without also resurrecting one an
+   * administrator deliberately removed: a key that is already listed here has
+   * had its chance and is never re-added.
+   */
+  seededPermissions: string[];
   /** True for the seven built-in roles; blocks rename/delete. */
   isSystem: boolean;
   isActive: boolean;
@@ -37,6 +47,7 @@ const roleSchema = new Schema<IRole>(
     name: { type: String, required: true, trim: true, maxlength: 60 },
     description: { type: String, trim: true, maxlength: 300 },
     permissions: [{ type: String, enum: PERMISSIONS }],
+    seededPermissions: { type: [String], default: [] },
     isSystem: { type: Boolean, default: false, index: true },
     isActive: { type: Boolean, default: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },

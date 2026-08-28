@@ -6,12 +6,29 @@ import { paramStr } from "../utils/params";
 import * as paymentService from "../services/payment.service";
 import { OrderModel } from "../models/Order.model";
 import { isBkashConfigured } from "../config/bkash";
+import { missingBkashEnvKeys } from "../config/env";
 import type { ListPaymentsQuery } from "../validators/payment.validator";
 
 /** Booleans only — the storefront needs to know which providers are live, never how they are configured. */
 export const getPaymentConfig = catchAsync(async (_req: Request, res: Response) => {
   sendSuccess(res, 200, "Payment configuration fetched", {
     providers: { bkash: isBkashConfigured },
+  });
+});
+
+/**
+ * Staff-only diagnostics. An unconfigured gateway is invisible to customers by
+ * design (a payment method that cannot take money should not be offered), so
+ * this is the one place that explains *why* bKash is absent from checkout and
+ * exactly what is missing. Variable names only — no values.
+ */
+export const getGatewayStatus = catchAsync(async (_req: Request, res: Response) => {
+  const missingKeys = missingBkashEnvKeys();
+  sendSuccess(res, 200, "Gateway status fetched", {
+    bkash: {
+      configured: missingKeys.length === 0,
+      missingKeys,
+    },
   });
 });
 

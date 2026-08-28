@@ -51,29 +51,75 @@ export function invalidateRoleCache(): void {
   roleCache.clear();
 }
 
+function defaultPermissionsFor(role: Role): Permission[] {
+  return role === "super_admin" ? ALL_PERMISSIONS : ROLE_DEFAULT_PERMISSIONS[role];
+}
+
 /**
  * Lazily seeds the seven built-in roles, the same pattern `SiteSettings` and
- * `StaticPage` use. Seeding only ever *creates* — an existing system role's
- * permissions are left alone, so an admin's edits survive restarts.
+ * `StaticPage` use, and reconciles them with permissions added to the codebase
+ * since they were seeded.
+ *
+ * The reconciliation exists because permissions are code but roles are data:
+ * before it, adding a permission key left every already-seeded deployment
+ * without it, so the feature it gated was silently unreachable for Admin and
+ * Co-Admin until a Super Admin happened to tick the box. (That is exactly what
+ * happened to `payments.view`.)
+ *
+ * `seededPermissions` is what keeps this from trampling deliberate edits: a
+ * permission is granted at most once, the first time it appears in the
+ * defaults, and an administrator who then removes it keeps it removed. Only
+ * genuinely new keys are ever added — nothing is removed here, so a permission
+ * an administrator *added* by hand is equally safe.
+ *
+ * One-time caveat on the very first run after this was introduced: existing
+ * role documents have no `seededPermissions` history, so any default a Super
+ * Admin had deliberately removed is granted once more. Subsequent removals
+ * stick. Every reconciliation is logged so the change is visible.
  */
 export async function ensureSystemRoles(): Promise<void> {
-  const existing = await RoleModel.find({ isSystem: true }).select("key");
-  const present = new Set(existing.map((r) => r.key));
-  const missing = ROLES.filter((role) => !present.has(role.toUpperCase()));
-  if (missing.length === 0) return;
+  const existing = await RoleModel.find({ isSystem: true });
+  const byKey = new Map(existing.map((role) => [role.key, role]));
 
-  await RoleModel.insertMany(
-    missing.map((role) => ({
-      key: role.toUpperCase(),
-      name: SYSTEM_ROLE_NAMES[role],
-      description: SYSTEM_ROLE_DESCRIPTIONS[role],
-      permissions:
-        role === "super_admin" ? ALL_PERMISSIONS : ROLE_DEFAULT_PERMISSIONS[role],
-      isSystem: true,
-      isActive: true,
-    })),
-    { ordered: false }
-  );
+  const missing = ROLES.filter((role) => !byKey.has(role.toUpperCase()));
+  if (missing.length > 0) {
+    await RoleModel.insertMany(
+      missing.map((role) => ({
+        key: role.toUpperCase(),
+        name: SYSTEM_ROLE_NAMES[role],
+        description: SYSTEM_ROLE_DESCRIPTIONS[role],
+        permissions: defaultPermissionsFor(role),
+        seededPermissions: defaultPermissionsFor(role),
+        isSystem: true,
+        isActive: true,
+      })),
+      { ordered: false }
+    );
+  }
+
+  for (const role of ROLES) {
+    const doc = byKey.get(role.toUpperCase());
+    if (!doc) continue;
+
+    const defaults = defaultPermissionsFor(role);
+    const alreadySeeded = new Set(doc.seededPermissions ?? []);
+    const newlyAdded = defaults.filter((permission) => !alreadySeeded.has(permission));
+    if (newlyAdded.length === 0) continue;
+
+    const held = new Set(doc.permissions);
+    const granted = newlyAdded.filter((permission) => !held.has(permission));
+
+    doc.permissions = [...doc.permissions, ...granted];
+    doc.seededPermissions = [...new Set([...(doc.seededPermissions ?? []), ...defaults])];
+    await doc.save();
+
+    if (granted.length > 0) {
+      console.log(
+        `[roles] granted ${granted.length} newly-added permission(s) to ${doc.key}: ${granted.join(", ")}`
+      );
+    }
+  }
+
   invalidateRoleCache();
 }
 

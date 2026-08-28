@@ -50,6 +50,13 @@ router.get(
   validate({ query: listPaymentsQuerySchema }),
   paymentController.listPayments
 );
+// Explains an absent bKash option at checkout. Staff-gated because it names
+// server environment variables, even though it never exposes their values.
+router.get(
+  "/gateway-status",
+  requirePermission("payments.view"),
+  paymentController.getGatewayStatus
+);
 
 // -- Owner or staff (authorization is enforced inside the controller) --
 router.get(
