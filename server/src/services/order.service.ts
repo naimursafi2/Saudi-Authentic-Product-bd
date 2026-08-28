@@ -6,11 +6,12 @@ import type { InventoryLogReason } from "../models/InventoryLog.model";
 import { ApiError } from "../utils/ApiError";
 import { uploadBufferToCloudinary } from "../config/cloudinary";
 import { computeShippingFee } from "../constants/shipping";
+import { getShippingSettings } from "./shippingSettings.service";
 import { consumeStockForSale, restockFromSale } from "./inventory.service";
 import { sendOrderConfirmationEmail, sendDeliveryOtpEmail } from "./email.service";
 import { sendSms } from "../config/sms";
 import { notifyNewOrder, notifyDeliveryFailed } from "./notification.service";
-import { applyCouponUsage, validateCouponForOrder } from "./coupon.service";
+import { applyCouponUsage, releaseCouponUsage, validateCouponForOrder } from "./coupon.service";
 import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_STATUSES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
 import { DELIVERY_OTP_TTL_MINUTES, MAX_DELIVERY_OTP_ATTEMPTS } from "../constants/security";
 import type { Role } from "../constants/roles";
@@ -51,12 +52,14 @@ function pushStatusHistory(order: IOrder, status: OrderStatus, actor: OrderActor
 }
 
 /**
- * Restocks every item on an order — and, per item, credits the exact
- * Purchase batch(es) it was originally drawn from back to their
- * `remainingQuantity`, so a later sale's FIFO draw sees the same batches
- * available again (see `inventory.service.ts#restockFromSale`).
+ * Unwinds an order that will never complete: restocks every item — crediting
+ * the exact Purchase batch(es) it was drawn from back to their
+ * `remainingQuantity`, so a later sale's FIFO draw sees them available again
+ * (see `inventory.service.ts#restockFromSale`) — and hands back the coupon
+ * use it consumed, for the same reason. A limited coupon should not be
+ * permanently burnt by an order that was cancelled or returned.
  */
-async function restockOrderItems(order: IOrder, reason: Extract<InventoryLogReason, "order_cancelled" | "order_returned">) {
+async function unwindOrder(order: IOrder, reason: Extract<InventoryLogReason, "order_cancelled" | "order_returned">) {
   await Promise.all(
     order.items.map((item) =>
       restockFromSale(
@@ -76,6 +79,7 @@ async function restockOrderItems(order: IOrder, reason: Extract<InventoryLogReas
       )
     )
   );
+  await releaseCouponUsage(order.couponCode);
 }
 
 export async function createOrder(customerId: string, input: CreateOrderInput) {
@@ -116,7 +120,18 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
     });
   }
 
-  const shippingFeeBDT = computeShippingFee(input.deliveryMethod, subtotalBDT);
+  // Rates come from the live `ShippingSettings` document, and the zone from
+  // the shipping address the customer actually submitted — never from any
+  // figure the client sent. `createOrderSchema` has no shipping field at all.
+  const shippingRates = await getShippingSettings();
+  const shippingFeeBDT = computeShippingFee(
+    {
+      deliveryMethod: input.deliveryMethod,
+      district: input.shippingAddress.district,
+      subtotalBDT,
+    },
+    shippingRates
+  );
 
   // Re-validated from scratch here regardless of any earlier
   // `/coupons/validate` preview — a client-submitted discount amount is
@@ -132,24 +147,38 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
   const totalBDT = Math.max(0, subtotalBDT + shippingFeeBDT - discountBDT);
   const orderNumber = await generateOrderNumber();
 
-  const order = await OrderModel.create({
-    orderNumber,
-    customer: customerId,
-    items,
-    shippingAddress: input.shippingAddress,
-    deliveryMethod: input.deliveryMethod,
-    shippingFeeBDT,
-    paymentMethod: input.paymentMethod,
-    subtotalBDT,
-    couponCode: appliedCoupon?.code,
-    discountBDT,
-    totalBDT,
-    status: "pending",
-    statusHistory: [{ status: "pending", at: new Date(), changedBy: customerId, changedByRole: "customer" }],
-  });
-
+  // The coupon's last remaining use is claimed BEFORE the order exists.
+  // `applyCouponUsage` throws when a concurrent order took the final use, and
+  // doing that first means such a loss leaves nothing behind — claiming it
+  // afterwards used to persist an order carrying a discount it was never
+  // entitled to, with its stock never drawn, and (for a bKash order) leave
+  // that ghost order payable.
   if (appliedCoupon) {
     await applyCouponUsage(appliedCoupon._id.toString(), appliedCoupon.usageLimit);
+  }
+
+  let order: IOrder;
+  try {
+    order = await OrderModel.create({
+      orderNumber,
+      customer: customerId,
+      items,
+      shippingAddress: input.shippingAddress,
+      deliveryMethod: input.deliveryMethod,
+      shippingFeeBDT,
+      paymentMethod: input.paymentMethod,
+      subtotalBDT,
+      couponCode: appliedCoupon?.code,
+      discountBDT,
+      totalBDT,
+      status: "pending",
+      statusHistory: [{ status: "pending", at: new Date(), changedBy: customerId, changedByRole: "customer" }],
+    });
+  } catch (err) {
+    // Hand the claimed use back rather than burning it on an order that never
+    // came into existence.
+    if (appliedCoupon) await releaseCouponUsage(appliedCoupon.code);
+    throw err;
   }
 
   // Decrement stock for each purchased variant. `consumeStockForSale`
@@ -300,9 +329,9 @@ export async function updateOrderStatus(id: string, status: OrderStatus, actor: 
   }
 
   if (status === "cancelled") {
-    await restockOrderItems(order, "order_cancelled");
+    await unwindOrder(order, "order_cancelled");
   } else if (status === "returned") {
-    await restockOrderItems(order, "order_returned");
+    await unwindOrder(order, "order_returned");
   }
 
   pushStatusHistory(order, status, actor, note);

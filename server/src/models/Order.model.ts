@@ -1,5 +1,7 @@
 import { Schema, model, type Document, type Model, type Types } from "mongoose";
 import { ORDER_STATUSES, type OrderStatus } from "../constants/orderStatus";
+import { estimatedDeliveryDays } from "../constants/shipping";
+import { getCachedShippingRates } from "./ShippingSettings.model";
 import type { Role } from "../constants/roles";
 
 export type { OrderStatus };
@@ -227,16 +229,18 @@ const ESTIMATE_HIDDEN_STATUSES: OrderStatus[] = [
   "refunded",
 ];
 
-/** Calendar days from order placement to the expected delivery, by delivery method. */
-export const ESTIMATED_DELIVERY_DAYS: Record<DeliveryMethod, number> = {
-  standard: 5,
-  express: 2,
-};
-
+/**
+ * Calendar days from order placement to the expected delivery. Configurable
+ * per delivery method in `ShippingSettings`, read here through the
+ * synchronous snapshot because Mongoose virtuals cannot await — see that
+ * model's cache comment for why that is safe (this is an estimate shown to
+ * the customer, never a charged amount).
+ */
 orderSchema.virtual("estimatedDeliveryDate").get(function estimatedDeliveryDate(this: IOrder) {
   if (ESTIMATE_HIDDEN_STATUSES.includes(this.status)) return undefined;
+  const rates = getCachedShippingRates();
   const date = new Date(this.createdAt);
-  date.setDate(date.getDate() + ESTIMATED_DELIVERY_DAYS[this.deliveryMethod]);
+  date.setDate(date.getDate() + estimatedDeliveryDays(this.deliveryMethod, rates));
   return date;
 });
 

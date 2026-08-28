@@ -4,11 +4,12 @@ import { useState } from "react";
 import Image from "next/image";
 import { Printer } from "lucide-react";
 import { getSiteSettings } from "@/lib/api/siteSettings";
+import { getPaymentForOrder } from "@/lib/api/payments";
 import { printWithFilename } from "@/lib/print";
 import { formatBDT } from "@/lib/utils";
 import { Modal } from "@/components/admin/Modal";
 import { Button } from "@/components/ui/Button";
-import type { ApiOrder, ApiSiteSettings } from "@/types/api";
+import type { ApiOrder, ApiPayment, ApiSiteSettings } from "@/types/api";
 
 function customerName(customer: ApiOrder["customer"]): string {
   return typeof customer === "string" ? customer : customer.name;
@@ -19,7 +20,21 @@ function customerName(customer: ApiOrder["customer"]): string {
  * at print time via the shared `.print-area` rule in `globals.css` (hides
  * everything else, including the modal chrome around this).
  */
-function InvoiceDocument({ order, settings }: { order: ApiOrder; settings: ApiSiteSettings | null }) {
+const PAYMENT_METHOD_LABELS: Record<ApiOrder["paymentMethod"], string> = {
+  cod: "Cash on Delivery",
+  bkash: "bKash",
+  nagad: "Nagad",
+};
+
+function InvoiceDocument({
+  order,
+  settings,
+  payment,
+}: {
+  order: ApiOrder;
+  settings: ApiSiteSettings | null;
+  payment: ApiPayment | null;
+}) {
   return (
     <div className="print-area bg-white p-8 text-[#1b1b1b]">
       <div className="mb-8 flex items-start justify-between gap-6 border-b border-gray-300 pb-6">
@@ -62,7 +77,8 @@ function InvoiceDocument({ order, settings }: { order: ApiOrder; settings: ApiSi
         <div className="text-right">
           <h2 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-500">Payment</h2>
           <p className="text-sm text-gray-700">
-            Method: <span className="font-medium uppercase">{order.paymentMethod}</span>
+            Method:{" "}
+            <span className="font-medium">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</span>
           </p>
           <p className="text-sm text-gray-700">
             Status:{" "}
@@ -70,6 +86,21 @@ function InvoiceDocument({ order, settings }: { order: ApiOrder; settings: ApiSi
               {order.isPaid ? "Paid" : "Unpaid"}
             </span>
           </p>
+          {payment?.transactionId && (
+            <p className="text-sm text-gray-700">
+              Reference: <span className="font-medium">{payment.transactionId}</span>
+            </p>
+          )}
+          {payment?.paidAt && (
+            <p className="text-sm text-gray-700">
+              Paid on{" "}
+              {new Date(payment.paidAt).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
+          )}
           {settings?.contactPhone && <p className="mt-2 text-sm text-gray-700">{settings.contactPhone}</p>}
           {settings?.contactEmail && <p className="text-sm text-gray-700">{settings.contactEmail}</p>}
         </div>
@@ -134,12 +165,21 @@ function InvoiceDocument({ order, settings }: { order: ApiOrder; settings: ApiSi
 export function PrintInvoiceButton({ order }: { order: ApiOrder }) {
   const [isOpen, setIsOpen] = useState(false);
   const [settings, setSettings] = useState<ApiSiteSettings | null>(null);
+  const [payment, setPayment] = useState<ApiPayment | null>(null);
 
   function handleOpen() {
     setIsOpen(true);
     if (!settings) {
       getSiteSettings()
         .then(({ data }) => setSettings(data.settings))
+        .catch(() => {});
+    }
+    // Only gateway-settled orders have a payment record; a missing one (or a
+    // viewer without permission to read it) simply leaves the reference row
+    // off the invoice rather than blocking it.
+    if (!payment) {
+      getPaymentForOrder(order._id)
+        .then(({ data }) => setPayment(data.payment))
         .catch(() => {});
     }
   }
@@ -163,7 +203,7 @@ export function PrintInvoiceButton({ order }: { order: ApiOrder }) {
               </Button>
             </div>
             <div className="overflow-hidden rounded-lg border border-gray-200">
-              <InvoiceDocument order={order} settings={settings} />
+              <InvoiceDocument order={order} settings={settings} payment={payment} />
             </div>
           </div>
         </Modal>

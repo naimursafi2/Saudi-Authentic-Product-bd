@@ -5,6 +5,7 @@ import * as orderService from "./order.service";
 import { getApprovalSettings } from "./approvalSettings.service";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
 import { createConfirmedExpense } from "./expense.service";
+import { markPaymentRefundedForOrder } from "./payment.service";
 import { recordAuditLog } from "./auditLog.service";
 import type { CreateRefundInput } from "../validators/refund.validator";
 import type { Role } from "../constants/roles";
@@ -172,6 +173,10 @@ async function finalizeRefundApproval(refund: IRefund, approver: RefundActor): P
     { id: approver.id, role: approver.role },
     `Refund approved (${refund._id.toString()})`
   );
+
+  // Closes the gateway payment's own lifecycle (paid -> refunded). A no-op for
+  // a cash-on-delivery order, which has no gateway payment record.
+  await markPaymentRefundedForOrder(refund.order.toString(), approver);
 
   const expense = await createConfirmedExpense({
     category: "refund",

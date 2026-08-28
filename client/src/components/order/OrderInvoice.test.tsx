@@ -1,14 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PrintInvoiceButton } from "./OrderInvoice";
-import type { ApiOrder, ApiSiteSettings } from "@/types/api";
+import type { ApiOrder, ApiPayment, ApiSiteSettings } from "@/types/api";
 
 vi.mock("@/lib/api/siteSettings", () => ({
   getSiteSettings: () =>
     Promise.resolve({
       data: { settings: { siteName: "Saudi Authentic Product", contactPhone: "01700000000" } as ApiSiteSettings },
     }),
+}));
+
+const getPaymentForOrder = vi.fn();
+vi.mock("@/lib/api/payments", () => ({
+  getPaymentForOrder: (...args: unknown[]) => getPaymentForOrder(...args),
 }));
 
 const order: ApiOrder = {
@@ -49,7 +54,12 @@ const order: ApiOrder = {
 };
 
 describe("PrintInvoiceButton", () => {
+  // This project's vitest setup has no global auto-cleanup, so a second test
+  // in the same file would otherwise render into the first one's leftover DOM.
+  afterEach(cleanup);
+
   it("opens an invoice showing the order's items, address and totals", async () => {
+    getPaymentForOrder.mockResolvedValue({ data: { payment: null } });
     const user = userEvent.setup();
     render(<PrintInvoiceButton order={order} />);
 
@@ -59,10 +69,34 @@ describe("PrintInvoiceButton", () => {
     expect(screen.getByText("Ajwa Dates")).toBeInTheDocument();
     expect(screen.getByText("500g")).toBeInTheDocument();
     expect(screen.getAllByText("Jane Doe").length).toBeGreaterThan(0);
+    expect(screen.getByText("Cash on Delivery")).toBeInTheDocument();
     expect(screen.getByText("Unpaid")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getAllByText(/Saudi Authentic Product/).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows the bKash transaction reference on a paid gateway order", async () => {
+    getPaymentForOrder.mockResolvedValue({
+      data: {
+        payment: {
+          _id: "pay1",
+          transactionId: "BKH7X2QK91",
+          paidAt: "2026-01-02T10:00:00.000Z",
+          status: "paid",
+        } as ApiPayment,
+      },
+    });
+    const user = userEvent.setup();
+    render(<PrintInvoiceButton order={{ ...order, paymentMethod: "bkash", isPaid: true }} />);
+
+    await user.click(screen.getByRole("button", { name: /print invoice/i }));
+
+    expect(screen.getByText("bKash")).toBeInTheDocument();
+    expect(screen.getByText("Paid")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("BKH7X2QK91")).toBeInTheDocument();
     });
   });
 });

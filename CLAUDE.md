@@ -88,6 +88,8 @@ authorization gate — see Roles & Permissions below), `authorize(...roles)`
 | `/roles` | permission catalogue, role CRUD, user role assignment | `roles.view`/`roles.manage`/`employees.manage` |
 | `/campaigns` | customer messaging campaigns | `campaigns.*` permissions, see below |
 | `/notifications`, `/product-alerts` | customer's own inbox / price-drop subscriptions | self-scoped, `authenticate` only |
+| `/payments` | public provider-availability flags; customer bKash create/execute/cancel; staff read-only list | customer routes self-scoped; staff list `payments.view` |
+| `/shipping-settings` | public read of the live shipping rates; admin edit | read public; `PATCH` needs `settings.manage` |
 
 ## Roles & permissions (RBAC)
 
@@ -214,7 +216,9 @@ auto-derived `minPriceBDT`), `Order` (embedded items/shipping snapshot,
 `InventoryLog` (stock-change audit trail), `HeroSlide`/`HomepageSection`/
 `NavLink`/`FooterColumn`/`StaticPage`/`SiteSettings` (storefront content),
 `Role`/`PendingAction`/`ApprovalSettings`/`AuditLog` (governance),
-`Investment`/`Expense`/`Refund` (finance), `Purchase` (landed-cost batches),
+`Investment`/`Expense`/`Refund` (finance), `Payment` (bKash gateway
+transactions), `ShippingSettings` (singleton delivery rates),
+`Purchase` (landed-cost batches),
 `Campaign`/`Notification` (messaging), `ProductAlert` (price-drop/
 back-in-stock subscriptions), `ReturnRequest`.
 
@@ -260,6 +264,76 @@ cost keeps changing after the sale) — `Order.model.ts` then derives
 values. Cancelling/returning an order credits the exact same batches back.
 This whole path is keyed only off `{product, variantId}` — no
 product-type/category branching, ever.
+
+**Shipping is configuration, not code** (`models/ShippingSettings.model.ts`,
+`constants/shipping.ts`): a singleton document holds the inside-Dhaka and
+outside-Dhaka charges, the express surcharge, the free-shipping switch /
+threshold / express-applicability, and the per-method delivery-day estimates.
+Its defaults reproduce the rates that used to be literals (৳60 / ৳120 / free
+over ৳5,000), so adopting it repriced nothing.
+
+`computeShippingFee(input, rates)` is **pure — it takes the rates as an
+argument and never reads them itself**, so it is testable against any rate
+combination and has exactly one authoritative call site:
+`order.service.ts#createOrder`, which awaits `getShippingSettings()` and
+computes the fee from the submitted district and the live rates. The client
+sends no shipping figure (there is no such field on `createOrderSchema`);
+`client/src/lib/shipping.ts` mirrors only the *formula* for display, never the
+numbers. **Any new shipping rule belongs on this model — never as a literal in
+either app.**
+
+`Order.estimatedDeliveryDate` stays a virtual, reading the day counts from a
+synchronous in-process snapshot (`getCachedShippingRates()`) because Mongoose
+virtuals cannot await. That snapshot is never used for money — every charged
+fee comes from a freshly awaited settings read — so a cold or stale cache can
+only make an estimate briefly out of date. Per-process, like the role cache.
+
+**Payments (bKash)** (`models/Payment.model.ts`, `services/payment.service.ts`,
+`config/bkash.ts`): the gateway client is isolated in `config/bkash.ts` — no
+credential, grant token or raw gateway body ever leaves it, and it 503s
+gracefully when `BKASH_*` is unset (same shape as Cloudinary/SMTP/SMS). A
+`Payment` record exists **only for gateway transactions**; a `cod` order is
+fully described by `Order.paymentMethod`/`Order.isPaid` and gets no record.
+
+**The client never sends an amount, anywhere in the payment path** — every
+payment request body carries an order id (or the gateway's `paymentID`) and
+nothing else, so the payable figure is always `order.totalBDT`, itself
+recomputed at checkout from live variant prices, a re-validated coupon and
+`computeShippingFee()`. Verification re-checks the gateway's settled amount
+against both `payment.amountBDT` and `order.totalBDT`, **compared in paisa**,
+plus the merchant invoice reference and `transactionStatus === "Completed"`;
+any mismatch marks the payment `failed` and returns one deliberately uniform
+message, never naming which check failed. Nothing is marked paid on the
+frontend's say-so.
+
+`PAYMENT_TRANSITIONS` gates every status write, and settling is a single
+guarded atomic update (`{status: {$in: ["initiated","pending"]}}` → `paid`)
+— the winner confirms the order, every replay reports the already-settled
+payment as a success. **Payment confirmation has no inventory side effect
+at all**: stock is consumed once by `createOrder`, so a replayed callback
+cannot double-deduct. Adding a future gateway is a `PAYMENT_PROVIDERS`
+value, a client beside `config/bkash.ts` and a branch in the service —
+never a change to the order or inventory pipeline.
+
+**Verification is entirely automatic — there is deliberately no manual
+staff step, and no permission that would allow one.** Two paths settle a
+payment, both server-side against bKash: the customer's own callback
+(`/payments/bkash/execute`), and `reconcileStalePayments()` on the
+scheduler for anyone whose browser never made it back (closed tab, dead
+connection). The sweep leaves a payment alone for 15 minutes so it never
+races the customer's callback, and only fails a still-"Initiated" one after
+45 minutes, past the bKash session window, so a slow customer is never
+failed out from under themselves. It swallows per-payment errors so one
+unreachable gateway call cannot stall the sweep. Staff endpoints are
+read-only (`payments.view`): **do not add a route or permission that lets a
+human mark a payment paid.**
+
+**Coupon usage is claimed before the order is created**, not after — the
+atomic `applyCouponUsage` guard throwing on the last remaining use must
+leave nothing behind, or it would persist a discounted, stock-less ghost
+order (payable, for a bKash order). `unwindOrder()` releases the use again
+alongside the restock when an order is cancelled or returned, so a limited
+coupon is never permanently burnt by an order that did not complete.
 
 **Purchase batches**: `Purchase.costItems[]` is completely free-text — **no
 category enum, none may be added** (a cost's identity is whatever name the
@@ -475,7 +549,26 @@ than the rewrite intercepts.
   resource.
 - Gate routes with `requirePermission("some.permission")`, never a
   hardcoded role list.
-- Don't reintroduce mock/static data — everything comes from MongoDB.
+- Don't reintroduce mock/static data — everything comes from MongoDB. Product
+  fields (name, price, category, slug, description, images, origin, stock,
+  variants, thresholds) are admin-editable at any time, so never branch on or
+  hardcode one; seed values are development defaults, not business values, and
+  `npm run seed` must stay idempotent (it upserts categories by slug and skips
+  products whose slug already exists, so an admin's edits survive a re-run).
+- **A value the business may want to change is configuration, not a constant.**
+  Money, fees, thresholds and customer-facing promises live in a settings
+  document — `ShippingSettings` (delivery rates/estimates), `ApprovalSettings`
+  (approval thresholds), `SiteSettings` (branding/contact) — and are edited in
+  the admin panel. Put a new one on the model whose domain it belongs to rather
+  than inventing a fourth settings table.
+  **Security and protocol constants deliberately stay in code** and must not be
+  moved into the database: lockout attempts/duration, staff idle timeout, OTP
+  TTL and attempt caps, impersonation token TTL, recovery-code count, rate-limit
+  windows and upload size/count caps (`constants/security.ts`,
+  `middlewares/`) — making these editable would hand anyone with
+  `settings.manage` a way to weaken authentication. Likewise the bKash timing
+  constants in `payment.service.ts`, which track the gateway's own session
+  semantics rather than a business choice.
 - Keep `lib/api/*.ts` thin (fetch call + types only) — business logic
   belongs in the backend service layer.
 - Never `await` an email send in a request path.
@@ -500,8 +593,11 @@ than the rewrite intercepts.
   list.
 - Approved Exchange requests aren't auto-fulfilled — no replacement-order
   automation; a staff member handles the swap manually.
-- No payment gateway — `bkash`/`nagad` are UI-only; only `cod` orders ever
-  get marked paid, on delivery.
+- bKash is implemented end-to-end but inactive until `BKASH_*` credentials
+  are provisioned (the storefront hides the option and the API 503s until
+  then). `nagad` remains UI-only with no gateway behind it.
+- An unpaid bKash order holds its stock and coupon use until someone
+  cancels it — there is no automatic expiry job for abandoned payments.
 - The approval-gate system covers only its fixed list of action types (see
   above) — role/settings/content changes are audit-logged but not
   gate-routed. Campaign approval is a separate lifecycle on `Campaign`

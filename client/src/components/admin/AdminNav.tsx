@@ -33,6 +33,7 @@ import {
   CircleUser,
   KeyRound,
   Megaphone,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -69,6 +70,7 @@ const NAV_ITEMS: NavItem[] = [
     permissions: ["categories.create", "categories.edit"],
   },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag, permissions: ["orders.view"] },
+  { href: "/admin/payments", label: "Payments", icon: CreditCard, permissions: ["payments.view"] },
   { href: "/admin/refunds", label: "Refunds", icon: Undo2, permissions: ["refunds.view"] },
   { href: "/admin/returns", label: "Returns & Exchanges", icon: RefreshCcw, permissions: ["returns.view"] },
   { href: "/admin/coupons", label: "Coupons", icon: Tag, permissions: ["marketing.view"] },

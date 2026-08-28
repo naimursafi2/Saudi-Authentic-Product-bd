@@ -40,6 +40,16 @@ const envSchema = z.object({
   SMS_API_KEY: z.string().optional().default(""),
   SMS_SENDER_ID: z.string().optional().default(""),
 
+  // bKash Tokenized Checkout API. Leave blank until real credentials are
+  // provisioned — bKash payment creation/verification returns a clear 503
+  // until these are set (see config/bkash.ts), same graceful-degrade
+  // pattern as Cloudinary/SMTP/SMS above. Dummy defaults only.
+  BKASH_BASE_URL: z.string().optional().default(""),
+  BKASH_USERNAME: z.string().optional().default(""),
+  BKASH_PASSWORD: z.string().optional().default(""),
+  BKASH_APP_KEY: z.string().optional().default(""),
+  BKASH_APP_SECRET: z.string().optional().default(""),
+
   SEED_SUPER_ADMIN_NAME: z.string().default("Super Admin"),
   SEED_SUPER_ADMIN_EMAIL: z
     .string()
@@ -86,6 +96,14 @@ export const isSmtpConfigured = Boolean(
 export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);
 
 export const isSmsConfigured = Boolean(env.SMS_API_URL && env.SMS_API_KEY && env.SMS_SENDER_ID);
+
+export const isBkashConfigured = Boolean(
+  env.BKASH_BASE_URL &&
+  env.BKASH_USERNAME &&
+  env.BKASH_PASSWORD &&
+  env.BKASH_APP_KEY &&
+  env.BKASH_APP_SECRET,
+);
 
 /**
  * `CLIENT_ORIGIN` may be a single origin or a comma-separated list (e.g. a

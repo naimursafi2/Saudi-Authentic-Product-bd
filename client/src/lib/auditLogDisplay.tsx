@@ -48,6 +48,11 @@ const DIRECT_ACTION_LABELS: Record<string, string> = {
   "expense.edit": "Expense Edited",
   "expense.delete": "Expense Deleted",
   "investment.create": "Investment Recorded",
+  "payment.initiated": "Payment Initiated",
+  "payment.verified": "Payment Verified",
+  "payment.cancelled": "Payment Cancelled",
+  "payment.refunded": "Payment Refunded",
+  "payment.verification.rejected": "Payment Verification Rejected",
   "role.create": "Role Created",
   "role.update": "Role Updated",
   "role.delete": "Role Deleted",
@@ -123,9 +128,11 @@ function actionTone(action: string): Tone {
     if (gated.suffix === "deny") return "danger";
     return "pending";
   }
+  // Order matters — "payment.verification.rejected" must read as danger, not
+  // as a success on the strength of the word "verification".
   if (/delete|reject|cancel|disable/i.test(action)) return "danger";
-  if (/approve|confirm|unlock|enable|receive/i.test(action)) return "success";
-  if (/create|update|assign|start/i.test(action)) return "info";
+  if (/approve|confirm|unlock|enable|receive|verified/i.test(action)) return "success";
+  if (/create|update|assign|start|initiated/i.test(action)) return "info";
   return "neutral";
 }
 
@@ -152,7 +159,7 @@ function humanizeResourceWord(resource: string): string {
   return resource.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
 }
 
-const NAME_KEYS = ["name", "productName", "code", "roleName"] as const;
+const NAME_KEYS = ["name", "productName", "code", "roleName", "orderNumber"] as const;
 
 function extractName(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;

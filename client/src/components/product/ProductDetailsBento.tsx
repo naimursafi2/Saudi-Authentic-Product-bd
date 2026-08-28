@@ -1,7 +1,7 @@
 import { CheckCircle2, MapPin, RotateCcw, Snowflake, Truck } from "lucide-react";
+import { ShippingPromise } from "@/components/product/ShippingPromise";
 import Link from "next/link";
 import type { Product } from "@/types/product";
-import { formatBDT } from "@/lib/utils";
 import { SealBadge } from "@/components/ui/SealBadge";
 
 export function ProductDetailsBento({ product }: { product: Product }) {
@@ -70,8 +70,7 @@ export function ProductDetailsBento({ product }: { product: Product }) {
             <div className="flex gap-3">
               <Truck size={18} className="mt-0.5 shrink-0 text-green-900" />
               <p className="text-sm leading-relaxed text-brown-600">
-                Delivered across Bangladesh in 3–5 business days. Free delivery on orders
-                over {formatBDT(5000)}.
+                <ShippingPromise withLeadTime />
               </p>
             </div>
             <div className="flex gap-3">

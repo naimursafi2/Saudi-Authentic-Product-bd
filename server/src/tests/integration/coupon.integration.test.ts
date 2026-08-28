@@ -5,6 +5,7 @@ import { createAuthedUser, authHeader } from "./helpers";
 import { CategoryModel } from "../../models/Category.model";
 import { ProductModel } from "../../models/Product.model";
 import { CouponModel } from "../../models/Coupon.model";
+import { OrderModel } from "../../models/Order.model";
 
 const app = createApp();
 
@@ -328,5 +329,101 @@ describe("Coupon integration", () => {
     const updatedProduct = await ProductModel.findById(product._id);
     // Stock must be untouched — no order should have been created for either rejected attempt.
     expect(updatedProduct?.variants[0]?.stock).toBe(10);
+  });
+
+  it("leaves nothing behind when the coupon's last use is lost to a concurrent order", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const product = await seedProduct(1000);
+    const variantId = product.variants[0]!._id!.toString();
+    await CouponModel.create({
+      code: "LASTONE",
+      discountType: "fixed",
+      discountValue: 500,
+      startsAt: new Date(Date.now() - HOUR),
+      expiresAt: new Date(Date.now() + HOUR),
+      usageLimit: 1,
+    });
+
+    const body = {
+      items: [{ productId: product._id.toString(), variantId, quantity: 1 }],
+      shippingAddress,
+      deliveryMethod: "standard" as const,
+      paymentMethod: "bkash" as const,
+      couponCode: "LASTONE",
+    };
+
+    const first = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(token))
+      .send(body);
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(token))
+      .send(body);
+    expect(second.status).toBe(400);
+
+    // Exactly one order exists. The rejected attempt must not have left a
+    // discounted, stock-less ghost order behind — which, being a bKash order,
+    // would otherwise have been payable.
+    const orders = await OrderModel.find();
+    expect(orders).toHaveLength(1);
+
+    const updatedProduct = await ProductModel.findById(product._id);
+    expect(updatedProduct?.variants[0]?.stock).toBe(9);
+  });
+
+  it("hands a coupon use back when the order that consumed it is cancelled", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { token: adminToken } = await createAuthedUser({ role: "admin" });
+    const product = await seedProduct(1000);
+    const variantId = product.variants[0]!._id!.toString();
+    const coupon = await CouponModel.create({
+      code: "GIVEBACK",
+      discountType: "fixed",
+      discountValue: 200,
+      startsAt: new Date(Date.now() - HOUR),
+      expiresAt: new Date(Date.now() + HOUR),
+      usageLimit: 1,
+    });
+
+    const created = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(token))
+      .send({
+        items: [{ productId: product._id.toString(), variantId, quantity: 1 }],
+        shippingAddress,
+        deliveryMethod: "standard",
+        paymentMethod: "cod",
+        couponCode: "GIVEBACK",
+      });
+    expect(created.status).toBe(201);
+    expect((await CouponModel.findById(coupon._id))?.usageCount).toBe(1);
+
+    const cancelled = await request(app)
+      .patch(`/api/v1/orders/${created.body.data.order._id}/status`)
+      .set(...authHeader(adminToken))
+      .send({ status: "cancelled" });
+    expect(cancelled.status).toBe(200);
+
+    // The use returns alongside the restocked inventory — a cancelled order
+    // must not permanently burn a limited coupon.
+    expect((await CouponModel.findById(coupon._id))?.usageCount).toBe(0);
+    expect((await ProductModel.findById(product._id))?.variants[0]?.stock).toBe(10);
+
+    // And the coupon is genuinely usable again.
+    const reused = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(token))
+      .send({
+        items: [{ productId: product._id.toString(), variantId, quantity: 1 }],
+        shippingAddress,
+        deliveryMethod: "standard",
+        paymentMethod: "cod",
+        couponCode: "GIVEBACK",
+      });
+    expect(reused.status).toBe(201);
+    expect(reused.body.data.order.discountBDT).toBe(200);
   });
 });

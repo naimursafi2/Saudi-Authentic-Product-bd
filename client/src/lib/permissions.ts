@@ -67,6 +67,7 @@ export const PERMISSIONS = [
   "returns.view",
   "returns.request",
   "returns.review",
+  "payments.view",
   "campaigns.view",
   "campaigns.create",
   "campaigns.edit",

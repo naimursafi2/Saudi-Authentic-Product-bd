@@ -236,6 +236,25 @@ export interface ApiSiteSettings {
   updatedAt: string;
 }
 
+/**
+ * Admin-editable shipping rules. The storefront uses these to *display* a
+ * shipping estimate; the server recomputes the charged fee from its own copy
+ * on every order, so these values are never authoritative client-side.
+ */
+export interface ApiShippingSettings {
+  _id: string;
+  insideDhakaChargeBDT: number;
+  outsideDhakaChargeBDT: number;
+  expressSurchargeBDT: number;
+  freeShippingEnabled: boolean;
+  freeShippingMinOrderBDT: number;
+  freeShippingAppliesToExpress: boolean;
+  standardDeliveryDays: number;
+  expressDeliveryDays: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApiNavLink {
   _id: string;
   label: string;
@@ -392,6 +411,49 @@ export interface ApiOrder {
   estimatedDeliveryDate?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// -- Payments (bKash gateway transactions) --
+
+/** Only gateway-settled payments get a record — a `cod` order is fully described by the Order itself. */
+export type PaymentProvider = "bkash";
+
+export type PaymentStatus =
+  | "unpaid"
+  | "initiated"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "cancelled"
+  | "refunded";
+
+export interface ApiPayment {
+  _id: string;
+  order: string | { _id: string; orderNumber: string; totalBDT: number; status: OrderStatus };
+  customer: string | { _id: string; name: string; email: string };
+  provider: PaymentProvider;
+  /** Always the server-computed order total — never anything the browser sent. */
+  amountBDT: number;
+  currency: string;
+  status: PaymentStatus;
+  gatewayPaymentId: string;
+  /** bKash's own transaction id, present only once the payment is verified. */
+  transactionId?: string;
+  merchantInvoiceNumber: string;
+  paidAt?: string;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The safe subset returned when a payment is created — enough to send the customer to bKash, nothing more. */
+export interface ApiCreatedPayment {
+  id: string;
+  gatewayPaymentId: string;
+  bkashURL: string;
+  amountBDT: number;
+  currency: string;
+  status: PaymentStatus;
 }
 
 export type CouponDiscountType = "percentage" | "fixed";

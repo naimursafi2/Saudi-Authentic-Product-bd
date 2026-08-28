@@ -104,6 +104,13 @@ export const PERMISSIONS = [
   "returns.view",
   "returns.request",
   "returns.review",
+  // Read-only. A customer creating/executing their own bKash payment needs no
+  // permission — those routes are self-scoped by order ownership, the same
+  // convention as `POST /orders` and `GET /orders/mine`. There is no
+  // "verify"/"settle" permission on purpose: payment verification is entirely
+  // automatic (customer callback, plus the scheduler's reconciliation sweep),
+  // so no role can mark a payment paid by hand.
+  "payments.view",
 
   // -- Customer messaging / campaigns --
   "campaigns.view",
@@ -239,6 +246,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
       { key: "refunds.request", label: "Request a refund" },
       { key: "refunds.review", label: "Review refund requests" },
       { key: "refunds.approve", label: "Approve refunds" },
+      { key: "payments.view", label: "View gateway payment transactions" },
     ],
   },
   {
@@ -306,6 +314,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "refunds.review",
     "returns.view",
     "returns.review",
+    // Order Manager verifies and dispatches orders, so it must be able to see
+    // whether a prepaid order's money actually landed.
+    "payments.view",
     "auditLogs.view",
   ],
 
@@ -359,6 +370,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "refunds.request",
     "returns.view",
     "returns.review",
+    // Same reasoning as Order Manager — read-only visibility of an order's
+    // gateway payment. Co-Admin remains excluded from `finance.view`.
+    "payments.view",
     "auditLogs.view",
     "roles.view",
     // Co-Admin creates and edits its own campaigns and submits them for
@@ -427,6 +441,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "refunds.approve",
     "returns.view",
     "returns.review",
+    "payments.view",
     "auditLogs.view",
     "roles.view",
     "roles.manage",

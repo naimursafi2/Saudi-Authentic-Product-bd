@@ -9,6 +9,7 @@ import { formatBDT, cn } from "@/lib/utils";
 import { toTelHref, toWhatsAppHref } from "@/lib/phone";
 import { StarRating } from "@/components/ui/StarRating";
 import { ProductAlertButtons } from "@/components/product/ProductAlertButtons";
+import { ShippingPromise } from "@/components/product/ShippingPromise";
 import { QuantityInput } from "@/components/ui/QuantityInput";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { SocialIcon } from "@/components/ui/SocialIcon";
@@ -229,8 +230,7 @@ export function ProductInfo({ product }: { product: Product }) {
       </div>
 
       <p className="flex items-center gap-2 text-xs text-brown-500">
-        <Truck size={14} /> Free delivery across Bangladesh on orders over{" "}
-        {formatBDT(5000)}.
+        <Truck size={14} /> <ShippingPromise />
       </p>
     </div>
   );

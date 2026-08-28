@@ -31,14 +31,18 @@ origins (client on Vercel, server on Render).
 
 **Storefront**: catalog browsing with filters/search, product detail pages
 with gallery + reviews, cart & wishlist (client-side), coupon codes,
-checkout, order tracking (with/without an account), customer account
+checkout with bKash online payment (server-verified) or cash on delivery,
+order tracking (with/without an account), customer account
 dashboard (orders, addresses, price-drop/back-in-stock alerts, refunds/
 returns), dark/light mode, Google Sign-In, 2FA, email verification.
 
 **Admin/Co-Admin/Super Admin/Order Manager portal**: product & category
 management (with a Super-Admin approval gate for new products, stock
 changes, and deletions), order lifecycle & delivery-agent assignment,
-inventory & purchase-batch/landed-cost tracking, coupons, customer
+inventory & purchase-batch/landed-cost tracking, bKash payment transactions
+with gateway reconciliation, configurable shipping rates (per-zone charges,
+express surcharge, free-shipping threshold, delivery estimates), coupons,
+customer
 messaging campaigns (email/SMS-ready/website notifications), reviews
 moderation, HR (leave, tasks, performance, salary, NID records), finance
 (investments, expenses, refunds, profit/loss, gross profit), a role &
@@ -113,10 +117,14 @@ npm run dev               # http://localhost:3000
 `JWT_REFRESH_SECRET`/`JWT_REFRESH_EXPIRES_IN`, `COOKIE_DOMAIN`,
 `CLOUDINARY_CLOUD_NAME`/`CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET`,
 `SMTP_SERVICE`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM`, `GOOGLE_CLIENT_ID`,
+`BKASH_BASE_URL`/`BKASH_USERNAME`/`BKASH_PASSWORD`/`BKASH_APP_KEY`/
+`BKASH_APP_SECRET`,
 `SEED_SUPER_ADMIN_NAME`/`SEED_SUPER_ADMIN_EMAIL`/`SEED_SUPER_ADMIN_PASSWORD`.
 Validated via Zod on startup — the app fails fast if a required var is
-missing. Cloudinary/SMTP/Google/SMS vars are optional; the affected feature
-degrades gracefully (a clear 503, or a silent no-op) rather than crashing.
+missing. Cloudinary/SMTP/Google/SMS/bKash vars are optional; the affected
+feature degrades gracefully (a clear 503, or a silent no-op) rather than
+crashing. The bKash credentials are secrets — they stay server-side and are
+never sent to the browser or logged.
 
 **`client/.env`**: `NEXT_PUBLIC_API_URL` (defaults to
 `http://localhost:5000/api/v1`), `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (optional —
@@ -146,7 +154,8 @@ groups: `/auth`, `/users`, `/categories`, `/products`, `/orders`,
 `/footer-columns`, `/static-pages`, `/site-settings`, `/audit-logs`,
 `/pending-actions`, `/approval-settings`, `/investments`, `/expenses`,
 `/refunds`, `/returns`, `/roles`, `/campaigns`, `/notifications`,
-`/product-alerts`. Auth is JWT via httpOnly cookies (or a bearer token for
+`/product-alerts`, `/payments`, `/shipping-settings`. Auth is JWT via httpOnly
+cookies (or a bearer token for
 staff impersonation); most write routes require a specific permission. See
 `CLAUDE.md`'s route table for per-route access rules.
 
@@ -168,9 +177,11 @@ or any deployed environment.
 
 ## Known limitations
 
-- No payment gateway integration — `bkash`/`nagad` are selectable at
-  checkout but not actually charged; only Cash on Delivery orders are ever
-  marked paid.
+- bKash payment is implemented end-to-end but stays hidden at checkout until
+  real `BKASH_*` credentials are configured. `nagad` is selectable but has no
+  gateway behind it and is never actually charged.
+- Abandoned bKash payments have no automatic expiry — an unpaid order holds
+  its stock and coupon use until someone cancels it.
 - No SMS gateway connected — SMS-dependent features (delivery OTP, campaign
   SMS) degrade to email/other channels.
 - No PDF-generation library anywhere — every "print"/"export as PDF" action

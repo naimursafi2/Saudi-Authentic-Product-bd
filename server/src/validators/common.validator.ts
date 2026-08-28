@@ -12,6 +12,10 @@ export const productIdParamSchema = z.object({
   productId: z.string().regex(/^[a-f0-9]{24}$/i, "Invalid product id"),
 });
 
+export const orderIdParamSchema = z.object({
+  orderId: z.string().regex(/^[a-f0-9]{24}$/i, "Invalid order id"),
+});
+
 /**
  * `z.coerce.boolean()` treats ANY non-empty string (including "false") as
  * truthy, which silently breaks multipart/form-data bodies where every

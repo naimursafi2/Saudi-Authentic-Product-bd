@@ -1,27 +1,28 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CreditCard, Lock, ShieldCheck, Tag, Truck, Wallet, X } from "lucide-react";
+import { CircleAlert, CreditCard, Loader2, Lock, ShieldCheck, Tag, Truck, Wallet, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { createOrder } from "@/lib/api/orders";
 import { validateCoupon } from "@/lib/api/coupons";
+import { createBkashPayment, getPaymentConfig } from "@/lib/api/payments";
+import { getShippingSettings } from "@/lib/api/shippingSettings";
+import { computeShippingFee, estimatedDeliveryDays } from "@/lib/shipping";
 import { ApiClientError } from "@/lib/api/client";
 import { formatBDT, cn } from "@/lib/utils";
 import { bdDistricts } from "@/data/bd-districts";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmailVerificationBanner } from "@/components/account/EmailVerificationBanner";
+import { BKASH_PENDING_ORDER_KEY } from "./BkashCallbackClient";
 import { FormSection, FieldLabel, inputClasses } from "./FormSection";
+import type { ApiShippingSettings } from "@/types/api";
 
 type DeliveryOption = "standard" | "express";
 type PaymentOption = "cod" | "bkash" | "nagad";
 
-const DELIVERY_FEES: Record<DeliveryOption, number> = {
-  standard: 60,
-  express: 120,
-};
 
 export function CheckoutClient() {
   const { items, subtotal, clearCart } = useCart();
@@ -29,17 +30,50 @@ export function CheckoutClient() {
   const [delivery, setDelivery] = useState<DeliveryOption>("standard");
   const [payment, setPayment] = useState<PaymentOption>("cod");
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  /** Set the moment the order is created, so a later bKash failure still knows what was placed. */
+  const [placedOrder, setPlacedOrder] = useState<{ id: string; orderNumber: string } | null>(null);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set once the order exists and the browser is being handed to bKash. The
+  // whole form is replaced by a "don't close this page" state, so there is
+  // nothing left to click twice while the redirect is in flight.
+  const [isRedirectingToBkash, setIsRedirectingToBkash] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isBkashAvailable, setIsBkashAvailable] = useState(false);
+  const [shippingSettings, setShippingSettings] = useState<ApiShippingSettings | null>(null);
+  // The shipping zone depends on the chosen district, so this one address
+  // field has to be controlled rather than left to the uncontrolled form.
+  const [district, setDistrict] = useState("");
 
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountBDT: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
-  const shipping = DELIVERY_FEES[delivery];
+  // Every figure on this page is a preview only — the backend recomputes all
+  // of them from the database when the order is placed, and again when the
+  // payment is created, so a tampered client total buys nothing. Until the
+  // rates load, shipping shows as pending rather than as a guessed number.
+  const shipping = shippingSettings
+    ? computeShippingFee({ deliveryMethod: delivery, district, subtotalBDT: subtotal }, shippingSettings)
+    : null;
   const discount = appliedCoupon?.discountBDT ?? 0;
-  const total = Math.max(0, subtotal + shipping - discount);
+  const total = Math.max(0, subtotal + (shipping ?? 0) - discount);
+
+  useEffect(() => {
+    getPaymentConfig()
+      .then(({ data }) => setIsBkashAvailable(data.providers.bkash))
+      .catch(() => setIsBkashAvailable(false));
+    getShippingSettings()
+      .then(({ data }) => setShippingSettings(data.settings))
+      .catch(() => setShippingSettings(null));
+  }, []);
+
+  // Derived rather than corrected after the fact: if the config request lands
+  // after the customer has already picked bKash and reports the gateway as
+  // unconfigured, the selection falls back to cash on delivery rather than
+  // submitting an order that could never be paid.
+  const selectedPayment: PaymentOption = payment === "bkash" && !isBkashAvailable ? "cod" : payment;
 
   async function handleApplyCoupon() {
     const code = couponInput.trim();
@@ -85,16 +119,66 @@ export function CheckoutClient() {
           cityArea: String(form.get("cityArea") ?? ""),
         },
         deliveryMethod: delivery,
-        paymentMethod: payment,
+        paymentMethod: selectedPayment,
         couponCode: appliedCoupon?.code,
       });
-      setOrderNumber(data.order.orderNumber);
       clearCart();
+      const placed = { id: data.order._id, orderNumber: data.order.orderNumber };
+      setPlacedOrder(placed);
+
+      if (selectedPayment === "bkash") {
+        await handOffToBkash(placed.id, placed.orderNumber);
+        return;
+      }
+
+      setOrderNumber(placed.orderNumber);
     } catch (err) {
       setFormError(err instanceof ApiClientError ? err.message : "Could not place your order.");
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  /**
+   * The order already exists by the time this runs, so a gateway failure is
+   * recoverable rather than fatal — `handoffError` drives a dedicated screen
+   * below that keeps the order number in front of the customer and offers a
+   * retry, instead of leaving them on a form whose cart has just been emptied.
+   */
+  async function handOffToBkash(orderId: string, placedOrderNumber: string) {
+    setHandoffError(null);
+    setIsRedirectingToBkash(true);
+    try {
+      const { data } = await createBkashPayment(orderId);
+      // Lets the callback page offer "Retry Payment" after a failure — bKash
+      // owns the return URL's query string, so it can't carry the order.
+      window.sessionStorage.setItem(
+        BKASH_PENDING_ORDER_KEY,
+        JSON.stringify({ orderId, orderNumber: placedOrderNumber })
+      );
+      window.location.assign(data.payment.bkashURL);
+    } catch (err) {
+      setIsRedirectingToBkash(false);
+      setHandoffError(
+        err instanceof ApiClientError
+          ? err.message
+          : "We could not reach bKash just now. Please check your connection and try again."
+      );
+    }
+  }
+
+  if (isRedirectingToBkash) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-6 py-24 text-center">
+        <Loader2 size={40} className="animate-spin text-green-900" />
+        <h1 className="font-serif text-3xl text-green-950">Connecting to bKash...</h1>
+        <p className="text-sm text-brown-500">
+          You are being taken to bKash to complete your payment of{" "}
+          <span className="font-semibold text-green-950">{formatBDT(total)}</span>.
+        </p>
+        <p className="text-sm font-semibold text-brown-600">Please don&apos;t close this page.</p>
+      </div>
+    );
   }
 
   if (orderNumber) {
@@ -110,6 +194,37 @@ export function CheckoutClient() {
         <ButtonLink href="/shop" variant="primary" size="md" className="mt-2">
           Continue Shopping
         </ButtonLink>
+      </div>
+    );
+  }
+
+  // The order exists but bKash could not be reached. This must come before the
+  // empty-cart branch below: the cart was cleared the moment the order was
+  // placed, so without this the customer would be shown "Your cart is empty"
+  // and lose both the error and their order number.
+  if (placedOrder && handoffError) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-6 py-24 text-center">
+        <CircleAlert size={44} className="text-gold-600" />
+        <h1 className="font-serif text-3xl text-green-950">Order Placed — Payment Pending</h1>
+        <p className="text-sm text-brown-500">
+          Your order <span className="font-semibold text-green-950">{placedOrder.orderNumber}</span> has
+          been placed and is being held for you, but we could not start the bKash payment. Nothing has
+          been charged.
+        </p>
+        <p className="text-sm text-danger">{handoffError}</p>
+        <div className="mt-2 flex flex-wrap justify-center gap-3">
+          <Button
+            variant="gold"
+            size="md"
+            onClick={() => handOffToBkash(placedOrder.id, placedOrder.orderNumber)}
+          >
+            Retry Payment
+          </Button>
+          <ButtonLink href="/account" variant="outline" size="md">
+            View Order
+          </ButtonLink>
+        </div>
       </div>
     );
   }
@@ -139,6 +254,39 @@ export function CheckoutClient() {
       </div>
     );
   }
+
+  // Both the quoted fee and the quoted lead time come from the admin-editable
+  // shipping settings, so a rate or SLA change needs no deploy. `feeBDT` is
+  // null until the rates have loaded.
+  const deliveryOptions = (["standard", "express"] as const).map((id) => ({
+    id,
+    label: id === "standard" ? "Standard Delivery" : "Express Delivery",
+    desc: shippingSettings
+      ? `${estimatedDeliveryDays(id, shippingSettings)} business day${
+          estimatedDeliveryDays(id, shippingSettings) === 1 ? "" : "s"
+        }${district ? "" : " (select a district for the exact rate)"}`
+      : "Loading rates...",
+    feeBDT: shippingSettings
+      ? computeShippingFee({ deliveryMethod: id, district, subtotalBDT: subtotal }, shippingSettings)
+      : null,
+  }));
+
+  // bKash is only offered when this deployment actually has gateway
+  // credentials; Nagad remains a UI-only option with no gateway behind it.
+  const paymentOptions = [
+    { id: "cod" as const, label: "Cash on Delivery", desc: "Pay the delivery agent when your order arrives", icon: Truck },
+    ...(isBkashAvailable
+      ? [
+          {
+            id: "bkash" as const,
+            label: "bKash",
+            desc: "Pay securely now through bKash mobile banking",
+            icon: Wallet,
+          },
+        ]
+      : []),
+    { id: "nagad" as const, label: "Nagad", desc: "Pay on delivery via Nagad", icon: CreditCard },
+  ];
 
   if (items.length === 0) {
     return (
@@ -219,7 +367,13 @@ export function CheckoutClient() {
               </div>
               <div>
                 <FieldLabel>District *</FieldLabel>
-                <select required name="district" defaultValue="" className={inputClasses}>
+                <select
+                  required
+                  name="district"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  className={inputClasses}
+                >
                   <option value="" disabled>
                     Select District
                   </option>
@@ -244,20 +398,7 @@ export function CheckoutClient() {
 
           <FormSection title="Delivery Method">
             <div className="flex flex-col gap-3">
-              {(
-                [
-                  {
-                    id: "standard" as const,
-                    label: "Standard Delivery",
-                    desc: "3–5 Business Days (Inside BD)",
-                  },
-                  {
-                    id: "express" as const,
-                    label: "Express Delivery",
-                    desc: "1–2 Business Days (Dhaka Only)",
-                  },
-                ] as const
-              ).map((option) => (
+              {deliveryOptions.map((option) => (
                 <label
                   key={option.id}
                   className={cn(
@@ -283,7 +424,11 @@ export function CheckoutClient() {
                     </span>
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-green-950">
-                    {formatBDT(DELIVERY_FEES[option.id])}
+                    {option.feeBDT === null
+                      ? "—"
+                      : option.feeBDT === 0
+                        ? "Free"
+                        : formatBDT(option.feeBDT)}
                   </span>
                 </label>
               ))}
@@ -292,18 +437,12 @@ export function CheckoutClient() {
 
           <FormSection title="Payment Method">
             <div className="flex flex-col gap-3">
-              {(
-                [
-                  { id: "cod" as const, label: "Cash on Delivery", icon: Truck },
-                  { id: "bkash" as const, label: "bKash (Mobile Banking)", icon: Wallet },
-                  { id: "nagad" as const, label: "Nagad (Mobile Banking)", icon: CreditCard },
-                ] as const
-              ).map((option) => (
+              {paymentOptions.map((option) => (
                 <label
                   key={option.id}
                   className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded border p-4 transition-colors",
-                    payment === option.id
+                    "flex cursor-pointer items-start gap-3 rounded border p-4 transition-colors",
+                    selectedPayment === option.id
                       ? "border-green-900 bg-green-950/5"
                       : "border-green-900/15 hover:border-green-900/30"
                   )}
@@ -311,21 +450,41 @@ export function CheckoutClient() {
                   <input
                     type="radio"
                     name="payment"
-                    checked={payment === option.id}
+                    checked={selectedPayment === option.id}
                     onChange={() => setPayment(option.id)}
-                    className="size-4 accent-green-900"
+                    className="mt-0.5 size-4 accent-green-900"
                   />
-                  <option.icon size={18} className="text-brown-600" />
-                  <span className="text-sm font-semibold text-green-950">{option.label}</span>
+                  <option.icon size={18} className="mt-0.5 text-brown-600" />
+                  <span>
+                    <span className="block text-sm font-semibold text-green-950">{option.label}</span>
+                    <span className="block text-xs text-brown-500">{option.desc}</span>
+                  </span>
                 </label>
               ))}
             </div>
+
+            {selectedPayment === "bkash" && (
+              <div className="flex items-start gap-2 rounded border border-green-900/15 bg-cream-50 p-3 text-xs text-brown-600">
+                <ShieldCheck size={15} className="mt-px shrink-0 text-green-900" />
+                <span>
+                  You will be taken to bKash to authorise{" "}
+                  <span className="font-semibold text-green-950">{formatBDT(total)}</span>. Your order is
+                  only confirmed once we have verified the transaction with bKash directly.
+                </span>
+              </div>
+            )}
           </FormSection>
 
           <div className="flex flex-col items-center gap-2 pt-2">
             {formError && <p className="text-sm text-danger">{formError}</p>}
             <Button type="submit" variant="gold" size="lg" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Placing Order..." : "Complete Order"}
+              {isSubmitting
+                ? selectedPayment === "bkash"
+                  ? "Connecting to bKash..."
+                  : "Placing Order..."
+                : selectedPayment === "bkash"
+                  ? `Pay ${formatBDT(total)} with bKash`
+                  : "Complete Order"}
             </Button>
             <p className="flex items-center gap-1.5 text-xs text-brown-500">
               <Lock size={12} /> Secure Checkout Process
@@ -414,7 +573,7 @@ export function CheckoutClient() {
             </div>
             <div className="flex items-center justify-between text-brown-600">
               <span>Shipping ({delivery === "standard" ? "Standard" : "Express"})</span>
-              <span>{formatBDT(shipping)}</span>
+              <span>{shipping === null ? "—" : shipping === 0 ? "Free" : formatBDT(shipping)}</span>
             </div>
             {discount > 0 && (
               <div className="flex items-center justify-between text-green-900">

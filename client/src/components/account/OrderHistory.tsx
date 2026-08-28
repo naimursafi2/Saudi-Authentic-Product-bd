@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Camera, Package, RefreshCcw, Search, Undo2 } from "lucide-react";
+import { Camera, Package, RefreshCcw, Search, Undo2, Wallet } from "lucide-react";
 import { listMyOrders } from "@/lib/api/orders";
+import { createBkashPayment } from "@/lib/api/payments";
+import { BKASH_PENDING_ORDER_KEY } from "@/components/checkout/BkashCallbackClient";
 import { createRefund, listRefunds } from "@/lib/api/finance";
 import { createReturnRequest, listReturnRequests } from "@/lib/api/returns";
 import { PrintInvoiceButton } from "@/components/order/OrderInvoice";
@@ -18,9 +20,19 @@ import type {
   ApiRefund,
   ApiReturnRequest,
   OrderStatus,
+  PaymentMethod,
   RefundReasonCategory,
   ReturnRequestType,
 } from "@/types/api";
+
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cod: "Cash on Delivery",
+  bkash: "bKash",
+  nagad: "Nagad",
+};
+
+/** Statuses a bKash order can still be paid for — past these the order is closed or already moving. */
+const PAYABLE_STATUSES: OrderStatus[] = ["pending"];
 
 const REASON_CATEGORIES: RefundReasonCategory[] = [
   "damaged",
@@ -93,6 +105,28 @@ export function OrderHistory() {
   const [desiredExchangeDetails, setDesiredExchangeDetails] = useState("");
   const [returnFormError, setReturnFormError] = useState<string | null>(null);
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  /** Resumes an abandoned or failed bKash payment on an order that is still unpaid. */
+  async function handlePayNow(order: ApiOrder) {
+    setPayError(null);
+    setPayingOrderId(order._id);
+    try {
+      const { data } = await createBkashPayment(order._id);
+      window.sessionStorage.setItem(
+        BKASH_PENDING_ORDER_KEY,
+        JSON.stringify({ orderId: order._id, orderNumber: order.orderNumber })
+      );
+      window.location.assign(data.payment.bkashURL);
+    } catch (err) {
+      setPayingOrderId(null);
+      setPayError(
+        err instanceof ApiClientError ? err.message : "Could not start a bKash payment. Please try again."
+      );
+    }
+  }
 
   function loadRefunds() {
     listRefunds({ limit: 100 })
@@ -295,17 +329,51 @@ export function OrderHistory() {
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-4">
-                <Link
-                  href={`/track-order?orderNumber=${encodeURIComponent(order.orderNumber)}`}
-                  className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brown-600/10 pt-3">
+              <span className="flex items-center gap-2 text-xs text-brown-600">
+                <Wallet size={13} className="text-brown-500" />
+                {PAYMENT_METHOD_LABELS[order.paymentMethod]}
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]",
+                    order.isPaid ? "bg-success-soft text-green-900" : "bg-gold-soft text-gold-700"
+                  )}
                 >
-                  <Search size={12} /> Track Order
-                </Link>
-                <PrintInvoiceButton order={order} />
-              </div>
+                  {order.isPaid ? "Paid" : "Unpaid"}
+                </span>
+              </span>
               <span className="text-base font-semibold text-green-950">{formatBDT(order.totalBDT)}</span>
+            </div>
+
+            {!order.isPaid &&
+              order.paymentMethod === "bkash" &&
+              PAYABLE_STATUSES.includes(order.status) && (
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="gold"
+                    size="sm"
+                    onClick={() => handlePayNow(order)}
+                    disabled={payingOrderId === order._id}
+                  >
+                    <Wallet size={14} />
+                    {payingOrderId === order._id
+                      ? "Connecting to bKash..."
+                      : `Pay ${formatBDT(order.totalBDT)} with bKash`}
+                  </Button>
+                  {payError && payingOrderId === null && (
+                    <p className="text-xs text-danger">{payError}</p>
+                  )}
+                </div>
+              )}
+
+            <div className="flex flex-wrap items-center gap-4">
+              <Link
+                href={`/track-order?orderNumber=${encodeURIComponent(order.orderNumber)}`}
+                className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
+              >
+                <Search size={12} /> Track Order
+              </Link>
+              <PrintInvoiceButton order={order} />
             </div>
 
             {order.status === "returned" &&

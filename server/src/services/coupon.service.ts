@@ -276,3 +276,25 @@ export async function applyCouponUsage(couponId: string, usageLimit?: number): P
     throw ApiError.badRequest("This coupon has reached its usage limit");
   }
 }
+
+/**
+ * Hands a consumed use back to the coupon — the counterpart to
+ * `applyCouponUsage`, called when the order that consumed it is cancelled or
+ * returned (the same reasoning as restocking that order's inventory: an order
+ * that never completed should not permanently burn a limited coupon's use).
+ *
+ * Best-effort and never throws: a cancellation must not fail because the
+ * coupon has since been renamed or deleted. The `$gt: 0` guard keeps the
+ * counter from going negative if a release is ever somehow applied twice.
+ */
+export async function releaseCouponUsage(code?: string): Promise<void> {
+  if (!code) return;
+  try {
+    await CouponModel.updateOne(
+      { code: code.trim().toUpperCase(), usageCount: { $gt: 0 } },
+      { $inc: { usageCount: -1 } }
+    );
+  } catch (err) {
+    console.error(`[coupon] failed to release a usage of ${code}:`, (err as Error).message);
+  }
+}

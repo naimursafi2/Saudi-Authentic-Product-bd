@@ -31,6 +31,8 @@ import purchaseRoutes from "./purchase.routes";
 import campaignRoutes from "./campaign.routes";
 import notificationRoutes from "./notification.routes";
 import productAlertRoutes from "./productAlert.routes";
+import paymentRoutes from "./payment.routes";
+import shippingSettingsRoutes from "./shippingSettings.routes";
 
 const router = Router();
 
@@ -66,5 +68,7 @@ router.use("/purchases", purchaseRoutes);
 router.use("/campaigns", campaignRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/product-alerts", productAlertRoutes);
+router.use("/payments", paymentRoutes);
+router.use("/shipping-settings", shippingSettingsRoutes);
 
 export default router;
