@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/finance";
 import { listAuditLogs } from "@/lib/api/auditLogs";
 import { ApiClientError } from "@/lib/api/client";
+import { printWithFilename } from "@/lib/print";
 import { useAuth } from "@/context/AuthContext";
 import { useConfirm } from "@/context/ConfirmDialogContext";
 import { cn, formatBDT } from "@/lib/utils";
@@ -58,11 +59,6 @@ function personName(person: ApiExpense["recordedBy"] | ApiExpense["lastEditedBy"
 function monthLabel(month: string): string {
   const [year, m] = month.split("-").map(Number);
   return new Date(year, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
-}
-
-/** `"2026-08"` -> `"August_2026"` — a clean, filesystem-safe fragment for the print filename. */
-function filenameSafeMonthLabel(month: string): string {
-  return monthLabel(month).replace(/\s+/g, "_");
 }
 
 function categoryLabel(expense: ApiExpense): string {
@@ -349,17 +345,7 @@ export function ExpensesManager() {
 
   function handlePrint() {
     if (!selectedMonth) return;
-    const filename = `${filenameSafeMonthLabel(selectedMonth)}_Expenses`;
-    const previousTitle = document.title;
-    document.title = filename;
-    // Deferred one macrotask so the title mutation reaches the browser
-    // chrome before the print dialog opens and reads it for the suggested
-    // filename — see CLAUDE.md's note on this exact Chrome race, first
-    // solved for the Sales Report print action.
-    setTimeout(() => {
-      window.print();
-      document.title = previousTitle;
-    }, 100);
+    printWithFilename("Expense-Report");
   }
 
   const monthTotalBDT = expenses.reduce((sum, e) => sum + e.amountBDT, 0);
@@ -464,7 +450,7 @@ export function ExpensesManager() {
                     )}
                     <p className="mt-0.5 truncate text-xs font-normal normal-case text-brown-500">{expense.reason}</p>
                     {expense.lastEditedAt && (
-                      <p className="mt-0.5 text-[11px] font-normal normal-case text-gold-700">
+                      <p className="mt-0.5 text-[11px] font-normal normal-case text-gold-700 print:hidden">
                         Edited by {personName(expense.lastEditedBy)} on {new Date(expense.lastEditedAt).toLocaleDateString()}
                         {expense.lastEditViaRequest ? " (approved edit request)" : ""}
                       </p>

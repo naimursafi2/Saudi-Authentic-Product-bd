@@ -2,8 +2,6 @@ import type { Request, Response } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { sendSuccess } from "../utils/ApiResponse";
 import * as reportService from "../services/report.service";
-import { renderSalesReportPdf } from "../services/salesReportPdf.service";
-import { getSettings } from "../services/siteSettings.service";
 import type { SalesSummaryQuery, SalesTimeSeriesQuery } from "../validators/report.validator";
 
 export const salesSummary = catchAsync(async (req: Request, res: Response) => {
@@ -16,33 +14,6 @@ export const salesTimeSeries = catchAsync(async (req: Request, res: Response) =>
   const { groupBy, from, to } = req.query as unknown as SalesTimeSeriesQuery;
   const timeSeries = await reportService.getSalesTimeSeries({ from, to }, groupBy);
   sendSuccess(res, 200, "Sales time series fetched", { timeSeries });
-});
-
-export const salesTimeSeriesPdf = catchAsync(async (req: Request, res: Response) => {
-  const { groupBy, from, to } = req.query as unknown as SalesTimeSeriesQuery;
-  const [timeSeries, settings] = await Promise.all([
-    reportService.getSalesTimeSeries({ from, to }, groupBy),
-    getSettings(),
-  ]);
-
-  res.setHeader("Content-Type", "application/pdf");
-  // A generic fallback name — the frontend names the actual downloaded
-  // file itself (see `getSalesReportPdf` in lib/api/reports.ts), but this
-  // still matters for a direct/non-JS request to this URL.
-  res.setHeader("Content-Disposition", "inline; filename=\"sales-report.pdf\"");
-
-  renderSalesReportPdf(
-    {
-      groupBy,
-      from,
-      to,
-      timeSeries,
-      siteName: settings.siteName,
-      contactEmail: settings.contactEmail,
-      contactPhone: settings.contactPhone,
-    },
-    res
-  );
 });
 
 export const adminDashboard = catchAsync(async (req: Request, res: Response) => {

@@ -133,28 +133,6 @@ describe("Reporting & analytics additions", () => {
     expect(april).toEqual({ period: "2026-04", revenueBDT: 0, expenseBDT: 500, profitBDT: -500 });
   });
 
-  it("generates a real, valid PDF for the sales report (not a browser print-to-PDF)", async () => {
-    const { token } = await createAuthedUser({ role: "admin" });
-    await seedOrder(1000, new Date());
-
-    const res = await request(app)
-      .get("/api/v1/reports/sales-timeseries/pdf?groupBy=day")
-      .set(...authHeader(token))
-      // Collect the raw bytes into a Buffer rather than letting supertest
-      // guess a text/JSON parser for a binary application/pdf body.
-      .buffer()
-      .parse((response, callback) => {
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => chunks.push(chunk));
-        response.on("end", () => callback(null, Buffer.concat(chunks)));
-      });
-
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("application/pdf");
-    // Every valid PDF file starts with this exact magic-number signature.
-    expect((res.body as Buffer).subarray(0, 5).toString("latin1")).toBe("%PDF-");
-  });
-
   it("includes out-of-stock count, recent orders and recent activities on the admin dashboard", async () => {
     const { token } = await createAuthedUser({ role: "admin" });
     await seedOrder(1200, new Date());

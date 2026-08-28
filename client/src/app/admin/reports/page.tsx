@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, FileDown, ListFilter, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
-import { getDeliveryAgentPerformance, getSalesReportPdf, getSalesSummary, getSalesTimeSeries } from "@/lib/api/reports";
+import { Download, ListFilter, Printer, Receipt, ShoppingBag, TrendingUp } from "lucide-react";
+import { getDeliveryAgentPerformance, getSalesSummary, getSalesTimeSeries } from "@/lib/api/reports";
 import { getSiteSettings } from "@/lib/api/siteSettings";
 import { formatBDT } from "@/lib/utils";
-import { downloadBlob, downloadCsv } from "@/lib/csvExport";
-import { ApiClientError } from "@/lib/api/client";
+import { downloadCsv } from "@/lib/csvExport";
+import { printWithFilename } from "@/lib/print";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -37,8 +37,6 @@ export default function AdminReportsPage() {
   const [timeSeries, setTimeSeries] = useState<SalesTimeSeriesPoint[]>([]);
   const [isTimeSeriesLoading, setIsTimeSeriesLoading] = useState(true);
   const [siteSettings, setSiteSettings] = useState<ApiSiteSettings | null>(null);
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
 
   function load(fromDate?: string, toDate?: string) {
     setIsLoading(true);
@@ -91,30 +89,8 @@ export default function AdminReportsPage() {
     );
   }
 
-  /**
-   * Generates a real PDF server-side and downloads it directly — no
-   * `window.print()`, no browser print dialog, no dependency on the OS's
-   * "Microsoft Print to PDF" driver (whose own save dialog no webpage can
-   * reach or pre-fill; `document.title` only ever affected Chrome's own
-   * built-in "Save as PDF" destination, a different flow entirely). The
-   * filename is generated here, from the browser's local clock at the
-   * exact moment Export is clicked, and applied directly via the download
-   * trigger (`downloadBlob`) — a real file download's name is fully
-   * client-controlled, unlike a print dialog's suggested filename.
-   */
-  async function handleExportPdf() {
-    setPdfError(null);
-    setIsExportingPdf(true);
-    try {
-      const blob = await getSalesReportPdf(groupBy, from || undefined, to || undefined);
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, "0");
-      downloadBlob(`${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}.pdf`, blob);
-    } catch (err) {
-      setPdfError(err instanceof ApiClientError ? err.message : "Could not generate the PDF.");
-    } finally {
-      setIsExportingPdf(false);
-    }
+  function handlePrint() {
+    printWithFilename("Sales-Report");
   }
 
   return (
@@ -195,17 +171,11 @@ export default function AdminReportsPage() {
                 <Button variant="outline" size="xs" onClick={handleExportCsv} disabled={timeSeries.length === 0}>
                   <Download size={13} /> CSV
                 </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={handleExportPdf}
-                  disabled={timeSeries.length === 0 || isExportingPdf}
-                >
-                  <FileDown size={13} /> {isExportingPdf ? "Generating..." : "Export PDF"}
+                <Button variant="outline" size="xs" onClick={handlePrint} disabled={timeSeries.length === 0}>
+                  <Printer size={13} /> Print
                 </Button>
               </div>
             </div>
-            {pdfError && <p className="mb-2 text-xs text-danger print:hidden">{pdfError}</p>}
             <p className="mb-3 text-xs text-brown-500">
               Period: {from || "Earliest order"} &ndash; {to || "Latest order"}
             </p>

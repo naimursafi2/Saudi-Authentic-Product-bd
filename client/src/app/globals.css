@@ -470,15 +470,17 @@ body {
   margin: 0.75in;
 }
 
-/* Printable invoice (components/order/OrderInvoice.tsx): isolates
-   #invoice-print-area from the rest of the page — including the modal
-   chrome it's shown in — so `window.print()` only outputs the invoice
-   itself, not the app UI around it.
+/* Shared print-isolation mechanism: every printable view project-wide
+   (Expenses, the Reports sales table, order invoices — see `lib/print.ts`
+   for the `window.print()` trigger they all share) marks its printable
+   content with the `.print-area` class, and this rule hides everything
+   else in `<body>` so `window.print()` outputs only that content, not the
+   surrounding app chrome (navbar, sidebar, modal frame, filters, buttons).
 
    THE HIDE/REVEAL MECHANISM MUST BE `visibility`, NOT `display` — this
    was tried (`display: none` / `revert` / `static`) and produced a
    completely BLANK printed page, a worse regression than the one it was
-   meant to fix. `#invoice-print-area` sits several DOM levels below
+   meant to fix. `.print-area` often sits several DOM levels below
    `<body>` (inside modal chrome, page wrappers, ...), and `display: none`
    on an ancestor permanently removes that ancestor's entire subtree from
    rendering — no descendant rule, however specific or `!important`, can
@@ -501,82 +503,38 @@ body {
    absolutely positioned element in paged media renders ONCE and lets its
    own overflowing content paginate normally across as many further pages
    as it needs, rather than being re-painted on every page like a running
-   header. (`.print-header`/`.print-footer` below are the deliberate
+   header. (`.print-header`/`.print-footer` above are the deliberate
    exception — a short banner that SHOULD repeat every page is exactly
-   what `position: fixed` is for.) */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  #invoice-print-area,
-  #invoice-print-area * {
-    visibility: visible;
-  }
-  #invoice-print-area {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-  }
-  #invoice-print-area tr,
-  #invoice-print-area td,
-  #invoice-print-area th {
-    break-inside: avoid;
-  }
-  .print-header,
-  .print-footer {
-    display: block !important;
-    visibility: visible;
-  }
-  .print-header {
-    position: fixed;
-    top: 0.2cm;
-    left: 0;
-    right: 0;
-    text-align: center;
-  }
-  .print-footer {
-    position: fixed;
-    bottom: 0.2cm;
-    left: 0;
-    right: 0;
-    text-align: center;
-  }
-}
+   what `position: fixed` is for.)
 
-/* Generic version of the invoice rule above, for any other "print this one
-   section" need (currently the Reports page's sales table) — same
-   technique, a reusable class instead of one component's specific id. No
-   PDF library anywhere in this project; "export as PDF" is always the
+   The hide-rule below must stay a bare `body *`, NOT `body:has(.print-area)
+   *` — `:has()` adds a class-level specificity component on top of the
+   `body` type selector, which then OUTRANKS the plain-class `.print-area *`
+   reveal rule below it (id/class/type tiers: 0,1,1 beats 0,1,0), hiding the
+   print area's own contents and printing a blank page. A bare `body *` has
+   lower specificity than any class selector, so `.print-area *` reliably
+   wins regardless of source order. This was a real regression once
+   already; don't reintroduce a `:has()`/other-compound-selector hide-rule
+   here.
+
+   `break-inside: avoid` on row-level elements stops a table row from being
+   split across a page boundary, and `thead`'s natural `table-header-group`
+   display (untouched here, since we never force `display` at all) is what
+   makes the column headers legitimately repeat at the top of each new page
+   a long table spills onto — a real per-page repeat, not a bug, since only
+   the headers repeat, never the data rows.
+
+   The printed output is deliberately plain: `.print-area` sheds its
+   on-screen card chrome (border, rounded corners, shadow, background) here
+   so it reads as plain professional paper, not a copy of the on-screen
+   card — per the "simple, clean, no decorative styling" requirement for
+   printed output. Body/table text is bumped to 12pt (normal
+   Word-document body-text size) since the on-screen admin UI runs smaller
+   (11–14px) for on-screen density; headings and small caption/label text
+   keep their own sizes so the printed hierarchy still reads clearly. No
+   PDF library anywhere in this project — "export as PDF" is always the
    browser's own "Save as PDF" print destination on a print-isolated view
-   like this one.
-
-   The hide-rule below must stay a bare `body *` (matching the invoice rule
-   above), NOT `body:has(.print-area) *` — `:has()` adds a class-level
-   specificity component on top of the `body` type selector, which then
-   OUTRANKS the plain-class `.print-area *` reveal rule below it (id/class/
-   type tiers: 0,1,1 beats 0,1,0), hiding the print area's own contents and
-   printing a blank page. A bare `body *` has lower specificity than any
-   class selector, so `.print-area *` reliably wins regardless of source
-   order — exactly like `#invoice-print-area` (id specificity) already
-   guarantees above. This was a real regression once already; don't
-   reintroduce a `:has()`/other-compound-selector hide-rule here.
-
-   Same `visibility`/`position: absolute` reasoning as the invoice rule
-   above — see that comment for exactly why `display`-based hiding and
-   `position: fixed` both broke this, one at a time, in two separate past
-   regressions. `break-inside: avoid` on row-level elements stops a table
-   row from being split across a page boundary, and `thead`'s natural
-   `table-header-group` display (untouched here, since we no longer force
-   `display` at all) is what makes the column headers legitimately repeat
-   at the top of each new page a long table spills onto — a real per-page
-   repeat, not a bug, since only the headers repeat, never the data rows.
-
-   The printed report is deliberately plain: `.print-area` sheds its
-   on-screen card chrome (border, rounded corners, shadow, background)
-   here so it reads as plain professional paper, not a copy of the
-   on-screen card — per the "simple, clean, no decorative styling"
-   requirement for this specific print output. */
+   like this one. */
 @media print {
   body * {
     visibility: hidden;
@@ -602,6 +560,12 @@ body {
   .print-area,
   .print-area * {
     color: #1b1b1b !important;
+  }
+  .print-area table,
+  .print-area td,
+  .print-area th,
+  .print-area p {
+    font-size: 12pt !important;
   }
   .print-area tr,
   .print-area td,

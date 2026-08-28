@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Printer } from "lucide-react";
 import { getSiteSettings } from "@/lib/api/siteSettings";
+import { printWithFilename } from "@/lib/print";
 import { formatBDT } from "@/lib/utils";
 import { Modal } from "@/components/admin/Modal";
 import { Button } from "@/components/ui/Button";
@@ -15,12 +16,12 @@ function customerName(customer: ApiOrder["customer"]): string {
 
 /**
  * The printable invoice content itself — isolated from the rest of the page
- * at print time via the `#invoice-print-area` rule in `globals.css` (hides
+ * at print time via the shared `.print-area` rule in `globals.css` (hides
  * everything else, including the modal chrome around this).
  */
 function InvoiceDocument({ order, settings }: { order: ApiOrder; settings: ApiSiteSettings | null }) {
   return (
-    <div id="invoice-print-area" className="bg-white p-8 text-[#1b1b1b]">
+    <div className="print-area bg-white p-8 text-[#1b1b1b]">
       <div className="mb-8 flex items-start justify-between gap-6 border-b border-gray-300 pb-6">
         <div className="flex items-center gap-3">
           {settings?.logo?.url && (
@@ -157,7 +158,7 @@ export function PrintInvoiceButton({ order }: { order: ApiOrder }) {
         <Modal title={`Invoice — #${order.orderNumber}`} onClose={() => setIsOpen(false)} wide>
           <div className="flex flex-col gap-4">
             <div className="flex justify-end print:hidden">
-              <Button variant="primary" size="sm" onClick={() => window.print()}>
+              <Button variant="primary" size="sm" onClick={() => printWithFilename(`Invoice-${order.orderNumber}`)}>
                 <Printer size={14} /> Print
               </Button>
             </div>
