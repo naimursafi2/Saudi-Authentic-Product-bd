@@ -47,6 +47,7 @@ export const PERMISSIONS = [
   "content.homepage.delete",
   "content.navigation.manage",
   "content.pages.manage",
+  "content.refundPolicy.manage",
   "content.branding.manage",
   "settings.manage",
   "reviews.view",

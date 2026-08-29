@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowRight,
   BadgeDollarSign,
-  BarChart3,
+  ChartPie,
+  Download,
+  Package,
   Receipt,
   ShoppingBag,
   TrendingDown,
@@ -20,39 +23,37 @@ import { orderStatusLabel } from "@/lib/orderStatus";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, ErrorState } from "@/components/admin/EmptyState";
 import { Button } from "@/components/ui/Button";
-import { BreakdownBars, TrendChart } from "@/components/admin/charts/TrendChart";
+import { BreakdownBars, TrendChart, formatPeriod } from "@/components/admin/charts/TrendChart";
 import type { FinanceSummary, OrderStatus } from "@/types/api";
 import type { RevenueVsExpensePoint, SalesSummary, SalesTimeSeriesPoint } from "@/types/hr";
 
 /**
- * Business Overview. Everything here is read live from the existing reporting
- * and finance endpoints — there is no analytics-specific API and no stored
- * snapshot, so a figure on this page is the same figure the Reports and
- * Finance pages show.
+ * Analytics / Business Overview. Everything is read live from the existing
+ * reporting and finance endpoints — there is no analytics-specific API and no
+ * stored snapshot, so a figure here is the same figure the Reports and Finance
+ * pages show.
  *
- * RBAC is the reason the page is built in two halves. `reports.view` gets the
- * sales half (revenue, orders, top products); the profit half needs
- * `finance.view`, which Co-Admin deliberately does not hold. A viewer without
- * it simply never sees — and never requests — cost, expense or profit data.
- * As everywhere else in this app the real boundary is server-side; this only
- * keeps the page honest about what it can show.
+ * RBAC splits the page in two. `reports.view` gets the sales half (revenue,
+ * orders, top products); the profit half needs `finance.view`, which Co-Admin
+ * deliberately does not hold — a viewer without it never sees, and never
+ * requests, cost or profit data. Super Admin holds every permission, so it
+ * sees the whole page. As everywhere else the real boundary is server-side.
  */
 
 type RangeKey = "day" | "week" | "month" | "custom";
 type GroupBy = "day" | "week" | "month";
 
 const RANGE_OPTIONS: { value: RangeKey; label: string; hint: string }[] = [
-  { value: "day", label: "Daily", hint: "Last 30 days" },
-  { value: "week", label: "Weekly", hint: "Last 12 weeks" },
-  { value: "month", label: "Monthly", hint: "Last 12 months" },
-  { value: "custom", label: "Custom", hint: "Pick your own dates" },
+  { value: "day", label: "Day", hint: "Last 30 days" },
+  { value: "week", label: "Week", hint: "Last 12 weeks" },
+  { value: "month", label: "Month", hint: "Last 12 months" },
+  { value: "custom", label: "Custom", hint: "Choose your own dates" },
 ];
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** The preset ranges, expressed as the {from, groupBy} the API already takes. */
 function presetRange(range: Exclude<RangeKey, "custom">): { from: string; groupBy: GroupBy } {
   const from = new Date();
   if (range === "day") from.setDate(from.getDate() - 29);
@@ -62,8 +63,8 @@ function presetRange(range: Exclude<RangeKey, "custom">): { from: string; groupB
   return { from: isoDate(from), groupBy: range };
 }
 
-/** For a custom range, pick the bucket size that yields a readable number of
- * bars rather than making the user choose one as well as the dates. */
+/** Picks a bucket size that yields a readable number of bars, so a custom
+ * range doesn't also make the user choose a grouping. */
 function groupByForSpan(from: string, to: string): GroupBy {
   const days = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000));
   if (days <= 45) return "day";
@@ -72,8 +73,8 @@ function groupByForSpan(from: string, to: string): GroupBy {
 }
 
 const fieldClasses =
-  "rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 focus:border-green-900/40 focus:outline-none";
-const labelClasses = "mb-1 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
+  "h-10 rounded-lg border border-green-900/15 bg-cream-50 px-3 text-sm tabular-nums text-green-950 focus:border-green-900/40 focus:outline-none focus:ring-2 focus:ring-green-900/10";
+const labelClasses = "mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-brown-500";
 
 export default function AdminAnalyticsPage() {
   const { hasPermission } = useAuth();
@@ -87,8 +88,6 @@ export default function AdminAnalyticsPage() {
     return isoDate(d);
   });
   const [customTo, setCustomTo] = useState(() => isoDate(new Date()));
-  /** The range actually applied — a custom range only takes effect on Apply,
-   * so half-typed dates never fire a request. */
   const [applied, setApplied] = useState<{ from?: string; to?: string; groupBy: GroupBy }>(() => ({
     ...presetRange("month"),
   }));
@@ -110,7 +109,6 @@ export default function AdminAnalyticsPage() {
         getSalesTimeSeries(groupBy, from, to).then(({ data }) => setSalesSeries(data.timeSeries)),
       ]);
 
-      // Only a viewer who holds finance.view asks for the profit half at all.
       const financeWork = canViewFinance
         ? Promise.all([
             getFinanceSummary({ from, to }).then(({ data }) => setFinance(data.summary)),
@@ -125,10 +123,6 @@ export default function AdminAnalyticsPage() {
     [canViewFinance]
   );
 
-  // Same fetch-on-mount/on-filter-change shape (and the same lint exemption)
-  // as every other data-backed admin page. A viewer without `reports.view`
-  // renders the restricted state below and never reads `isLoading`, so there
-  // is nothing to load for them.
   useEffect(() => {
     if (!canViewSales) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -146,18 +140,13 @@ export default function AdminAnalyticsPage() {
   }
 
   const periods = useMemo(() => salesSeries.map((p) => p.period), [salesSeries]);
-
-  /** The P&L series keyed by period, so its bars line up with the sales bars
-   * even when one side has a period the other doesn't. */
   const plByPeriod = useMemo(() => new Map(plSeries.map((row) => [row.period, row])), [plSeries]);
 
   function handleExportCsv() {
     const headers = ["Period", "Revenue (BDT)", "Orders"];
-    if (canViewFinance) {
-      headers.push("Cost of Goods Sold (BDT)", "Expenses (BDT)", "Net Profit (BDT)");
-    }
+    if (canViewFinance) headers.push("Cost of Goods Sold (BDT)", "Expenses (BDT)", "Net Profit (BDT)");
     downloadCsv(
-      `business-overview-${applied.groupBy}.csv`,
+      `analytics-${applied.groupBy}.csv`,
       headers,
       salesSeries.map((row) => {
         const base: (string | number)[] = [row.period, row.revenueBDT, row.orders];
@@ -173,9 +162,9 @@ export default function AdminAnalyticsPage() {
   if (!canViewSales) {
     return (
       <div>
-        <PageHeader title="Business Overview" />
+        <PageHeader title="Analytics" />
         <EmptyState
-          icon={BarChart3}
+          icon={ChartPie}
           title="Access restricted"
           description="Business analytics is available to roles that can view reports."
         />
@@ -183,40 +172,51 @@ export default function AdminAnalyticsPage() {
     );
   }
 
-  const activeHint = RANGE_OPTIONS.find((o) => o.value === range)?.hint ?? "";
   const periodLabel =
-    range === "custom" ? `${applied.from} to ${applied.to}` : activeHint.toLowerCase();
+    range === "custom"
+      ? `${formatPeriod(applied.from ?? "", "day", true)} – ${formatPeriod(applied.to ?? "", "day", true)}`
+      : (RANGE_OPTIONS.find((o) => o.value === range)?.hint ?? "").toLowerCase();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-7">
       <PageHeader
-        title="Business Overview"
+        title="Analytics"
         description="How the business is performing — sales, costs and profit, straight from live data."
       />
 
       {/* -- Period switcher -- */}
-      <div className="flex flex-col gap-4 rounded-xl border border-brown-600/10 bg-surface p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          {RANGE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => selectRange(option.value)}
-              aria-pressed={range === option.value}
-              className={`cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
-                range === option.value
-                  ? "bg-brand-deep text-on-brand"
-                  : "bg-cream-200 text-brown-600 hover:bg-cream-300"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-          <span className="ml-1 text-xs text-brown-500">{activeHint}</span>
+      <section className="rounded-xl border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={labelClasses + " mb-0 mr-1"}>Show</span>
+            <div className="flex rounded-lg bg-cream-200 p-1">
+              {RANGE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => selectRange(option.value)}
+                  aria-pressed={range === option.value}
+                  className={`cursor-pointer rounded-md px-4 py-1.5 text-sm font-semibold transition-all ${
+                    range === option.value
+                      ? "bg-surface text-green-950 shadow-sm"
+                      : "text-brown-500 hover:text-green-950"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-sm text-brown-500">
+            Showing <span className="font-semibold text-green-950">{periodLabel}</span>
+          </p>
         </div>
 
         {range === "custom" && (
-          <form onSubmit={applyCustom} className="flex flex-wrap items-end gap-3 border-t border-brown-600/10 pt-4">
+          <form
+            onSubmit={applyCustom}
+            className="mt-4 flex flex-wrap items-end gap-3 border-t border-brown-600/10 pt-4"
+          >
             <div>
               <label className={labelClasses}>From</label>
               <input
@@ -242,44 +242,39 @@ export default function AdminAnalyticsPage() {
             <Button type="submit" variant="primary" size="sm">
               Apply
             </Button>
-            <p className="text-xs text-brown-500">
-              Grouped by {groupByForSpan(customFrom, customTo)} for readability.
+            <p className="pb-2 text-xs text-brown-500">
+              Grouped by {groupByForSpan(customFrom, customTo)} so the chart stays readable.
             </p>
           </form>
         )}
-      </div>
+      </section>
 
       {isLoading ? (
-        <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl bg-surface" />
-            ))}
-          </div>
-          <div className="h-72 animate-pulse rounded-xl bg-surface" />
-        </div>
+        <LoadingSkeleton />
       ) : error ? (
         <ErrorState message={error} />
       ) : (
         <>
-          <KpiGrid summary={summary} finance={canViewFinance ? finance : null} periodLabel={periodLabel} />
+          <KpiGrid summary={summary} finance={canViewFinance ? finance : null} />
 
           <ChartCard
-            title="Sales & Orders"
-            subtitle={`Revenue taken and orders placed, ${periodLabel}. Hover a bar for the exact figure.`}
+            title="Revenue"
+            subtitle="Total sales taken in each period, including shipping."
             action={
               <Button variant="outline" size="xs" onClick={handleExportCsv} disabled={salesSeries.length === 0}>
-                Export CSV
+                <Download size={13} /> Export CSV
               </Button>
             }
           >
             <TrendChart
+              groupBy={applied.groupBy}
+              variant="area"
               periods={periods}
               series={[
                 {
                   key: "revenue",
                   label: "Revenue",
-                  className: "fill-green-900",
+                  colorClass: "text-green-900",
                   values: salesSeries.map((p) => p.revenueBDT),
                 },
               ]}
@@ -287,14 +282,15 @@ export default function AdminAnalyticsPage() {
             />
           </ChartCard>
 
-          <ChartCard title="Orders Placed" subtitle={`Number of orders, ${periodLabel}.`}>
+          <ChartCard title="Orders" subtitle="How many orders were placed in each period.">
             <TrendChart
+              groupBy={applied.groupBy}
               periods={periods}
               series={[
                 {
                   key: "orders",
                   label: "Orders",
-                  className: "fill-gold-600",
+                  colorClass: "text-gold-600",
                   values: salesSeries.map((p) => p.orders),
                 },
               ]}
@@ -306,33 +302,34 @@ export default function AdminAnalyticsPage() {
           {canViewFinance && (
             <ChartCard
               title="Profit & Loss"
-              subtitle={`What was earned against what the goods and running costs took, ${periodLabel}. Bars below the line are a loss.`}
+              subtitle="Sales against what the goods cost and what the business spent. Bars below the line are a loss."
             >
               <TrendChart
+                groupBy={applied.groupBy}
                 periods={periods}
                 series={[
                   {
                     key: "revenue",
-                    label: "Sales revenue",
-                    className: "fill-green-900",
+                    label: "Sales",
+                    colorClass: "text-green-900",
                     values: periods.map((p) => plByPeriod.get(p)?.netSellingRevenueBDT ?? 0),
                   },
                   {
                     key: "cogs",
                     label: "Product cost",
-                    className: "fill-brown-500",
+                    colorClass: "text-brown-500",
                     values: periods.map((p) => plByPeriod.get(p)?.costOfGoodsSoldBDT ?? 0),
                   },
                   {
                     key: "expense",
-                    label: "Other expenses",
-                    className: "fill-gold-600",
+                    label: "Expenses",
+                    colorClass: "text-gold-600",
                     values: periods.map((p) => plByPeriod.get(p)?.expenseBDT ?? 0),
                   },
                   {
                     key: "profit",
-                    label: "Profit / loss",
-                    className: "fill-brand-deep",
+                    label: "Net profit",
+                    colorClass: "text-brand-deep",
                     values: periods.map((p) => plByPeriod.get(p)?.profitBDT ?? 0),
                   },
                 ]}
@@ -341,8 +338,8 @@ export default function AdminAnalyticsPage() {
             </ChartCard>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <ChartCard title="Where Orders Are" subtitle="Every order in this period by its current status.">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <ChartCard title="Order Status" subtitle="Where this period's orders currently sit.">
               <BreakdownBars
                 rows={Object.entries(summary?.ordersByStatus ?? {})
                   .sort((a, b) => b[1] - a[1])
@@ -355,19 +352,17 @@ export default function AdminAnalyticsPage() {
               />
               <Link
                 href="/admin/orders"
-                className="mt-4 inline-block text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
+                className="mt-5 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.08em] text-green-900 transition-colors hover:text-green-950"
               >
-                Open orders
+                Open orders <ArrowRight size={12} />
               </Link>
             </ChartCard>
 
             <ChartCard title="Best Sellers" subtitle="Top products by units sold in this period.">
               <BreakdownBars
-                rows={(summary?.topProducts ?? []).map((p) => ({
-                  label: p.name,
-                  value: p.quantitySold,
-                }))}
+                rows={(summary?.topProducts ?? []).map((p) => ({ label: p.name, value: p.quantitySold }))}
                 valueKind="count"
+                colorClass="text-gold-600"
                 emptyMessage="No product sales in this period."
               />
             </ChartCard>
@@ -375,30 +370,40 @@ export default function AdminAnalyticsPage() {
 
           {canViewFinance && finance && (
             <ChartCard
-              title="Where the Money Went"
-              subtitle="Confirmed operating expenses by category. Stock purchases are not here — they count as product cost when the stock sells."
+              title="Expenses by Category"
+              subtitle="Confirmed operating spend. Stock purchases are not here — they reach the P&L as product cost when the stock sells."
             >
               <BreakdownBars
                 rows={Object.entries(finance.expensesByCategory)
                   .filter(([, amount]) => amount > 0)
                   .sort((a, b) => b[1] - a[1])
-                  .map(([category, amount]) => ({
-                    label: category.replace(/_/g, " "),
-                    value: amount,
-                  }))}
-                barClassName="bg-gold-600"
+                  .map(([category, amount]) => ({ label: category.replace(/_/g, " "), value: amount }))}
+                colorClass="text-brown-500"
                 emptyMessage="No confirmed expenses in this period."
               />
             </ChartCard>
           )}
 
           {!canViewFinance && (
-            <p className="rounded-xl border border-brown-600/10 bg-surface p-4 text-xs text-brown-500">
-              Cost and profit figures are not shown for your role. Ask a Super Admin if you need finance access.
+            <p className="rounded-xl border border-brown-600/10 bg-surface p-4 text-sm text-brown-500">
+              Cost and profit figures are hidden for your role. Ask a Super Admin if you need finance access.
             </p>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="flex flex-col gap-7">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-[104px] animate-pulse rounded-xl bg-surface" />
+        ))}
+      </div>
+      <div className="h-[420px] animate-pulse rounded-xl bg-surface" />
     </div>
   );
 }
@@ -415,11 +420,11 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-brown-600/10 bg-surface p-6">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-serif text-lg text-green-950">{title}</h2>
-          {subtitle && <p className="mt-1 max-w-2xl text-xs text-brown-500">{subtitle}</p>}
+          <h2 className="font-serif text-lg font-semibold tracking-tight text-green-950">{title}</h2>
+          {subtitle && <p className="mt-1 max-w-2xl text-sm leading-relaxed text-brown-500">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -428,73 +433,97 @@ function ChartCard({
   );
 }
 
-/** The headline numbers. The finance half is simply absent for a viewer
- * without `finance.view`, rather than shown as zero or blanked out. */
-function KpiGrid({
-  summary,
-  finance,
-  periodLabel,
-}: {
-  summary: SalesSummary | null;
-  finance: FinanceSummary | null;
-  periodLabel: string;
-}) {
-  const tiles: { icon: typeof TrendingUp; label: string; value: string; tone?: "good" | "bad" }[] = [
-    { icon: TrendingUp, label: "Revenue", value: formatBDT(summary?.totalRevenueBDT ?? 0) },
-    { icon: ShoppingBag, label: "Orders", value: String(summary?.totalOrders ?? 0) },
-    { icon: Receipt, label: "Average Order", value: formatBDT(summary?.averageOrderValueBDT ?? 0) },
+/**
+ * The headline numbers. The finance half is simply absent for a viewer without
+ * `finance.view`, rather than shown as zero or blanked out.
+ */
+function KpiGrid({ summary, finance }: { summary: SalesSummary | null; finance: FinanceSummary | null }) {
+  const tiles: {
+    icon: typeof TrendingUp;
+    label: string;
+    value: string;
+    hint?: string;
+    tone?: "good" | "bad";
+  }[] = [
+    { icon: TrendingUp, label: "Revenue", value: formatBDT(summary?.totalRevenueBDT ?? 0), hint: "Sales incl. shipping" },
+    { icon: ShoppingBag, label: "Orders", value: String(summary?.totalOrders ?? 0), hint: "Orders placed" },
+    {
+      icon: Receipt,
+      label: "Average Order",
+      value: formatBDT(summary?.averageOrderValueBDT ?? 0),
+      hint: "Revenue per order",
+    },
+    {
+      icon: Package,
+      label: "Products Sold",
+      value: String((summary?.topProducts ?? []).reduce((sum, p) => sum + p.quantitySold, 0)),
+      hint: "Units, top products",
+    },
   ];
 
   if (finance) {
     tiles.push(
-      { icon: BadgeDollarSign, label: "Product Cost", value: formatBDT(finance.costOfGoodsSoldBDT) },
-      { icon: TrendingDown, label: "Expenses", value: formatBDT(finance.totalExpensesBDT) },
+      {
+        icon: BadgeDollarSign,
+        label: "COGS",
+        value: formatBDT(finance.costOfGoodsSoldBDT),
+        hint: "Cost of goods sold",
+      },
+      {
+        icon: TrendingDown,
+        label: "Expenses",
+        value: formatBDT(finance.totalExpensesBDT),
+        hint: "Confirmed operating spend",
+      },
       {
         icon: finance.grossProfitBDT >= 0 ? TrendingUp : TrendingDown,
         label: "Gross Profit",
         value: formatBDT(finance.grossProfitBDT),
+        hint: "Sales minus product cost",
         tone: finance.grossProfitBDT >= 0 ? "good" : "bad",
       },
       {
         icon: finance.netProfitBDT >= 0 ? TrendingUp : TrendingDown,
         label: finance.netProfitBDT >= 0 ? "Net Profit" : "Net Loss",
         value: formatBDT(finance.netProfitBDT),
+        hint: "After all expenses",
         tone: finance.netProfitBDT >= 0 ? "good" : "bad",
       },
-      { icon: Wallet, label: "Cash Balance", value: formatBDT(finance.cashBalanceBDT) }
+      { icon: Wallet, label: "Cash Balance", value: formatBDT(finance.cashBalanceBDT), hint: "Investment + sales − spend" }
     );
   }
 
   return (
     <div>
-      <p className="mb-3 text-xs font-bold uppercase tracking-[0.06em] text-brown-500">
-        Totals for {periodLabel}
-      </p>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
         {tiles.map((tile) => (
-          <div key={tile.label} className="flex flex-col gap-3 rounded-xl border border-brown-600/10 bg-surface p-4">
-            <span
-              className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
-                tile.tone === "bad" ? "bg-danger-soft text-danger" : "bg-green-950/5 text-green-900"
-              }`}
-            >
-              <tile.icon size={16} />
-            </span>
-            <span>
+          <div
+            key={tile.label}
+            className="rounded-xl border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)] transition-shadow hover:shadow-md"
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-brown-500">{tile.label}</span>
               <span
-                className={`block text-lg font-semibold ${
-                  tile.tone === "bad" ? "text-danger" : "text-green-950"
+                className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+                  tile.tone === "bad" ? "bg-danger-soft text-danger" : "bg-green-950/5 text-green-900"
                 }`}
               >
-                {tile.value}
+                <tile.icon size={15} />
               </span>
-              <span className="block text-xs text-brown-500">{tile.label}</span>
-            </span>
+            </div>
+            <p
+              className={`font-serif text-[26px] font-semibold leading-none tracking-tight tabular-nums ${
+                tile.tone === "bad" ? "text-danger" : "text-green-950"
+              }`}
+            >
+              {tile.value}
+            </p>
+            {tile.hint && <p className="mt-2 text-xs text-brown-500">{tile.hint}</p>}
           </div>
         ))}
       </div>
       {finance && finance.ordersWithUnknownCostBasis > 0 && (
-        <p className="mt-3 text-xs text-gold-700">
+        <p className="mt-3 rounded-lg border border-gold-500/40 bg-gold-soft px-4 py-2.5 text-xs text-gold-700">
           {finance.ordersWithUnknownCostBasis} order(s) in this period include an item with no purchase-batch cost
           recorded, so product cost and profit are partial totals.
         </p>

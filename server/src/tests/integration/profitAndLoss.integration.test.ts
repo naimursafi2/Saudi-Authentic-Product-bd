@@ -5,6 +5,8 @@ import { createAuthedUser, authHeader } from "./helpers";
 import { CategoryModel } from "../../models/Category.model";
 import { ProductModel } from "../../models/Product.model";
 import { PurchaseModel } from "../../models/Purchase.model";
+import mongoose from "mongoose";
+import { OrderModel } from "../../models/Order.model";
 
 /**
  * The Purchase/Landed-Cost system feeding the finance module's profit-and-loss
@@ -272,6 +274,329 @@ describe("Finance profit & loss, sourced from real purchase costs", () => {
     const summary = summaryRes.body.data.summary;
     expect(summary.netProfitBDT).toBe(series.reduce((sum, r) => sum + r.profitBDT, 0));
     expect(summary.costOfGoodsSoldBDT).toBe(series.reduce((sum, r) => sum + r.costOfGoodsSoldBDT, 0));
+  });
+
+  /**
+   * Returns and refunds are the easiest place in this whole module to
+   * accidentally count the same money twice, so each stage of the lifecycle is
+   * pinned separately: goods back on the shelf must release the cost, and the
+   * money going back to the customer must hit the P&L once — as the refund
+   * expense — never also as a hole in revenue.
+   */
+  describe("returned and refunded orders", () => {
+    /** Sells 2 units at ৳1,500 against a ৳900/unit batch, then walks the order
+     * to `delivered` so it can be returned. */
+    async function sellAndDeliver() {
+      const { token: superAdminToken, user: superAdmin } = await createAuthedUser({ role: "super_admin" });
+      const { token: customerToken } = await createAuthedUser({ role: "customer" });
+      const { token: agentToken, user: agent } = await createAuthedUser({ role: "delivery_agent" });
+
+      const product = await seedProduct(1500);
+      const variantId = product.variants[0]!._id!.toString();
+      await receiveBatch({
+        product: product._id.toString(),
+        variantId,
+        quantity: 20,
+        productCostBDT: 18_000, // ৳900 per unit
+        recordedBy: superAdmin._id.toString(),
+      });
+
+      const created = await request(app)
+        .post("/api/v1/orders")
+        .set(...authHeader(customerToken))
+        .send({
+          items: [{ productId: product._id.toString(), variantId, quantity: 2 }],
+          shippingAddress,
+          deliveryMethod: "standard",
+          paymentMethod: "cod",
+        });
+      expect(created.status).toBe(201);
+      const order = created.body.data.order as { _id: string; subtotalBDT: number };
+
+      for (const status of ["confirmed", "processing", "packed", "ready_for_dispatch"]) {
+        await request(app)
+          .patch(`/api/v1/orders/${order._id}/status`)
+          .set(...authHeader(superAdminToken))
+          .send({ status })
+          .expect(200);
+      }
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/assign-agent`)
+        .set(...authHeader(superAdminToken))
+        .send({ agentId: agent._id.toString() })
+        .expect(200);
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/delivery-status`)
+        .set(...authHeader(agentToken))
+        .send({ status: "picked_up" })
+        .expect(200);
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/delivery-status`)
+        .set(...authHeader(agentToken))
+        .send({ status: "out_for_delivery" })
+        .expect(200);
+      await request(app)
+        .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
+        .set(...authHeader(agentToken))
+        .send({})
+        .expect(200);
+      const withOtp = await OrderModel.findById(order._id).select("+otpCode");
+      await request(app)
+        .post(`/api/v1/orders/${order._id}/verify-otp`)
+        .set(...authHeader(agentToken))
+        .send({ otp: withOtp!.otpCode })
+        .expect(200);
+
+      return { order, superAdminToken };
+    }
+
+    async function summaryFor(token: string) {
+      const res = await request(app).get("/api/v1/finance/summary").set(...authHeader(token));
+      expect(res.status).toBe(200);
+      return res.body.data.summary;
+    }
+
+    it("charges full cost while the goods are still with the customer", async () => {
+      const { order, superAdminToken } = await sellAndDeliver();
+
+      const summary = await summaryFor(superAdminToken);
+      expect(summary.netSellingRevenueBDT).toBe(order.subtotalBDT);
+      expect(summary.costOfGoodsSoldBDT).toBe(1800);
+      expect(summary.grossProfitBDT).toBe(order.subtotalBDT - 1800);
+    });
+
+    it("releases the cost of goods once a return puts the stock back", async () => {
+      const { order, superAdminToken } = await sellAndDeliver();
+
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/status`)
+        .set(...authHeader(superAdminToken))
+        .send({ status: "returned" })
+        .expect(200);
+
+      const summary = await summaryFor(superAdminToken);
+      // The units are on the shelf again and their cost is carried by the
+      // inventory valuation, so charging COGS here as well would count it
+      // twice.
+      expect(summary.costOfGoodsSoldBDT).toBe(0);
+      // No refund has been approved yet, so nothing has been paid back and
+      // the order's revenue still stands.
+      expect(summary.netSellingRevenueBDT).toBe(order.subtotalBDT);
+      expect(summary.totalExpensesBDT).toBe(0);
+    });
+
+    it("counts an approved refund once — as an expense, not also as lost revenue", async () => {
+      const { order, superAdminToken } = await sellAndDeliver();
+
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/status`)
+        .set(...authHeader(superAdminToken))
+        .send({ status: "returned" })
+        .expect(200);
+
+      const refund = await request(app)
+        .post("/api/v1/refunds")
+        .set(...authHeader(superAdminToken))
+        .send({ orderId: order._id, reasonCategory: "damaged", requestedAmountBDT: order.subtotalBDT });
+      expect(refund.status).toBe(201);
+      // A refund is reviewed first (pending_review -> pending_approval), then
+      // financially approved — the same two-step path the refunds page drives.
+      await request(app)
+        .patch(`/api/v1/refunds/${refund.body.data.refund._id}/review`)
+        .set(...authHeader(superAdminToken))
+        .send({ decision: "approve" })
+        .expect(200);
+      await request(app)
+        .patch(`/api/v1/refunds/${refund.body.data.refund._id}/approve`)
+        .set(...authHeader(superAdminToken))
+        .send({})
+        .expect(200);
+
+      const refunded = await OrderModel.findById(order._id);
+      expect(refunded?.status).toBe("refunded");
+
+      const summary = await summaryFor(superAdminToken);
+      // The sale still happened, so its revenue stays on the books...
+      expect(summary.netSellingRevenueBDT).toBe(order.subtotalBDT);
+      // ...the goods came back, so no cost of goods...
+      expect(summary.costOfGoodsSoldBDT).toBe(0);
+      // ...and the money returned is booked exactly once, as the refund expense.
+      expect(summary.totalExpensesBDT).toBe(order.subtotalBDT);
+      // A fully refunded, fully restocked order therefore nets out to zero
+      // rather than to minus-the-refund (the double count) or plus-the-sale.
+      expect(summary.netProfitBDT).toBe(0);
+    });
+
+    it("nets a partial refund down to the amount actually returned", async () => {
+      const { order, superAdminToken } = await sellAndDeliver();
+
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/status`)
+        .set(...authHeader(superAdminToken))
+        .send({ status: "returned" })
+        .expect(200);
+
+      const partial = 1000;
+      const refund = await request(app)
+        .post("/api/v1/refunds")
+        .set(...authHeader(superAdminToken))
+        .send({ orderId: order._id, reasonCategory: "damaged", requestedAmountBDT: partial });
+      // A refund is reviewed first (pending_review -> pending_approval), then
+      // financially approved — the same two-step path the refunds page drives.
+      await request(app)
+        .patch(`/api/v1/refunds/${refund.body.data.refund._id}/review`)
+        .set(...authHeader(superAdminToken))
+        .send({ decision: "approve" })
+        .expect(200);
+      await request(app)
+        .patch(`/api/v1/refunds/${refund.body.data.refund._id}/approve`)
+        .set(...authHeader(superAdminToken))
+        .send({})
+        .expect(200);
+
+      const summary = await summaryFor(superAdminToken);
+      expect(summary.totalExpensesBDT).toBe(partial);
+      // Only the amount actually returned is deducted — the rest of the sale
+      // is still the shop's.
+      expect(summary.netProfitBDT).toBe(order.subtotalBDT - partial);
+    });
+
+    it("drops a cancelled order out of revenue and cost entirely", async () => {
+      const { token: superAdminToken, user: superAdmin } = await createAuthedUser({ role: "super_admin" });
+      const { token: customerToken } = await createAuthedUser({ role: "customer" });
+
+      const product = await seedProduct(1500);
+      const variantId = product.variants[0]!._id!.toString();
+      await receiveBatch({
+        product: product._id.toString(),
+        variantId,
+        quantity: 10,
+        productCostBDT: 9000,
+        recordedBy: superAdmin._id.toString(),
+      });
+
+      const created = await request(app)
+        .post("/api/v1/orders")
+        .set(...authHeader(customerToken))
+        .send({
+          items: [{ productId: product._id.toString(), variantId, quantity: 2 }],
+          shippingAddress,
+          deliveryMethod: "standard",
+          paymentMethod: "cod",
+        });
+      await request(app)
+        .patch(`/api/v1/orders/${created.body.data.order._id}/status`)
+        .set(...authHeader(superAdminToken))
+        .send({ status: "cancelled" })
+        .expect(200);
+
+      const summary = await summaryFor(superAdminToken);
+      // No money ever changed hands, so a cancelled order contributes nothing
+      // on either side.
+      expect(summary.netSellingRevenueBDT).toBe(0);
+      expect(summary.costOfGoodsSoldBDT).toBe(0);
+      expect(summary.totalRevenueBDT).toBe(0);
+      expect(summary.netProfitBDT).toBe(0);
+    });
+
+    it("reports the same figures on the period table as on the summary", async () => {
+      const { order, superAdminToken } = await sellAndDeliver();
+      await request(app)
+        .patch(`/api/v1/orders/${order._id}/status`)
+        .set(...authHeader(superAdminToken))
+        .send({ status: "returned" })
+        .expect(200);
+      const refund = await request(app)
+        .post("/api/v1/refunds")
+        .set(...authHeader(superAdminToken))
+        .send({ orderId: order._id, reasonCategory: "damaged", requestedAmountBDT: order.subtotalBDT });
+      // A refund is reviewed first (pending_review -> pending_approval), then
+      // financially approved — the same two-step path the refunds page drives.
+      await request(app)
+        .patch(`/api/v1/refunds/${refund.body.data.refund._id}/review`)
+        .set(...authHeader(superAdminToken))
+        .send({ decision: "approve" })
+        .expect(200);
+      await request(app)
+        .patch(`/api/v1/refunds/${refund.body.data.refund._id}/approve`)
+        .set(...authHeader(superAdminToken))
+        .send({})
+        .expect(200);
+
+      const summary = await summaryFor(superAdminToken);
+      const seriesRes = await request(app)
+        .get("/api/v1/finance/revenue-vs-expense?groupBy=day")
+        .set(...authHeader(superAdminToken));
+      const series = seriesRes.body.data.timeSeries as {
+        netSellingRevenueBDT: number;
+        costOfGoodsSoldBDT: number;
+        expenseBDT: number;
+        profitBDT: number;
+      }[];
+
+      const sum = (pick: (r: (typeof series)[number]) => number) => series.reduce((t, r) => t + pick(r), 0);
+      expect(sum((r) => r.netSellingRevenueBDT)).toBe(summary.netSellingRevenueBDT);
+      expect(sum((r) => r.costOfGoodsSoldBDT)).toBe(summary.costOfGoodsSoldBDT);
+      expect(sum((r) => r.expenseBDT)).toBe(summary.totalExpensesBDT);
+      expect(sum((r) => r.profitBDT)).toBe(summary.netProfitBDT);
+
+      // The sales report the Analytics revenue chart reads must agree too.
+      const salesRes = await request(app).get("/api/v1/reports/sales").set(...authHeader(superAdminToken));
+      expect(salesRes.body.data.sales.totalRevenueBDT).toBe(summary.totalRevenueBDT);
+    });
+  });
+
+  it("still counts an order stored without a discount field at all", async () => {
+    const { token: superAdminToken, user: superAdmin } = await createAuthedUser({ role: "super_admin" });
+    const { token: customerToken } = await createAuthedUser({ role: "customer" });
+
+    const product = await seedProduct(1500);
+    const variantId = product.variants[0]!._id!.toString();
+    await receiveBatch({
+      product: product._id.toString(),
+      variantId,
+      quantity: 10,
+      productCostBDT: 9000,
+      recordedBy: superAdmin._id.toString(),
+    });
+
+    const created = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(customerToken))
+      .send({
+        items: [{ productId: product._id.toString(), variantId, quantity: 2 }],
+        shippingAddress,
+        deliveryMethod: "standard",
+        paymentMethod: "cod",
+      })
+      .expect(201);
+
+    // Orders written before `discountBDT` existed have no such field stored.
+    // `$subtract` with a missing operand yields null and `$sum` skips it, so
+    // without an `$ifNull` guard the whole order silently disappears from
+    // revenue and profit — which is exactly what was happening in the live
+    // database.
+    await OrderModel.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(created.body.data.order._id as string) },
+      { $unset: { discountBDT: "" } }
+    );
+
+    const res = await request(app).get("/api/v1/finance/summary").set(...authHeader(superAdminToken));
+    const summary = res.body.data.summary;
+
+    expect(summary.netSellingRevenueBDT).toBe(3000);
+    expect(summary.costOfGoodsSoldBDT).toBe(1800);
+    expect(summary.grossProfitBDT).toBe(1200);
+
+    // The period table must not lose it either.
+    const series = await request(app)
+      .get("/api/v1/finance/revenue-vs-expense?groupBy=day")
+      .set(...authHeader(superAdminToken));
+    const total = (series.body.data.timeSeries as { netSellingRevenueBDT: number }[]).reduce(
+      (sum, r) => sum + r.netSellingRevenueBDT,
+      0
+    );
+    expect(total).toBe(3000);
   });
 
   it("keeps the P&L endpoints behind finance.view", async () => {

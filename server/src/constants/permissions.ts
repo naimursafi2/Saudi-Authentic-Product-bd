@@ -80,6 +80,12 @@ export const PERMISSIONS = [
   "content.homepage.delete",
   "content.navigation.manage",
   "content.pages.manage",
+  // Narrower than "content.pages.manage" (which Co-Admin does not hold) —
+  // this grants ONLY the Return & Refund Policy page, never About/Contact/
+  // Shipping. Same shape as "content.branding.manage" carving the logo upload
+  // out of "settings.manage". The per-page restriction is enforced in
+  // staticPage.service.ts; holding this key alone does not widen the route.
+  "content.refundPolicy.manage",
   "content.branding.manage",
   "settings.manage",
 
@@ -227,6 +233,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
       { key: "content.homepage.delete", label: "Delete homepage banners & sections" },
       { key: "content.navigation.manage", label: "Edit header nav & footer" },
       { key: "content.pages.manage", label: "Edit About / Contact / Shipping pages" },
+      { key: "content.refundPolicy.manage", label: "Edit the Return & Refund Policy page" },
       { key: "content.branding.manage", label: "Upload/change the company logo" },
       { key: "settings.manage", label: "Edit site settings" },
     ],
@@ -377,6 +384,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "marketing.view",
     "marketing.manage",
     "content.homepage.manage",
+    // Co-Admin handles returns and refunds day to day, so it maintains the
+    // customer-facing Return & Refund Policy — and only that page. The rest
+    // of the static pages stay behind "content.pages.manage", which Co-Admin
+    // does not hold.
+    "content.refundPolicy.manage",
     // Narrower than "settings.manage" (which Co-Admin does not hold, per the
     // deliberate site-settings exclusion) — this grants only the logo
     // upload, not the rest of site settings (name/announcement/contact/
@@ -447,6 +459,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "content.homepage.delete",
     "content.navigation.manage",
     "content.pages.manage",
+    "content.refundPolicy.manage",
     "settings.manage",
     "reviews.view",
     "reviews.delete",

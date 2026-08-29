@@ -67,6 +67,18 @@ const FIELD_VISIBILITY: Record<
     blocksLabel: "Policy Sections",
     cta: false,
   },
+  // Same shape as the Shipping Policy, plus an intro paragraph — the policy
+  // opens with a short summary before the numbered sections.
+  refundPolicy: {
+    heroDescription: false,
+    heroImage: false,
+    introText: true,
+    addressLine: false,
+    blocks: true,
+    blockIcon: false,
+    blocksLabel: "Policy Sections",
+    cta: false,
+  },
 };
 
 export function fromStaticPage(page: ApiStaticPage): StaticPageFormValues {

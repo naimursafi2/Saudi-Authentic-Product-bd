@@ -1,29 +1,21 @@
 import { ExpenseModel, EXPENSE_CATEGORIES } from "../models/Expense.model";
 import { OrderModel } from "../models/Order.model";
 import {
+  cogsContribution,
   dateBucketFormat,
   getSalesSummary,
   getSalesTimeSeries,
+  revenueOrderMatch,
   type SalesGroupBy,
   type SalesSummaryFilter,
 } from "./report.service";
 import { getTotalInvestmentBDT } from "./investment.service";
 import { getInventoryValuation } from "./inventory.service";
 
-/** The order-side `$match` shared by every sales/COGS aggregation, so the
- * revenue and cost halves of the P&L always cover exactly the same orders. */
-function orderMatch(filter: SalesSummaryFilter): Record<string, unknown> {
-  const match: Record<string, unknown> = { status: { $nin: ["cancelled", "refunded"] } };
-  if (filter.from || filter.to) {
-    const range: Record<string, Date> = {};
-    if (filter.from) range.$gte = filter.from;
-    if (filter.to) range.$lte = filter.to;
-    match.createdAt = range;
-  }
-  return match;
-}
-
-/** The Expense-side `$match` — confirmed spend only, dated by `incurredAt`. */
+/** The Expense-side `$match` — confirmed spend only, dated by `incurredAt`.
+ * Includes the `refund` category: an approved refund is booked as a confirmed
+ * expense (`refund.service.ts#finalizeRefundApproval`), which is how money
+ * returned to a customer reaches the P&L. */
 function expenseMatch(filter: SalesSummaryFilter): Record<string, unknown> {
   const match: Record<string, unknown> = { status: "confirmed" };
   if (filter.from || filter.to) {
@@ -46,24 +38,37 @@ function expenseMatch(filter: SalesSummaryFilter): Record<string, unknown> {
  */
 export async function getCostOfGoodsSold(filter: SalesSummaryFilter) {
   const [row] = await OrderModel.aggregate([
-    { $match: orderMatch(filter) },
+    { $match: revenueOrderMatch(filter) },
     {
       $addFields: {
-        netSellingRevenueBDT: { $subtract: ["$subtotalBDT", "$discountBDT"] },
-        cogsBDT: {
+        // `$ifNull` on every term: an order written before a field existed
+        // stores nothing for it, and `$subtract` with a missing operand
+        // evaluates to null, which `$sum` then skips — silently dropping that
+        // whole order out of revenue instead of treating the gap as zero.
+        netSellingRevenueBDT: {
+          $subtract: [{ $ifNull: ["$subtotalBDT", 0] }, { $ifNull: ["$discountBDT", 0] }],
+        },
+        // Zeroed once the order's stock went back on the shelf — see
+        // `cogsContribution`. The order still contributes its revenue.
+        cogsBDT: cogsContribution({
           $sum: {
             $map: {
               input: "$items",
               as: "item",
-              in: { $multiply: ["$$item.unitLandedCostBDT", "$$item.quantity"] },
+              in: {
+                $multiply: [
+                  { $ifNull: ["$$item.unitLandedCostBDT", 0] },
+                  { $ifNull: ["$$item.quantity", 0] },
+                ],
+              },
             },
           },
-        },
-        hasUnknownCostBasis: {
+        }),
+        hasUnknownCostBasis: cogsContribution({
           $anyElementTrue: {
             $map: { input: "$items", as: "item", in: { $eq: ["$$item.costBasisKnown", false] } },
           },
-        },
+        }),
       },
     },
     {
@@ -71,7 +76,11 @@ export async function getCostOfGoodsSold(filter: SalesSummaryFilter) {
         _id: null,
         netSellingRevenueBDT: { $sum: "$netSellingRevenueBDT" },
         costOfGoodsSoldBDT: { $sum: "$cogsBDT" },
-        ordersWithUnknownCostBasis: { $sum: { $cond: ["$hasUnknownCostBasis", 1, 0] } },
+        // Only orders that actually contribute cost can have an unknown one,
+        // so a restocked order never gets flagged as a partial total.
+        ordersWithUnknownCostBasis: {
+          $sum: { $cond: [{ $eq: ["$hasUnknownCostBasis", true] }, 1, 0] },
+        },
       },
     },
   ]);
@@ -110,6 +119,21 @@ export async function getCostOfGoodsSold(filter: SalesSummaryFilter) {
  * `ordersWithUnknownCostBasis` counts orders holding at least one item that
  * had no purchase-batch history at sale time, so a partial COGS figure can be
  * labelled as such rather than silently reading as "this sold at zero cost".
+ *
+ * ## Returns and refunds are counted exactly once
+ *
+ * A refunded or returned order is never recorded twice. The order keeps its
+ * original revenue; what changes is:
+ *
+ * - **Cost of goods sold** drops to zero for it, because `unwindOrder` put the
+ *   stock back and `getInventoryValuation()` now carries that cost instead.
+ * - **The money returned** reaches the P&L once, as the confirmed `refund`
+ *   expense that `finalizeRefundApproval` creates — not as a second deduction
+ *   from revenue.
+ *
+ * Removing the revenue *and* booking the refund expense would charge the same
+ * refund against profit twice; charging COGS on stock that is back on the
+ * shelf would count the same cost twice. Neither happens.
  */
 export async function getFinanceSummary(filter: SalesSummaryFilter) {
   const match = expenseMatch(filter);
@@ -238,20 +262,33 @@ export async function getRevenueVsExpenseTimeSeries(filter: SalesSummaryFilter, 
  */
 export async function getGrossProfitTimeSeries(filter: SalesSummaryFilter, groupBy: SalesGroupBy) {
   const rows = await OrderModel.aggregate([
-    { $match: orderMatch(filter) },
+    { $match: revenueOrderMatch(filter) },
     {
       $addFields: {
-        netSellingRevenueBDT: { $subtract: ["$subtotalBDT", "$discountBDT"] },
-        cogsBDT: {
+        // `$ifNull` on every term: an order written before a field existed
+        // stores nothing for it, and `$subtract` with a missing operand
+        // evaluates to null, which `$sum` then skips — silently dropping that
+        // whole order out of revenue instead of treating the gap as zero.
+        netSellingRevenueBDT: {
+          $subtract: [{ $ifNull: ["$subtotalBDT", 0] }, { $ifNull: ["$discountBDT", 0] }],
+        },
+        cogsBDT: cogsContribution({
           $sum: {
             $map: {
               input: "$items",
               as: "item",
-              in: { $multiply: ["$$item.unitLandedCostBDT", "$$item.quantity"] },
+              in: {
+                $multiply: [
+                  { $ifNull: ["$$item.unitLandedCostBDT", 0] },
+                  { $ifNull: ["$$item.quantity", 0] },
+                ],
+              },
             },
           },
-        },
-        hasUnknownCostBasis: { $anyElementTrue: { $map: { input: "$items", as: "item", in: { $eq: ["$$item.costBasisKnown", false] } } } },
+        }),
+        hasUnknownCostBasis: cogsContribution({
+          $anyElementTrue: { $map: { input: "$items", as: "item", in: { $eq: ["$$item.costBasisKnown", false] } } },
+        }),
       },
     },
     {
@@ -260,7 +297,9 @@ export async function getGrossProfitTimeSeries(filter: SalesSummaryFilter, group
         netSellingRevenueBDT: { $sum: "$netSellingRevenueBDT" },
         costOfGoodsSoldBDT: { $sum: "$cogsBDT" },
         orders: { $sum: 1 },
-        ordersWithUnknownCostBasis: { $sum: { $cond: ["$hasUnknownCostBasis", 1, 0] } },
+        ordersWithUnknownCostBasis: {
+          $sum: { $cond: [{ $eq: ["$hasUnknownCostBasis", true] }, 1, 0] },
+        },
       },
     },
     { $sort: { _id: 1 } },

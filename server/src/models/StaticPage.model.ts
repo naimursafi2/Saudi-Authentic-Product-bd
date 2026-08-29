@@ -1,15 +1,19 @@
 import { Schema, model, type Document, type Model, type Types } from "mongoose";
 
 /**
- * Fixed 3 types — one singleton document each, lazily seeded by
+ * Fixed set of types — one singleton document each, lazily seeded by
  * `staticPage.service.ts#ensureDefaultPages` — same pattern as
  * `HomepageSection`'s fixed types (editable, not creatable/deletable).
- * Powers the storefront's previously-hardcoded `/about`, `/contact`, and
- * `/shipping-policy` body copy. Contact's phone/email/social links are
- * NOT duplicated here — they stay on the existing `SiteSettings` singleton;
- * this model only adds the page's own intro text and address line.
+ * Powers the storefront's previously-hardcoded `/about`, `/contact`,
+ * `/shipping-policy` and `/refund-policy` body copy. Contact's phone/email/
+ * social links are NOT duplicated here — they stay on the existing
+ * `SiteSettings` singleton; this model only adds the page's own intro text
+ * and address line.
+ *
+ * The values below are seed defaults, not business values: every one of them
+ * is editable in the admin panel and an admin's edits survive a re-seed.
  */
-export const STATIC_PAGE_TYPES = ["about", "contact", "shippingPolicy"] as const;
+export const STATIC_PAGE_TYPES = ["about", "contact", "shippingPolicy", "refundPolicy"] as const;
 export type StaticPageType = (typeof STATIC_PAGE_TYPES)[number];
 
 /** Allow-listed lucide icon names for About's value-highlight blocks. */
@@ -175,6 +179,50 @@ export const STATIC_PAGE_DEFAULTS: Array<
       {
         title: "Order Tracking",
         body: "Once your order is dispatched, you will receive a confirmation with tracking details via email, and you can track its status anytime using your order number and email on our Track Order page.",
+        isVisible: true,
+      },
+    ],
+    ctaTitle: undefined,
+    ctaDescription: undefined,
+    ctaButtonLabel: undefined,
+    ctaButtonHref: undefined,
+  },
+  {
+    type: "refundPolicy",
+    heroTitle: "Return & Refund Policy",
+    heroDescription: undefined,
+    introText:
+      "We want you to be happy with every order. If something arrives damaged, incorrect, or not as described, here is exactly how returns and refunds work.",
+    addressLine: undefined,
+    blocks: [
+      {
+        title: "When You Can Request a Refund",
+        body: "You can request a refund if your order arrives damaged, if you received the wrong item, or if the product is not as described. Requests are made from your account's order history once the order has been marked as returned.",
+        isVisible: true,
+      },
+      {
+        title: "How a Request Is Reviewed",
+        body: "Every request is reviewed by our team before it is approved. We may ask for a photo or a short description so we can understand what went wrong and put it right quickly.",
+        isVisible: true,
+      },
+      {
+        title: "Returning the Items",
+        body: "Once a return is approved, the returned items are added back to our stock and the order is updated to show that the items are no longer with you.",
+        isVisible: true,
+      },
+      {
+        title: "How Refunds Are Adjusted",
+        body: "A returned or refunded order is always adjusted against your original order. The amount refunded and the cost of the returned items are corrected on that same order — they are never recorded again as a separate sale, expense, or cost. This means an order is never counted twice, and you are never charged or credited twice for the same purchase.",
+        isVisible: true,
+      },
+      {
+        title: "Partial Returns and Refunds",
+        body: "If only part of your order is returned, only the amount actually refunded is adjusted. The rest of the order stands as normal.",
+        isVisible: true,
+      },
+      {
+        title: "When You Will Receive Your Money",
+        body: "For a cash-on-delivery order we arrange the refund with you directly. For an order paid online, the refund is returned through the same payment method you used.",
         isVisible: true,
       },
     ],

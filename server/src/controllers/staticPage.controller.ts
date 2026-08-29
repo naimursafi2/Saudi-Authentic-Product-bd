@@ -21,7 +21,8 @@ export const updatePage = catchAsync(async (req: Request, res: Response) => {
     paramStr(req.params.type) as StaticPageType,
     req.body,
     actorOf(req),
-    req.file
+    req.file,
+    req.user!.permissions ?? []
   );
   sendSuccess(res, 200, "Page updated", { page });
 });

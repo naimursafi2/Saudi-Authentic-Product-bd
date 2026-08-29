@@ -43,6 +43,30 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   refunded: [],
 };
 
+/**
+ * Statuses excluded from revenue. **Only `cancelled`** — a cancelled order
+ * never completed, so no money was ever taken for it.
+ *
+ * A `returned`/`refunded` order deliberately stays IN revenue. This project
+ * books a refund as a confirmed `Expense` (category `refund`, see
+ * `refund.service.ts#finalizeRefundApproval`), so the money going back to the
+ * customer is already accounted for on the expense side. Dropping the order's
+ * revenue as well would charge the same refund against profit twice.
+ */
+export const REVENUE_EXCLUDED_STATUSES: OrderStatus[] = ["cancelled"];
+
+/**
+ * Statuses whose stock was credited back to inventory by
+ * `order.service.ts#unwindOrder`, and which therefore contribute **no cost of
+ * goods sold**: the goods are on the shelf again, so their cost is carried by
+ * `getInventoryValuation()` instead. Charging COGS as well would count the
+ * same cost twice.
+ *
+ * `refunded` is included because an order only reaches it through `returned`,
+ * where the restock already happened — it is never unwound twice.
+ */
+export const COGS_EXCLUDED_STATUSES: OrderStatus[] = ["cancelled", "returned", "refunded"];
+
 /** Statuses that may only be reached through their own dedicated delivery-agent
  * endpoint (assign-agent / delivery-status / verify-otp / delivery-failed),
  * never through the generic `PATCH /orders/:id/status`. */

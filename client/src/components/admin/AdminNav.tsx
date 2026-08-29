@@ -64,12 +64,7 @@ interface NavItem {
  */
 const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  {
-    href: "/admin/analytics",
-    label: "Business Overview",
-    icon: ChartPie,
-    permissions: ["reports.view"],
-  },
+  { href: "/admin/analytics", label: "Analytics", icon: ChartPie, permissions: ["reports.view"] },
   { href: "/admin/products", label: "Products", icon: Package, permissions: ["products.view"] },
   {
     href: "/admin/categories",
@@ -128,7 +123,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: PanelBottom,
     permissions: ["content.navigation.manage"],
   },
-  { href: "/admin/pages", label: "Pages", icon: FileText, permissions: ["content.pages.manage"] },
+  {
+    href: "/admin/pages",
+    label: "Pages",
+    icon: FileText,
+    // Co-Admin holds only `content.refundPolicy.manage`, which reaches this
+    // page for the Return & Refund Policy tab alone.
+    permissions: ["content.pages.manage", "content.refundPolicy.manage"],
+  },
   {
     href: "/admin/settings",
     label: "Settings",

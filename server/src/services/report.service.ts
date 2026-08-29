@@ -6,6 +6,7 @@ import { SalaryPaymentModel } from "../models/SalaryPayment.model";
 import { countPendingLeaves } from "./leave.service";
 import { countLowStockProducts, countOutOfStockProducts } from "./inventory.service";
 import { listAuditLogs } from "./auditLog.service";
+import { COGS_EXCLUDED_STATUSES, REVENUE_EXCLUDED_STATUSES } from "../constants/orderStatus";
 import type { Role } from "../constants/roles";
 
 export interface SalesSummaryFilter {
@@ -13,14 +14,38 @@ export interface SalesSummaryFilter {
   to?: Date;
 }
 
-export async function getSalesSummary(filter: SalesSummaryFilter) {
-  const match: Record<string, unknown> = { status: { $nin: ["cancelled", "refunded"] } };
+/**
+ * The one order `$match` every revenue figure in this codebase is built on —
+ * KPI tiles, sales time series, the finance summary, the P&L period table and
+ * the gross-profit report all call this, so they cannot drift apart.
+ *
+ * Excludes only `cancelled` (see `REVENUE_EXCLUDED_STATUSES` for why a
+ * returned/refunded order stays in).
+ */
+export function revenueOrderMatch(filter: SalesSummaryFilter): Record<string, unknown> {
+  const match: Record<string, unknown> = { status: { $nin: REVENUE_EXCLUDED_STATUSES } };
   if (filter.from || filter.to) {
     const range: Record<string, Date> = {};
     if (filter.from) range.$gte = filter.from;
     if (filter.to) range.$lte = filter.to;
     match.createdAt = range;
   }
+  return match;
+}
+
+/**
+ * A `$cond` that zeroes an order's cost of goods sold once its stock has been
+ * credited back to inventory. Used *inside* a `revenueOrderMatch` aggregation
+ * rather than as a second `$match`, so the revenue and cost halves of every
+ * report always cover exactly the same set of orders and line up
+ * period-for-period.
+ */
+export function cogsContribution(expression: unknown): Record<string, unknown> {
+  return { $cond: [{ $in: ["$status", COGS_EXCLUDED_STATUSES] }, 0, expression] };
+}
+
+export async function getSalesSummary(filter: SalesSummaryFilter) {
+  const match = revenueOrderMatch(filter);
 
   const [totals] = await OrderModel.aggregate([
     { $match: match },
@@ -126,13 +151,7 @@ export function dateBucketFormat(groupBy: SalesGroupBy): string {
  * bucket instead of collapsed to one total.
  */
 export async function getSalesTimeSeries(filter: SalesSummaryFilter, groupBy: SalesGroupBy) {
-  const match: Record<string, unknown> = { status: { $nin: ["cancelled", "refunded"] } };
-  if (filter.from || filter.to) {
-    const range: Record<string, Date> = {};
-    if (filter.from) range.$gte = filter.from;
-    if (filter.to) range.$lte = filter.to;
-    match.createdAt = range;
-  }
+  const match = revenueOrderMatch(filter);
 
   const rows = await OrderModel.aggregate([
     { $match: match },

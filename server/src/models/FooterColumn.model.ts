@@ -60,7 +60,8 @@ export const FOOTER_COLUMN_DEFAULTS: Array<
     links: [
       { label: "Track Order", href: "/track-order", sortOrder: 0 },
       { label: "Shipping Policy", href: "/shipping-policy", sortOrder: 1 },
-      { label: "Contact Us", href: "/contact", sortOrder: 2 },
+      { label: "Return & Refund Policy", href: "/refund-policy", sortOrder: 2 },
+      { label: "Contact Us", href: "/contact", sortOrder: 3 },
     ],
   },
 ];

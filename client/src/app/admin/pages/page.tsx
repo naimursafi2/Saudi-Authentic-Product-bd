@@ -14,16 +14,26 @@ const PAGE_LABELS: Record<StaticPageType, string> = {
   about: "About",
   contact: "Contact",
   shippingPolicy: "Shipping Policy",
+  refundPolicy: "Return & Refund Policy",
 };
 
-const PAGE_TYPES: StaticPageType[] = ["about", "contact", "shippingPolicy"];
+const PAGE_TYPES: StaticPageType[] = ["about", "contact", "shippingPolicy", "refundPolicy"];
 
 export default function AdminStaticPagesPage() {
   const { hasPermission } = useAuth();
-  const isRestricted = !hasPermission("content.pages.manage");
+  const canManageAllPages = hasPermission("content.pages.manage");
+  const canManageRefundPolicy = canManageAllPages || hasPermission("content.refundPolicy.manage");
+  const isRestricted = !canManageAllPages && !canManageRefundPolicy;
+
+  // Co-Admin holds `content.refundPolicy.manage` and nothing wider, so it sees
+  // only that one tab. The server enforces the same rule in
+  // staticPage.service.ts — this just avoids offering a tab that would 403.
+  const editableTypes: StaticPageType[] = canManageAllPages ? PAGE_TYPES : ["refundPolicy"];
 
   const [pages, setPages] = useState<ApiStaticPage[]>([]);
-  const [activeType, setActiveType] = useState<StaticPageType>("about");
+  const [activeType, setActiveType] = useState<StaticPageType>(
+    canManageAllPages ? "about" : "refundPolicy"
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -74,7 +84,7 @@ export default function AdminStaticPagesPage() {
         <EmptyState
           icon={FileText}
           title="Access restricted"
-          description="Static page content is available to Admin and Super Admin only."
+          description="Static page content is available to Admin, Super Admin and (for the Return & Refund Policy) Co-Admin."
         />
       </div>
     );
@@ -83,7 +93,7 @@ export default function AdminStaticPagesPage() {
   if (isLoading) {
     return (
       <div>
-        <PageHeader title="Pages" description="Edit the About, Contact and Shipping Policy pages." />
+        <PageHeader title="Pages" description="Edit the About, Contact, Shipping Policy and Return & Refund Policy pages." />
         <TableSkeleton />
       </div>
     );
@@ -92,7 +102,7 @@ export default function AdminStaticPagesPage() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Pages" description="Edit the About, Contact and Shipping Policy pages." />
+        <PageHeader title="Pages" description="Edit the About, Contact, Shipping Policy and Return & Refund Policy pages." />
         <ErrorState message={error} />
       </div>
     );
@@ -104,11 +114,11 @@ export default function AdminStaticPagesPage() {
     <div>
       <PageHeader
         title="Pages"
-        description="Edit the About, Contact and Shipping Policy pages. Contact details (phone/email/social) are managed under Settings."
+        description="Edit the About, Contact, Shipping Policy and Return & Refund Policy pages. Contact details (phone/email/social) are managed under Settings."
       />
 
       <div className="mb-6 flex gap-1 border-b border-brown-600/10">
-        {PAGE_TYPES.map((type) => (
+        {editableTypes.map((type) => (
           <button
             key={type}
             onClick={() => setActiveType(type)}

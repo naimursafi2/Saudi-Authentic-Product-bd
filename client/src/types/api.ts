@@ -281,7 +281,7 @@ export interface ApiFooterColumn {
   updatedAt: string;
 }
 
-export type StaticPageType = "about" | "contact" | "shippingPolicy";
+export type StaticPageType = "about" | "contact" | "shippingPolicy" | "refundPolicy";
 
 export type StaticPageBlockIcon =
   | "BadgeCheck"

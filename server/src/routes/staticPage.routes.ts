@@ -13,11 +13,13 @@ const router = Router();
 router.get("/", staticPageController.listPages);
 router.get("/:type", validate({ params: staticPageTypeParamSchema }), staticPageController.getPage);
 
-// -- Admin / Super Admin only --
+// -- Admin / Super Admin (all pages), Co-Admin (Return & Refund Policy only).
+// Which pages each key actually reaches is enforced in the service — see
+// staticPage.service.ts#assertMayEditPage. --
 router.patch(
   "/:type",
   authenticate,
-  requirePermission("content.pages.manage"),
+  requirePermission("content.pages.manage", "content.refundPolicy.manage"),
   upload.single("heroImage"),
   parseMultipartJsonFields(["blocks"]),
   validate({ params: staticPageTypeParamSchema, body: updateStaticPageSchema }),
