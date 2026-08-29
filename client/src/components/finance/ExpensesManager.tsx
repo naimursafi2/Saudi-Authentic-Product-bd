@@ -14,8 +14,9 @@ import {
   type EditExpenseFields,
 } from "@/lib/api/finance";
 import { listAuditLogs } from "@/lib/api/auditLogs";
+import { getSiteSettings } from "@/lib/api/siteSettings";
 import { ApiClientError } from "@/lib/api/client";
-import { printWithFilename } from "@/lib/print";
+import { downloadReportPdf } from "@/lib/pdfExport";
 import { useAuth } from "@/context/AuthContext";
 import { useConfirm } from "@/context/ConfirmDialogContext";
 import { cn, formatBDT } from "@/lib/utils";
@@ -27,7 +28,7 @@ import { AdminPagination } from "@/components/admin/AdminPagination";
 import { Button } from "@/components/ui/Button";
 import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { ActionBadge, actorName, friendlyNote } from "@/lib/auditLogDisplay";
-import type { ApiAuditLog, ApiExpense, ExpenseCategory, ExpenseMonthSummary, Pagination } from "@/types/api";
+import type { ApiAuditLog, ApiExpense, ApiSiteSettings, ExpenseCategory, ExpenseMonthSummary, Pagination } from "@/types/api";
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   "product_purchase",
@@ -136,6 +137,18 @@ export function ExpensesManager() {
   const [historyExpense, setHistoryExpense] = useState<ApiExpense | null>(null);
   const [historyLogs, setHistoryLogs] = useState<ApiAuditLog[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // The printed report's footer carries the business's own name, so it is read
+  // from the admin-editable SiteSettings singleton rather than written into
+  // this component — renaming the business in the admin panel has to reach the
+  // exported PDF too. A failed load simply leaves the footer off.
+  const [siteSettings, setSiteSettings] = useState<ApiSiteSettings | null>(null);
+
+  useEffect(() => {
+    getSiteSettings()
+      .then(({ data }) => setSiteSettings(data.settings))
+      .catch(() => setSiteSettings(null));
+  }, []);
 
   function loadMonths() {
     getExpenseMonths()
@@ -344,15 +357,44 @@ export function ExpensesManager() {
   }
 
   function handlePrint() {
+    // The button is disabled without a month, so this only ever exports one
+    // month's expenses — and the file is named after that month, not after the
+    // day it was generated. Dating it "today" gave July's and August's reports
+    // the same filename, so saving both collided.
     if (!selectedMonth) return;
-    printWithFilename("Expense-Report");
+    downloadReportPdf({
+      filenamePrefix: "Expense-Report",
+      dateContext: selectedMonth,
+      bannerTitle: "EXPENSES",
+      bannerSubtitle: `${monthLabel(selectedMonth)} · Generated ${new Date().toLocaleDateString()}`,
+      title: `${monthLabel(selectedMonth)} Expenses`,
+      columns: [
+        { header: "Category", width: 0.3 },
+        { header: "Amount", align: "right", width: 0.15 },
+        { header: "Date", width: 0.15 },
+        { header: "Requested By", width: 0.22 },
+        { header: "Status", width: 0.18 },
+      ],
+      // Built from the same `expenses` the table renders, so the file reflects
+      // the month currently selected on screen. The reason line rides along
+      // with the category the way it does in the table cell.
+      rows: expenses.map((expense) => [
+        expense.reason ? `${categoryLabel(expense)} — ${expense.reason}` : categoryLabel(expense),
+        formatBDT(expense.amountBDT),
+        new Date(expense.incurredAt).toLocaleDateString(),
+        personName(expense.recordedBy),
+        expense.status,
+      ]),
+      total: { label: `Total ${monthLabel(selectedMonth)} Expenses`, value: formatBDT(monthTotalBDT) },
+      footer: siteSettings?.siteName ?? "",
+    });
   }
 
   const monthTotalBDT = expenses.reduce((sum, e) => sum + e.amountBDT, 0);
 
   return (
     <div>
-      <div className="print:hidden">
+      <div className="">
         <PageHeader
           title="Expenses"
           description="Operational costs, organized by month. Co-Admin submissions require Admin/Super Admin confirmation."
@@ -367,7 +409,7 @@ export function ExpensesManager() {
       </div>
 
       {months.length > 0 && (
-        <div className="mb-5 flex flex-wrap items-center gap-2 print:hidden">
+        <div className="mb-5 flex flex-wrap items-center gap-2">
           <button
             onClick={() => setSelectedMonth(null)}
             className={cn(
@@ -396,14 +438,7 @@ export function ExpensesManager() {
         </div>
       )}
 
-      {actionError && <p className="mb-4 text-sm text-danger print:hidden">{actionError}</p>}
-
-      <div className="print-header">
-        <strong>EXPENSES</strong>
-        <br />
-        {selectedMonth ? monthLabel(selectedMonth) : "All periods"} &middot; Printed {new Date().toLocaleDateString()}
-      </div>
-      <p className="print-footer">Saudi Authentic Product</p>
+      {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
 
       {isLoading ? (
         <TableSkeleton />
@@ -412,8 +447,8 @@ export function ExpensesManager() {
       ) : expenses.length === 0 ? (
         <EmptyState icon={Receipt} title="No expenses yet" description="Record your first expense to get started." />
       ) : (
-        <div className="print-area overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
-          <div className="flex items-center justify-between px-4 pt-4 print:hidden">
+        <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
+          <div className="flex items-center justify-between px-4 pt-4">
             <h2 className="font-serif text-base text-green-950">
               {selectedMonth ? monthLabel(selectedMonth) : "All Expenses"}
             </h2>
@@ -429,7 +464,7 @@ export function ExpensesManager() {
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Requested By</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 print:hidden" />
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -443,14 +478,14 @@ export function ExpensesManager() {
                         target="_blank"
                         rel="noopener noreferrer"
                         title="View cash memo"
-                        className="ml-1.5 inline-flex text-brown-500 hover:text-green-950 print:hidden"
+                        className="ml-1.5 inline-flex text-brown-500 hover:text-green-950"
                       >
                         <Paperclip size={13} />
                       </a>
                     )}
                     <p className="mt-0.5 truncate text-xs font-normal normal-case text-brown-500">{expense.reason}</p>
                     {expense.lastEditedAt && (
-                      <p className="mt-0.5 text-[11px] font-normal normal-case text-gold-700 print:hidden">
+                      <p className="mt-0.5 text-[11px] font-normal normal-case text-gold-700">
                         Edited by {personName(expense.lastEditedBy)} on {new Date(expense.lastEditedAt).toLocaleDateString()}
                         {expense.lastEditViaRequest ? " (approved edit request)" : ""}
                       </p>
@@ -462,7 +497,7 @@ export function ExpensesManager() {
                   <td className="px-4 py-3">
                     <StatusBadge status={expense.status} />
                   </td>
-                  <td className="px-4 py-3 text-right print:hidden">
+                  <td className="px-4 py-3 text-right">
                     <ActionButtonGroup>
                       {canReview && expense.status === "pending" && (
                         <>

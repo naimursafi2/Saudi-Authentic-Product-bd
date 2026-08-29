@@ -22,6 +22,7 @@ content — all backed by a live MongoDB database (no mock data).
 **Frontend** (`client/`)
 - Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS v4 (CSS-variable design tokens, no `tailwind.config.js`)
+- `jspdf` + `jspdf-autotable` for one-click PDF downloads
 - Vitest + React Testing Library for testing
 
 The two apps are independent — no shared code — and deploy to different
@@ -49,7 +50,7 @@ moderation, HR (leave, tasks, performance, salary, NID records), finance
 permission management system with custom roles, a Grant-Based Approval
 Workflow for high-risk actions, a centralized internal upload registry with a
 delete-approval flow and 15-day recycle bin, audit logging, homepage/navigation/footer/
-static-page content management, site settings, a Business Overview dashboard
+static-page content management (including an editable Return & Refund Policy), site settings, an Analytics dashboard
 charting sales, orders and profit/loss over a day/week/month/custom range, and
 sales/delivery analytics with CSV/PDF export.
 
@@ -186,9 +187,11 @@ or any deployed environment.
   its stock and coupon use until someone cancels it.
 - No SMS gateway connected — SMS-dependent features (delivery OTP, campaign
   SMS) degrade to email/other channels.
-- No PDF-generation library anywhere — every "print"/"export as PDF" action
-  (invoices, Expenses, Sales Report) uses the browser's own print-to-PDF;
-  CSV export is hand-rolled.
+- Every "Print" action (invoices, Expenses, Sales Report) generates a PDF with
+  `jspdf` and downloads it directly — no print dialog. The PDF is drawn rather
+  than captured from the page, so it mirrors the on-screen layout rather than
+  reproducing it exactly, and amounts print as "BDT" since the built-in PDF
+  fonts have no Bengali Taka sign. CSV export is hand-rolled.
 - No e2e/browser test suite — UI changes need manual verification.
 - Test coverage is solid but not exhaustive on either side.
 

@@ -13,8 +13,17 @@ function escapeCsvCell(value: unknown): string {
 /** Triggers a browser download of an already-fetched/generated Blob via a
  * synthetic `<a download>` click — the filename is fully controlled here,
  * client-side, regardless of what content-type the blob is. Shared by
- * `downloadCsv` below and any other "download this file" action (e.g. a
- * server-generated PDF) so there's one implementation of the boilerplate. */
+ * `downloadCsv` below and `pdfExport.ts`, so every file this app hands the
+ * user leaves through one implementation.
+ *
+ * A fresh object URL is minted per call and never reused, so two downloads
+ * cannot serve each other's bytes. The revoke is deferred rather than run in
+ * the same tick as `click()`: the click only *queues* the download, and
+ * revoking the URL synchronously can pull the blob out from under a browser
+ * that has not started reading it yet, which truncates or drops the file
+ * while the on-screen preview still looks right. A macrotask is enough for
+ * the download to be committed, and the URL is still released so the blob
+ * can be garbage-collected. */
 export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -23,7 +32,7 @@ export function downloadBlob(filename: string, blob: Blob): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {

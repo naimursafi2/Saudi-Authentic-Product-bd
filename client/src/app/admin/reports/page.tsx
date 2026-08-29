@@ -7,7 +7,7 @@ import { getDeliveryAgentPerformance, getSalesSummary, getSalesTimeSeries } from
 import { getSiteSettings } from "@/lib/api/siteSettings";
 import { formatBDT } from "@/lib/utils";
 import { downloadCsv } from "@/lib/csvExport";
-import { printWithFilename } from "@/lib/print";
+import { downloadReportPdf } from "@/lib/pdfExport";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -90,18 +90,66 @@ export default function AdminReportsPage() {
   }
 
   function handlePrint() {
-    printWithFilename("Sales-Report");
+    // Built from the same `timeSeries`/`summary` the table above renders, so
+    // the downloaded file always matches what is on screen — including the
+    // active date range and grouping, which are recorded in the meta lines
+    // rather than left for the reader to guess.
+    const siteName = siteSettings?.siteName ?? "Saudi Authentic Product";
+    const label = GROUP_BY_OPTIONS.find((o) => o.value === groupBy)?.label ?? "Sales";
+
+    // The filename identifies *which* report this is, not merely that it is a
+    // sales report: the grouping and the applied range both go in it. Naming
+    // every one of them `Sales-Report-<today>` meant a Daily, a Weekly and a
+    // filtered report downloaded on the same day all landed as that one name
+    // plus Chrome's "(1)", "(2)" suffixes — indistinguishable in the Downloads
+    // folder, where it is then very easy to open an older one and think the
+    // new download was wrong. Same report, same name, so re-downloading
+    // replaces its own file instead of piling up copies.
+    const rangeStart = from || null;
+    const rangeEnd = to || null;
+    const prefix = rangeStart
+      ? `Sales-Report-${label}-${rangeStart}-to`
+      : rangeEnd
+        ? `Sales-Report-${label}-through`
+        : `Sales-Report-${label}`;
+    // Dated by the range it covers when one is set, else by today.
+    const dateContext = rangeEnd ?? rangeStart ?? undefined;
+
+    downloadReportPdf({
+      filenamePrefix: prefix,
+      dateContext,
+      bannerTitle: siteName,
+      bannerSubtitle: `Report date: ${new Date().toLocaleDateString()}`,
+      title: `${label} Sales Report`,
+      meta: [`Period: ${from || "Earliest order"} – ${to || "Latest order"}`],
+      columns: [
+        { header: "Period", width: 0.4 },
+        { header: "Revenue", align: "right", width: 0.3 },
+        { header: "Orders", align: "right", width: 0.3 },
+      ],
+      rows: timeSeries.map((row) => [row.period, formatBDT(row.revenueBDT), row.orders]),
+      total: summary
+        ? {
+            label: "Total Revenue",
+            value: formatBDT(summary.totalRevenueBDT),
+            note: `${summary.totalOrders} order${summary.totalOrders === 1 ? "" : "s"} in this period`,
+          }
+        : undefined,
+      footer: siteSettings?.contactEmail
+        ? `${siteName} · ${siteSettings.contactEmail}`
+        : siteSettings?.contactPhone
+          ? `${siteName} · ${siteSettings.contactPhone}`
+          : siteName,
+    });
   }
 
   return (
     <div>
-      <div className="print:hidden">
-        <PageHeader title="Reports" description="Deeper, date-range-filterable sales insight." />
-      </div>
+      <PageHeader title="Reports" description="Deeper, date-range-filterable sales insight." />
 
       <form
         onSubmit={handleApply}
-        className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-brown-600/10 bg-surface p-4 print:hidden"
+        className="mb-8 flex flex-wrap items-end gap-4 rounded-lg border border-brown-600/10 bg-surface p-4"
       >
         <div>
           <label className={labelClasses}>From</label>
@@ -127,7 +175,7 @@ export default function AdminReportsPage() {
         <ErrorState message={error} />
       ) : summary ? (
         <>
-          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 print:hidden">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <StatTile icon={TrendingUp} label="Total Revenue" value={formatBDT(summary.totalRevenueBDT)} />
             <StatTile icon={ShoppingBag} label="Total Orders" value={String(summary.totalOrders)} />
             <StatTile
@@ -137,26 +185,12 @@ export default function AdminReportsPage() {
             />
           </div>
 
-          <div className="print-header">
-            <strong>{siteSettings?.siteName ?? "Saudi Authentic Product"}</strong>
-            <br />
-            Report date: {new Date().toLocaleDateString()}
-          </div>
-          <p className="print-footer">
-            {siteSettings?.siteName ?? "Saudi Authentic Product"}
-            {siteSettings?.contactEmail
-              ? ` · ${siteSettings.contactEmail}`
-              : siteSettings?.contactPhone
-                ? ` · ${siteSettings.contactPhone}`
-                : ""}
-          </p>
-
-          <div className="print-area mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
+          <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-serif text-lg text-green-950">
                 {GROUP_BY_OPTIONS.find((o) => o.value === groupBy)?.label} Sales Report
               </h2>
-              <div className="flex flex-wrap items-center gap-2 print:hidden">
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value as GroupBy)}
@@ -203,9 +237,24 @@ export default function AdminReportsPage() {
                 </tbody>
               </table>
             )}
+
+            {/* The period rows above list every bucket but never their total,
+                so the report closes with one. It is the same
+                `summary.totalRevenueBDT` the stat tile shows and the same
+                figure `handlePrint` writes into the PDF — one source, so the
+                screen and the downloaded file can never disagree. */}
+            <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3 border-t-2 border-green-950/70 pt-3">
+              <p className="font-serif text-base font-semibold text-green-950">Total Revenue</p>
+              <p className="font-serif text-xl font-semibold tabular-nums text-green-950">
+                {formatBDT(summary.totalRevenueBDT)}
+              </p>
+            </div>
+            <p className="mt-1 text-xs text-brown-500">
+              {summary.totalOrders} order{summary.totalOrders === 1 ? "" : "s"} in this period
+            </p>
           </div>
 
-          <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5 print:hidden">
+          <div className="mb-8 rounded-lg border border-brown-600/10 bg-surface p-5">
             <h2 className="mb-3 font-serif text-lg text-green-950">Orders by Status</h2>
             <p className="mb-3 text-xs text-brown-500">Click a status to view those orders.</p>
             {Object.keys(summary.ordersByStatus).length === 0 ? (
@@ -226,7 +275,7 @@ export default function AdminReportsPage() {
             )}
           </div>
 
-          <div className="rounded-lg border border-brown-600/10 bg-surface p-5 print:hidden">
+          <div className="rounded-lg border border-brown-600/10 bg-surface p-5">
             <h2 className="mb-3 font-serif text-lg text-green-950">Top Products</h2>
             {summary.topProducts.length === 0 ? (
               <p className="text-sm text-brown-500">No product sales in this range.</p>
@@ -254,7 +303,7 @@ export default function AdminReportsPage() {
         </>
       ) : null}
 
-      <div className="mt-8 rounded-lg border border-brown-600/10 bg-surface p-5 print:hidden">
+      <div className="mt-8 rounded-lg border border-brown-600/10 bg-surface p-5">
         <h2 className="mb-1 font-serif text-lg text-green-950">Delivery Agent Performance</h2>
         <p className="mb-3 text-xs text-brown-500">
           Live counts derived from assigned orders — not a separate tracked number.

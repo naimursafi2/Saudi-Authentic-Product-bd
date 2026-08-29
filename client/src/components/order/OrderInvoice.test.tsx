@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PrintInvoiceButton } from "./OrderInvoice";
-import { printWithFilename } from "@/lib/print";
+import { downloadInvoicePdf } from "@/lib/pdfExport";
 import type { ApiOrder, ApiPayment, ApiSiteSettings } from "@/types/api";
 
-vi.mock("@/lib/print", () => ({ printWithFilename: vi.fn() }));
+vi.mock("@/lib/pdfExport", () => ({ downloadInvoicePdf: vi.fn() }));
 
 vi.mock("@/lib/api/siteSettings", () => ({
   getSiteSettings: () =>
@@ -130,7 +130,7 @@ describe("PrintInvoiceButton", () => {
     expect(screen.getByText("Discount (EID200)")).toBeInTheDocument();
   });
 
-  it("prints through the shared mechanism, naming the file after the order", async () => {
+  it("downloads a PDF built from the order, naming the file after it", async () => {
     getPaymentForOrder.mockResolvedValue({ data: { payment: null } });
     const user = userEvent.setup();
     render(<PrintInvoiceButton order={order} />);
@@ -138,9 +138,17 @@ describe("PrintInvoiceButton", () => {
     await user.click(screen.getByRole("button", { name: /print invoice/i }));
     await user.click(screen.getByRole("button", { name: /^print$/i }));
 
-    // Every print in this project goes through printWithFilename() — never a
-    // bare window.print() or a server-generated file.
-    expect(printWithFilename).toHaveBeenCalledWith("Invoice-SAP-20260101-1234");
+    // Print downloads a generated PDF directly — never window.print(), which
+    // would put two dialogs between the click and the file. The order's own
+    // date is passed, so re-downloading months later yields the same filename.
+    expect(downloadInvoicePdf).toHaveBeenCalledTimes(1);
+    const options = vi.mocked(downloadInvoicePdf).mock.calls[0][0];
+    expect(options.filenamePrefix).toBe("Invoice-SAP-20260101-1234");
+    expect(options.dateContext).toBe("2026-01-01T00:00:00.000Z");
+    // The PDF is built from the same order the preview renders, so the two can
+    // never disagree about what was actually billed.
+    expect(options.rows).toEqual([["Ajwa Dates (500g)", "৳ 1,200", 2, "৳ 2,400"]]);
+    expect(options.totals.at(-1)).toEqual({ label: "Total", value: "৳ 2,460", strong: true });
   });
 
   it("still renders a complete invoice when the payment lookup is unavailable", async () => {

@@ -61,6 +61,9 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * `YYYY-MM` — see `report.service.ts#dateBucketFormat`.
  */
 export function formatPeriod(period: string, groupBy: ChartGroupBy, long = false): string {
+  // Callers pass API bucket keys, but also user-facing range bounds that may
+  // not be set yet. Bail out rather than emitting "NaN undefined".
+  if (!period) return "";
   if (groupBy === "month") {
     const [year, month] = period.split("-");
     const name = MONTHS[Number(month) - 1] ?? month;
@@ -151,7 +154,13 @@ export function TrendChart({
   const zeroY = yFor(0);
   const slot = PLOT_W / periods.length;
   const stride = labelStride(periods.length);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => scale.min + scale.span * t);
+
+  // Counts are whole things — an axis reading "0, 0, 1, 1, 1" (five ticks
+  // squeezed into a range of 1, each rounded for display) is worse than two
+  // honest ones, so a count axis is de-duplicated to integers.
+  const rawTicks = [0, 0.25, 0.5, 0.75, 1].map((t) => scale.min + scale.span * t);
+  const ticks =
+    valueKind === "count" ? [...new Set(rawTicks.map((v) => Math.round(v)))] : rawTicks;
 
   // Grouped bars share a slot, leaving a quarter of it as breathing room.
   const barW = Math.max(3, (slot * 0.7) / series.length);

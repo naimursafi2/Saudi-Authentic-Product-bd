@@ -81,7 +81,7 @@ authorization gate — see Roles & Permissions below), `authorize(...roles)`
 | `/reports`, `/finance` | dashboards, sales/gross-profit/revenue time series, inventory valuation | `admin`,`super_admin`,`co_admin` (finance: `co_admin` excluded by default) |
 | `/purchases` | purchase-batch CRUD, cost items, receive, traceability | `purchases.view/create/edit/delete` |
 | `/coupons` | validate (customer preview); staff CRUD, gated by discount size | `co_admin`,`admin`,`super_admin`; delete `admin`+ only |
-| `/hero-slides`, `/homepage-sections`, `/nav-links`, `/footer-columns`, `/static-pages`, `/site-settings` | admin-editable storefront content | mostly `admin`,`super_admin`(+`co_admin` for hero/homepage/logo) |
+| `/hero-slides`, `/homepage-sections`, `/nav-links`, `/footer-columns`, `/static-pages`, `/site-settings` | admin-editable storefront content | mostly `admin`,`super_admin`(+`co_admin` for hero/homepage/logo/refund-policy) |
 | `/audit-logs` | read-only sensitive-action trail | every staff role, force-scoped to own actions except `admin`/`super_admin` |
 | `/pending-actions`, `/approval-settings` | Grant-Based Approval Workflow queue + thresholds | `super_admin` only |
 | `/investments`, `/expenses`, `/refunds`, `/returns` | Finance module | see "Finance module" below |
@@ -292,6 +292,35 @@ values. Cancelling/returning an order credits the exact same batches back.
 This whole path is keyed only off `{product, variantId}` — no
 product-type/category branching, ever.
 
+**Returns and refunds are counted exactly once.** This is the rule most easily
+broken by a well-meaning "surely a refunded order shouldn't count as revenue"
+change, so it is spelled out. An approved refund is booked as a confirmed
+`Expense` (category `refund`, `refund.service.ts#finalizeRefundApproval`).
+Given that, two status groupings in `constants/orderStatus.ts` govern every
+figure:
+
+- `REVENUE_EXCLUDED_STATUSES` = `["cancelled"]` only. A returned/refunded
+  order **keeps its revenue** — dropping it as well as booking the refund
+  expense would charge the same refund against profit twice.
+- `COGS_EXCLUDED_STATUSES` = `["cancelled", "returned", "refunded"]` — every
+  status whose stock `unwindOrder()` credited back. Those goods are on the
+  shelf and carried by `getInventoryValuation()`, so charging COGS as well
+  would count the same cost twice.
+
+`report.service.ts#revenueOrderMatch()` and `#cogsContribution()` are the only
+implementations; `getSalesSummary`, `getSalesTimeSeries`, `getFinanceSummary`,
+`getCostOfGoodsSold`, `getRevenueVsExpenseTimeSeries` and
+`getGrossProfitTimeSeries` all go through them, so KPI tiles, charts and
+reports cannot drift apart. A partial refund needs no special handling: the
+expense is whatever was actually refunded.
+
+**Guard every aggregation field with `$ifNull`.** Orders written before a
+field existed store nothing for it, and `$subtract`/`$multiply` with a missing
+operand evaluate to `null`, which `$sum` then silently skips — dropping that
+entire order out of the total rather than treating the gap as zero. This was a
+live bug: orders with no stored `discountBDT` vanished from net selling
+revenue and gross profit.
+
 **Profit & loss** (`finance.service.ts`): the frozen landed costs above are
 what the finance module nets against revenue, so the P&L reads as a real
 income statement — net selling revenue (subtotal − discount; shipping excluded
@@ -424,39 +453,49 @@ through `pending_actions`" shape as stock changes and product
 creation/deletion — this is the general pattern to follow for any future
 "correct a finalized record" feature, not something bespoke per feature.
 
-**Print mechanism** (`.print-area`/`.print-header`/`.print-footer` in
-`globals.css`, `@page{margin:0.75in}`, triggered via
-`lib/print.ts#printWithFilename(prefix)`): every "Print" action project-wide
-(Expenses, Sales Report, order invoices, ...) opens the browser's own native
-print dialog via `window.print()` — never a server-generated file, never a
-forced direct download. `printWithFilename()` sets `document.title` to
-`${prefix}-YYYY-MM-DD` (today's date, generated at click time) so Chrome
-suggests that as the print/"Save as PDF" filename, deferred one macrotask
-(`setTimeout`, 100ms) before calling `window.print()` — calling both in the
-same tick is a known Chrome race where the dialog reads the stale title.
-Print isolation MUST use `visibility: hidden`/`visible` (never `display:
-none` — that permanently removes a whole ancestor subtree from rendering,
-producing a blank page) and the revealed target MUST be `position: absolute`
-(never `fixed` — repeats content on every page; never `static` — leaves it
-wherever the invisible flow put it, causing blank pages). Every
-non-print-target section on a print-enabled page needs `print:hidden` (plain
-`display:none`, safe since nothing inside needs to reveal itself) or it
-still reserves layout height and pads out extra blank pages — this also
-covers audit/edit-trail annotations (e.g. an "edited by ... on ..." note)
-that shouldn't appear on a printed record. `.print-area table/td/th/p` get
-`font-size: 12pt !important` in print (normal Word-body-text size — the
-on-screen admin UI runs smaller for on-screen density); headings and small
-caption/label text are left alone so the printed hierarchy still reads.
-Reuse `printWithFilename()` + the `.print-area` CSS mechanism for any new
-print output; don't reinvent either — there is exactly one print
-implementation project-wide, not a per-page one.
+**Print / PDF export** (`lib/pdfExport.ts`): every "Print" action
+project-wide (Sales Report, the Expenses monthly report, order invoices)
+**generates a PDF and downloads it directly on one click** — no
+`window.print()`, no browser print dialog, no OS "Save As". The file goes out
+through `csvExport.ts#downloadBlob()`, the same path the CSV buttons use, so
+Print and CSV behave identically. `downloadReportPdf()` covers the two tabular
+reports and `downloadInvoicePdf()` the invoice; both take the document's data
+as **arguments** and read no DOM, so one page's content can never leak into
+another's file. Built on `jspdf` + `jspdf-autotable` (the only rendering
+libraries in the client) — a DOM rasterizer was rejected because it cannot
+parse this project's Tailwind v4 `oklch()` tokens and produces blurry,
+unsearchable pages.
 
-**PDF/export**: no PDF-generation or spreadsheet library project-wide —
-every "print"/"export as PDF" (invoices, the Expenses monthly report, the
-Sales Report) is the browser's own print-to-PDF via the mechanism above,
-never a server-generated file. CSV export is a small hand-rolled generator
-(`lib/csvExport.ts`) — no library. Match whichever pattern an existing
-similar export uses; don't introduce a new approach without asking.
+`pdfFilename(prefix, dateContext?)` names every file `${prefix}-${date}.pdf`,
+the date derived automatically so the user never types one. `dateContext` is
+the date the document is *about*, defaulting to today: an invoice passes the
+order's `createdAt` (a fixed record must re-download under the same name) and
+the Expenses report passes its `YYYY-MM` month (dating it "today" made July's
+and August's reports collide on one filename). A `YYYY-MM`/`YYYY-MM-DD` string
+is used verbatim — reparsing it through `new Date()` shifts the stamp a day
+west of Greenwich.
+
+Two encoding rules, both learned from silent failures: every string reaching a
+page goes through `pdfText()`, because jsPDF's built-in fonts are
+WinAnsi-encoded and **drop** an unsupported character rather than throwing —
+the Bengali Taka sign becomes "BDT" (embedding a Bengali font would cost
+several hundred KB for one glyph) and typographic dashes/quotes fold to ASCII,
+after an en dash silently vanished from the Reports period line. And column
+alignment is set in autoTable's `didParseCell` hook, not `columnStyles`, which
+it honours only for body cells — a money column's figures came out flush right
+under a heading still flush left.
+
+Reuse these two functions for any new print output; there is exactly one PDF
+implementation project-wide, not a per-page one. **Do not reintroduce
+`window.print()`** — the print-isolation CSS (`.print-area`, `print:hidden`
+and the `@media print` block) that supported it has been removed, along with
+the global `.print-area` selector that made cross-page contamination possible
+at all.
+
+**Other exports**: CSV is a small hand-rolled generator (`lib/csvExport.ts`) —
+no library. There is no server-generated file and no spreadsheet library
+anywhere. Match whichever pattern an existing similar export uses; don't
+introduce a new approach without asking.
 
 **Express 5 `req.query` gotcha**: `req.query` is a getter with no setter
 that re-parses `req.url` on every access — plain reassignment throws, and
@@ -544,14 +583,20 @@ Product Comparison.
 Query, no Redux/Zustand. Match this for new forms/pages.
 
 **No charting library either** — `components/admin/charts/TrendChart.tsx` is
-hand-rolled SVG (`TrendChart` for grouped bars over time, `BreakdownBars` for
-category shares), same reasoning as `lib/csvExport.ts`. Colors come from
-theme tokens via Tailwind `fill-*`/`stroke-*` utilities so charts invert with
-dark mode, exact figures ride in native `<title>` tooltips, and every chart
-renders an `sr-only` data table beside it. Reuse these two for any new chart;
-don't add Recharts/Chart.js/d3.
+hand-rolled SVG (`TrendChart` for bars/area over time, `BreakdownBars` for
+category shares), same reasoning as `lib/csvExport.ts`. Its conventions:
+each series carries a Tailwind **text** colour class from a theme token and
+every shape paints with `currentColor`, so one declaration drives the line,
+fill, gradient and legend swatch and the whole chart inverts with dark mode;
+numbers use `tabular-nums` everywhere; hover is one full-height hit target
+per period feeding a positioned tooltip card (not a native `<title>`); axis
+labels go through `formatPeriod()` because the raw `$dateToString` bucket
+keys are unreadable; and an `area` chart falls back to bars below three
+points, where an area degenerates into a meaningless block. Every chart also
+renders an `sr-only` data table. Reuse these two for any new chart; don't add
+Recharts/Chart.js/d3.
 
-**`/admin/analytics` (Business Overview)** is composed entirely from the
+**`/admin/analytics` (Analytics)** is composed entirely from the
 existing `/reports/*` and `/finance/*` endpoints — there is no
 analytics-specific API and no stored snapshot, so its numbers are by
 construction the same ones Reports and Finance show. Its sales half needs
@@ -675,6 +720,16 @@ than the rewrite intercepts.
 - A new route reading `req.query` must go through `validate({query: ...})`.
 - Don't call the homepage/hero-slide system a general "CMS" — it's a fixed
   set of known section types, not arbitrary page/block creation.
+- **Customer-facing policy copy is content, not code.** `STATIC_PAGE_TYPES`
+  (`about`/`contact`/`shippingPolicy`/`refundPolicy`) are admin-editable
+  singletons; the storefront pages — including the FAQ's return/refund
+  section — read them from the API. Never hardcode policy wording in a
+  `.tsx`: it gives the site two sources of truth and the admin panel's copy
+  silently stops matching what customers see. `content.refundPolicy.manage`
+  is Co-Admin's narrow key for the refund policy alone; which page each key
+  reaches is enforced in `staticPage.service.ts#assertMayEditPage`, since a
+  route's `requirePermission(...)` can only ask *whether* a key is held, not
+  *which* page it covers.
 - Don't add a fixed category/type enum to `Purchase.costItems[]`.
 - Don't reintroduce a `Shop`/multi-shop-outlet model without a fresh
   decision from the user.

@@ -131,7 +131,14 @@ export default function AdminAnalyticsPage() {
 
   function selectRange(next: RangeKey) {
     setRange(next);
-    if (next !== "custom") setApplied({ ...presetRange(next) });
+    // Switching to Custom applies the dates already in the inputs straight
+    // away. Leaving the previous preset's range applied while the header reads
+    // "Custom" would show one range and describe another.
+    setApplied(
+      next === "custom"
+        ? { from: customFrom, to: customTo, groupBy: groupByForSpan(customFrom, customTo) }
+        : { ...presetRange(next) }
+    );
   }
 
   function applyCustom(e: React.FormEvent) {
@@ -173,8 +180,8 @@ export default function AdminAnalyticsPage() {
   }
 
   const periodLabel =
-    range === "custom"
-      ? `${formatPeriod(applied.from ?? "", "day", true)} – ${formatPeriod(applied.to ?? "", "day", true)}`
+    applied.from && applied.to
+      ? `${formatPeriod(applied.from, "day", true)} – ${formatPeriod(applied.to, "day", true)}`
       : (RANGE_OPTIONS.find((o) => o.value === range)?.hint ?? "").toLowerCase();
 
   return (
