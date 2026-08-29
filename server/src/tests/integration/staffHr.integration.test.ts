@@ -20,6 +20,7 @@ import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { createAuthedUser, authHeader } from "./helpers";
 import { UserModel } from "../../models/User.model";
 import { SalaryPaymentModel } from "../../models/SalaryPayment.model";
+import { InternalAssetModel } from "../../models/InternalAsset.model";
 
 const app = createApp();
 const PIXEL = Buffer.from(
@@ -69,7 +70,7 @@ describe("Staff NID information", () => {
     expect(corrected.body.data.user.staffMeta.nidNumber).toBe("1990123456780");
   });
 
-  it("uploads an NID card image and replaces (deleting the old one) on re-upload", async () => {
+  it("uploads an NID card image and retires the old one on re-upload", async () => {
     const { token: adminToken } = await createAuthedUser({ role: "admin" });
     const staff = await createStaffMember(adminToken);
 
@@ -86,7 +87,13 @@ describe("Staff NID information", () => {
       .set(...authHeader(adminToken))
       .attach("nidImage", PIXEL, "nid-front-retake.png");
     expect(second.status).toBe(200);
-    expect(deleteCloudinaryImage).toHaveBeenCalledWith("staff-nid/nid-1");
+
+    // The superseded NID scan is not destroyed — a staff replacement now hands
+    // the old file to the internal-asset lifecycle for Super Admin review, so
+    // it stays recoverable. See internalAsset.service.ts#retireInternalAsset.
+    expect(deleteCloudinaryImage).not.toHaveBeenCalled();
+    const retired = await InternalAssetModel.findOne({ publicId: "staff-nid/nid-1" });
+    expect(retired?.status).toBe("delete_requested");
   });
 
   it("rejects a non-HR role from reading or writing staff-meta / NID data", async () => {

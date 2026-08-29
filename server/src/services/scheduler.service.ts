@@ -1,6 +1,7 @@
 import cron, { type ScheduledTask } from "node-cron";
 import { claimDueCampaigns, dispatchCampaign } from "./campaign.service";
 import { reconcileStalePayments } from "./payment.service";
+import { purgeExpiredAssets } from "./internalAsset.service";
 
 /**
  * The project's single background scheduler, running server-side via
@@ -34,6 +35,19 @@ async function paymentTick(): Promise<void> {
   await reconcileStalePayments();
 }
 
+/**
+ * Permanently deletes Recycle Bin items whose 15-day retention has elapsed.
+ * `purgeExpiredAssets` contains its own per-item error handling, so a file
+ * Cloudinary refuses is counted and left in the bin for the next tick rather
+ * than stopping the sweep or being lost track of.
+ */
+async function assetPurgeTick(): Promise<void> {
+  const { purged, failed } = await purgeExpiredAssets();
+  if (purged > 0 || failed > 0) {
+    console.log(`[assets] purge sweep: ${purged} deleted, ${failed} failed (will retry).`);
+  }
+}
+
 /** Idempotent — safe to call more than once (e.g. in tests), only ever schedules one task. */
 export function startCampaignScheduler(): void {
   if (task) return;
@@ -46,6 +60,9 @@ export function startCampaignScheduler(): void {
     paymentTick().catch((err) =>
       console.error("[scheduler] payment reconciliation tick failed:", (err as Error).message)
     );
+    assetPurgeTick().catch((err) =>
+      console.error("[scheduler] asset purge tick failed:", (err as Error).message)
+    );
   });
 }
 
@@ -57,3 +74,4 @@ export function stopCampaignScheduler(): void {
 /** Exposed for tests — runs one tick synchronously without waiting for the cron clock. */
 export { tick as runCampaignSchedulerTick };
 export { paymentTick as runPaymentReconciliationTick };
+export { assetPurgeTick as runAssetPurgeTick };

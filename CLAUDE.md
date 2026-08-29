@@ -90,6 +90,7 @@ authorization gate — see Roles & Permissions below), `authorize(...roles)`
 | `/notifications`, `/product-alerts` | customer's own inbox / price-drop subscriptions | self-scoped, `authenticate` only |
 | `/payments` | public provider-availability flags; customer bKash create/execute/cancel; staff read-only list | customer routes self-scoped; staff list `payments.view` |
 | `/shipping-settings` | public read of the live shipping rates; admin edit | read public; `PATCH` needs `settings.manage` |
+| `/internal-assets` | staff upload registry, delete requests, Recycle Bin, restore, permanent deletion | staff request-own: `assets.request_delete`; everything else `assets.manage` (Super Admin) |
 
 ## Roles & permissions (RBAC)
 
@@ -218,6 +219,7 @@ auto-derived `minPriceBDT`), `Order` (embedded items/shipping snapshot,
 `Role`/`PendingAction`/`ApprovalSettings`/`AuditLog` (governance),
 `Investment`/`Expense`/`Refund` (finance), `Payment` (bKash gateway
 transactions), `ShippingSettings` (singleton delivery rates),
+`InternalAsset` (staff upload registry + recycle bin),
 `Purchase` (landed-cost batches),
 `Campaign`/`Notification` (messaging), `ProductAlert` (price-drop/
 back-in-stock subscriptions), `ReturnRequest`.
@@ -264,6 +266,39 @@ cost keeps changing after the sale) — `Order.model.ts` then derives
 values. Cancelling/returning an order credits the exact same batches back.
 This whole path is keyed only off `{product, variantId}` — no
 product-type/category branching, ever.
+
+**Internal upload lifecycle** (`models/InternalAsset.model.ts`,
+`services/internalAsset.service.ts`): every file uploaded by internal staff is
+indexed in one central registry, and no staff member can destroy one.
+
+Files stay where they already live — embedded `{url, publicId}` on Product,
+Category, Expense, Purchase and the rest. `InternalAsset` *indexes* them
+through a generic `resource`/`resourceId`/`fieldPath` triple, so **no feature
+is named anywhere in the model or service** and a new internal upload type is
+supported by recording it, never by writing another delete flow.
+
+Two calls are the whole integration surface, and both must be used instead of
+the raw Cloudinary helpers in any staff path:
+- `uploadInternalFile(file, {folder, resource, fieldPath, module, actor})` —
+  uploads and registers in one step, returning the same shape
+  `uploadBufferToCloudinary` did.
+- `retireInternalAsset(publicId, actor, reason)` — replaces
+  `deleteCloudinaryImage`. A tracked internal file enters `delete_requested`
+  and **the Cloudinary object is left intact**; an untracked file (customer
+  review photo, customer avatar, anything predating this system) still deletes
+  immediately, so existing behaviour is preserved.
+
+Lifecycle: `active` → `delete_requested` → (Super Admin rejects → `active`) |
+(approves → `recycled`, `purgeAfter` = now + 15 days) → `restored` back to
+`active` reusing the original file, or `purged` by the scheduler sweep or an
+explicitly confirmed immediate deletion. A `purged` row is kept as the
+permanent audit record and can never be restored. `purgeExpiredAssets()`
+counts and logs per-file failures without stopping, leaving a stuck file in
+the bin with a raised `purgeAttempts` for the next tick rather than losing it.
+
+**Customer uploads are outside this system entirely** — `isInternalRole()`
+excludes `customer`, so review photos and a customer's own avatar are never
+registered and keep their immediate-delete behaviour.
 
 **Shipping is configuration, not code** (`models/ShippingSettings.model.ts`,
 `constants/shipping.ts`): a singleton document holds the inside-Dhaka and
@@ -425,7 +460,11 @@ submits every field.
   `sessionStorage`. Impersonating another `super_admin` 403s.
 - **Uploads**: multer memory storage → `uploadBufferToCloudinary()`, guarded
   by `isCloudinaryConfigured` (503 if unset). Reuse this path, don't add a
-  parallel upload system.
+  parallel upload system. **In a staff path call
+  `uploadInternalFile()`/`retireInternalAsset()` rather than the Cloudinary
+  helpers directly**, so the file joins the internal upload lifecycle above —
+  a raw `deleteCloudinaryImage()` in a staff path destroys a file that should
+  have been recoverable.
 - **Email**: always fire-and-forget — `void sendXEmail(...)`, **never
   `await`** an email send in a request path. `safeSend()` swallows/logs
   failures so callers never need to handle rejections.
@@ -481,12 +520,20 @@ hex in any `.tsx` — add a token. A few token families are deliberately
 **Dark mode** (`context/ThemeContext.tsx`): site-wide via one `data-theme`
 attribute on `<html>`, not per-component `dark:` classes. Default for a
 visitor with no saved preference is always **Light**, deliberately not
-`prefers-color-scheme`. Preference persists in `localStorage` (`sap:theme`);
-applied pre-hydration via a `next/script` `strategy="beforeInteractive"`
-tag in `app/layout.tsx` (**not a raw `<script>` tag** — the App Router
-refuses to execute a literal `<script>` rendered by a Server Component;
-`next/script` with `beforeInteractive` is the supported way to run
-pre-hydration JS and Next.js injects it into `<head>` itself).
+`prefers-color-scheme` — the server renders `<html data-theme="light">` and
+the init script only overrides that when `sap:theme` is explicitly saved.
+Preference persists in `localStorage` (`sap:theme`); applied before first
+paint by a **plain inline `<script>`** rendered by the `app/layout.tsx`
+Server Component. On Next 16 + React 19 that is emitted verbatim into the SSR
+HTML and executes synchronously as the browser parses it, and React hydrates
+the existing node instead of creating one.
+
+**Do not switch this back to `next/script`.** For an *inline*
+`beforeInteractive` script that component renders its own raw `<script>` from
+a client component: React 19 replaces it with a `<div>` and logs "Encountered
+a script tag while rendering React component", and the actual code is
+deferred to Next's `self.__next_s` runtime, which runs after first paint —
+reintroducing the very theme flash the script exists to prevent.
 
 **Row actions in `/admin/*` tables** (`components/ui/ActionButton.tsx`):
 **always an always-visible text label, never icon-only-with-hover-tooltip**

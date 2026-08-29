@@ -3,6 +3,7 @@ import { catchAsync } from "../utils/catchAsync";
 import { sendSuccess } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 import { paramStr } from "../utils/params";
+import { actorOf } from "../utils/actor";
 import * as userService from "../services/user.service";
 
 export const createStaff = catchAsync(async (req: Request, res: Response) => {
@@ -63,7 +64,7 @@ export const updateStaffMeta = catchAsync(async (req: Request, res: Response) =>
 
 export const uploadStaffNidImage = catchAsync(async (req: Request, res: Response) => {
   if (!req.file) throw ApiError.badRequest("An NID card image is required");
-  const user = await userService.updateStaffNidImage(paramStr(req.params.id), req.file);
+  const user = await userService.updateStaffNidImage(paramStr(req.params.id), req.file, actorOf(req));
   sendSuccess(res, 200, "NID card image updated", { user });
 });
 

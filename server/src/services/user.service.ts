@@ -1,6 +1,6 @@
 import { UserModel } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
-import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
+import { retireInternalAsset, uploadInternalFile, type AssetActor } from "./internalAsset.service";
 import { sendStaffWelcomeEmail, sendVerificationEmail } from "./email.service";
 import { recordAuditLog } from "./auditLog.service";
 import { signImpersonationToken, signEmailVerificationToken } from "../utils/jwt";
@@ -55,16 +55,19 @@ export async function updateStaffMeta(id: string, input: UpdateStaffMetaInput) {
 }
 
 /** Uploads/replaces a staff member's NID card photo — same pattern as `updateMyAvatar`. */
-export async function updateStaffNidImage(id: string, file: Express.Multer.File) {
+export async function updateStaffNidImage(id: string, file: Express.Multer.File, actor: AssetActor) {
   const user = await UserModel.findById(id);
   if (!user) throw ApiError.notFound("User not found");
   if (!user.staffMeta) throw ApiError.badRequest("This user is not a staff account");
 
-  if (user.staffMeta.nidImage?.publicId) {
-    await deleteCloudinaryImage(user.staffMeta.nidImage.publicId);
-  }
-  const uploaded = await uploadBufferToCloudinary(file.buffer, {
+  await retireInternalAsset(user.staffMeta.nidImage?.publicId, actor, "Staff NID image replaced");
+  const uploaded = await uploadInternalFile(file, {
     folder: "saudi-authentic-product/staff-nid",
+    resource: "User",
+    resourceId: id,
+    fieldPath: "staffMeta.nidImage",
+    module: "Employees",
+    actor,
   });
   user.staffMeta.nidImage = { url: uploaded.url, publicId: uploaded.publicId };
   await user.save();
@@ -291,11 +294,15 @@ export async function updateMyAvatar(userId: string, file: Express.Multer.File) 
   const user = await UserModel.findById(userId);
   if (!user) throw ApiError.notFound("User not found");
 
-  if (user.avatar?.publicId) {
-    await deleteCloudinaryImage(user.avatar.publicId);
-  }
-  const uploaded = await uploadBufferToCloudinary(file.buffer, {
+  const owner: AssetActor = { id: user._id.toString(), role: user.role };
+  await retireInternalAsset(user.avatar?.publicId, owner, "Avatar replaced");
+  const uploaded = await uploadInternalFile(file, {
     folder: "saudi-authentic-product/avatars",
+    resource: "User",
+    resourceId: user._id.toString(),
+    fieldPath: "avatar",
+    module: "Profiles",
+    actor: owner,
   });
   user.avatar = { url: uploaded.url, publicId: uploaded.publicId };
   await user.save();
@@ -306,9 +313,7 @@ export async function removeMyAvatar(userId: string) {
   const user = await UserModel.findById(userId);
   if (!user) throw ApiError.notFound("User not found");
 
-  if (user.avatar?.publicId) {
-    await deleteCloudinaryImage(user.avatar.publicId);
-  }
+  await retireInternalAsset(user.avatar?.publicId, { id: user._id.toString(), role: user.role }, "Avatar removed");
   user.avatar = undefined;
   await user.save();
   return user;

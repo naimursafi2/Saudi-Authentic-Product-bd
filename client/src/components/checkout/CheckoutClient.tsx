@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, CreditCard, Loader2, Lock, ShieldCheck, Tag, Truck, Wallet, X } from "lucide-react";
+import { CircleAlert, Loader2, Lock, ShieldCheck, Tag, Truck, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { createOrder } from "@/lib/api/orders";
@@ -16,6 +16,7 @@ import { bdDistricts } from "@/data/bd-districts";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmailVerificationBanner } from "@/components/account/EmailVerificationBanner";
+import { BkashMark, NagadMark } from "./PaymentBrandMark";
 import { BKASH_PENDING_ORDER_KEY } from "./BkashCallbackClient";
 import { FormSection, FieldLabel, inputClasses } from "./FormSection";
 import type { ApiShippingSettings } from "@/types/api";
@@ -69,11 +70,7 @@ export function CheckoutClient() {
       .catch(() => setShippingSettings(null));
   }, []);
 
-  // Derived rather than corrected after the fact: if the config request lands
-  // after the customer has already picked bKash and reports the gateway as
-  // unconfigured, the selection falls back to cash on delivery rather than
-  // submitting an order that could never be paid.
-  const selectedPayment: PaymentOption = payment === "bkash" && !isBkashAvailable ? "cod" : payment;
+  const selectedPayment: PaymentOption = payment;
 
   async function handleApplyCoupon() {
     const code = couponInput.trim();
@@ -126,7 +123,11 @@ export function CheckoutClient() {
       const placed = { id: data.order._id, orderNumber: data.order.orderNumber };
       setPlacedOrder(placed);
 
-      if (selectedPayment === "bkash") {
+      // Only redirect to bKash when the gateway is actually configured.
+      // Otherwise bKash behaves like Nagad: the order is placed unpaid and
+      // settled manually, rather than sending the customer to a gateway that
+      // would refuse the request.
+      if (selectedPayment === "bkash" && isBkashAvailable) {
         await handOffToBkash(placed.id, placed.orderNumber);
         return;
       }
@@ -271,21 +272,36 @@ export function CheckoutClient() {
       : null,
   }));
 
-  // bKash is only offered when this deployment actually has gateway
-  // credentials; Nagad remains a UI-only option with no gateway behind it.
+  // bKash and Nagad are both always offered, each with its brand mark. What
+  // differs is only what happens after the order is placed: with gateway
+  // credentials configured, bKash hands off to its hosted checkout; without
+  // them it behaves exactly like Nagad — the order is placed unpaid and
+  // settled manually. Staff see the gateway's configuration state on
+  // /admin/payments, so an unconfigured gateway is never silently invisible.
   const paymentOptions = [
-    { id: "cod" as const, label: "Cash on Delivery", desc: "Pay the delivery agent when your order arrives", icon: Truck },
-    ...(isBkashAvailable
-      ? [
-          {
-            id: "bkash" as const,
-            label: "bKash",
-            desc: "Pay securely now through bKash mobile banking",
-            icon: Wallet,
-          },
-        ]
-      : []),
-    { id: "nagad" as const, label: "Nagad", desc: "Pay on delivery via Nagad", icon: CreditCard },
+    {
+      id: "cod" as const,
+      label: "Cash on Delivery",
+      desc: "Pay the delivery agent when your order arrives",
+      icon: Truck,
+      mark: null,
+    },
+    {
+      id: "bkash" as const,
+      label: "bKash",
+      desc: isBkashAvailable
+        ? "Pay securely now through bKash mobile banking"
+        : "Pay via bKash — our team will confirm your payment",
+      icon: null,
+      mark: <BkashMark />,
+    },
+    {
+      id: "nagad" as const,
+      label: "Nagad",
+      desc: "Pay via Nagad — our team will confirm your payment",
+      icon: null,
+      mark: <NagadMark />,
+    },
   ];
 
   if (items.length === 0) {
@@ -454,7 +470,9 @@ export function CheckoutClient() {
                     onChange={() => setPayment(option.id)}
                     className="mt-0.5 size-4 accent-green-900"
                   />
-                  <option.icon size={18} className="mt-0.5 text-brown-600" />
+                  {option.mark ?? (option.icon ? (
+                    <option.icon size={18} className="mt-0.5 text-brown-600" />
+                  ) : null)}
                   <span>
                     <span className="block text-sm font-semibold text-green-950">{option.label}</span>
                     <span className="block text-xs text-brown-500">{option.desc}</span>
@@ -463,7 +481,7 @@ export function CheckoutClient() {
               ))}
             </div>
 
-            {selectedPayment === "bkash" && (
+            {selectedPayment === "bkash" && isBkashAvailable && (
               <div className="flex items-start gap-2 rounded border border-green-900/15 bg-cream-50 p-3 text-xs text-brown-600">
                 <ShieldCheck size={15} className="mt-px shrink-0 text-green-900" />
                 <span>
@@ -479,10 +497,10 @@ export function CheckoutClient() {
             {formError && <p className="text-sm text-danger">{formError}</p>}
             <Button type="submit" variant="gold" size="lg" className="w-full" disabled={isSubmitting}>
               {isSubmitting
-                ? selectedPayment === "bkash"
+                ? selectedPayment === "bkash" && isBkashAvailable
                   ? "Connecting to bKash..."
                   : "Placing Order..."
-                : selectedPayment === "bkash"
+                : selectedPayment === "bkash" && isBkashAvailable
                   ? `Pay ${formatBDT(total)} with bKash`
                   : "Complete Order"}
             </Button>

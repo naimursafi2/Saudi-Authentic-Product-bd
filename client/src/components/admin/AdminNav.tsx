@@ -34,6 +34,7 @@ import {
   KeyRound,
   Megaphone,
   CreditCard,
+  FileStack,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -95,6 +96,12 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/investments", label: "Investments", icon: PiggyBank, permissions: ["investments.view"] },
   { href: "/admin/expenses", label: "Expenses", icon: Receipt, permissions: ["expenses.view"] },
   { href: "/admin/approvals", label: "Approvals", icon: ShieldCheck, permissions: ["approvals.manage"] },
+  {
+    href: "/admin/uploads",
+    label: "Uploads & Recycle Bin",
+    icon: FileStack,
+    permissions: ["assets.manage"],
+  },
   { href: "/admin/audit-logs", label: "Audit Logs", icon: ScrollText, permissions: ["auditLogs.view"] },
   {
     href: "/admin/homepage",

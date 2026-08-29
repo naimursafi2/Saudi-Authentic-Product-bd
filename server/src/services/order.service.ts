@@ -4,7 +4,7 @@ import { UserModel } from "../models/User.model";
 import { OrderModel, type IOrder } from "../models/Order.model";
 import type { InventoryLogReason } from "../models/InventoryLog.model";
 import { ApiError } from "../utils/ApiError";
-import { uploadBufferToCloudinary } from "../config/cloudinary";
+import { uploadInternalFile } from "./internalAsset.service";
 import { computeShippingFee } from "../constants/shipping";
 import { getShippingSettings } from "./shippingSettings.service";
 import { consumeStockForSale, restockFromSale } from "./inventory.service";
@@ -494,8 +494,13 @@ export async function verifyDeliveryOtp(
   order.otpAttempts = 0;
 
   if (proofImage) {
-    const uploaded = await uploadBufferToCloudinary(proofImage.buffer, {
+    const uploaded = await uploadInternalFile(proofImage, {
       folder: "saudi-authentic-product/delivery-proof",
+      resource: "Order",
+      resourceId: orderId,
+      fieldPath: "deliveryProofImage",
+      module: "Delivery",
+      actor,
     });
     order.deliveryProofImage = { url: uploaded.url, publicId: uploaded.publicId };
   }

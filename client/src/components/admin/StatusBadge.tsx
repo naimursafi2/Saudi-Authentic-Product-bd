@@ -19,6 +19,9 @@ const PALETTE: Record<string, string> = {
   awaiting_stock_approval: "bg-gold-soft text-gold-700",
   initiated: "bg-gold-soft text-gold-700",
   unpaid: "bg-cream-300 text-brown-600",
+  delete_requested: "bg-gold-soft text-gold-700",
+  recycled: "bg-danger-soft text-danger",
+  purged: "bg-cream-300 text-brown-600",
   sending: "bg-gold-soft text-gold-700",
   paused: "bg-cream-300 text-brown-600",
   // positive / complete

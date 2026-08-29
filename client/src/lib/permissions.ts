@@ -74,6 +74,8 @@ export const PERMISSIONS = [
   "campaigns.delete",
   "campaigns.approve",
   "campaigns.send",
+  "assets.request_delete",
+  "assets.manage",
   "approvals.manage",
   "auditLogs.view",
   "roles.view",

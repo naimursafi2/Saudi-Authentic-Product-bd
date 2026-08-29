@@ -1,5 +1,5 @@
 import { SiteSettingsModel, SITE_SETTINGS_DEFAULTS } from "../models/SiteSettings.model";
-import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
+import { retireInternalAsset, uploadInternalFile, type AssetActor } from "./internalAsset.service";
 import { recordAuditLog } from "./auditLog.service";
 import type { UpdateSiteSettingsInput } from "../validators/siteSettings.validator";
 import type { Role } from "../constants/roles";
@@ -15,13 +15,17 @@ export async function getSettings() {
   );
 }
 
-export async function updateSettings(input: UpdateSiteSettingsInput, logoFile?: Express.Multer.File) {
+export async function updateSettings(
+  input: UpdateSiteSettingsInput,
+  actor: AssetActor,
+  logoFile?: Express.Multer.File
+) {
   const settings = await getSettings();
   Object.assign(settings, input);
 
   if (logoFile) {
-    if (settings.logo?.publicId) await deleteCloudinaryImage(settings.logo.publicId);
-    const uploaded = await uploadBufferToCloudinary(logoFile.buffer, { folder: FOLDER });
+    await retireInternalAsset(settings.logo?.publicId, actor, "Site logo replaced");
+    const uploaded = await uploadInternalFile(logoFile, { folder: FOLDER, resource: "SiteSettings", fieldPath: "logo", module: "Settings", actor });
     settings.logo = { url: uploaded.url, publicId: uploaded.publicId };
   }
 
@@ -43,8 +47,8 @@ export async function updateLogo(
   const settings = await getSettings();
   const previousUrl = settings.logo?.url ?? null;
 
-  if (settings.logo?.publicId) await deleteCloudinaryImage(settings.logo.publicId);
-  const uploaded = await uploadBufferToCloudinary(logoFile.buffer, { folder: FOLDER });
+  await retireInternalAsset(settings.logo?.publicId, actor, "Site logo replaced");
+  const uploaded = await uploadInternalFile(logoFile, { folder: FOLDER, resource: "SiteSettings", fieldPath: "logo", module: "Settings", actor });
   settings.logo = { url: uploaded.url, publicId: uploaded.publicId };
   await settings.save();
 

@@ -33,6 +33,7 @@ import notificationRoutes from "./notification.routes";
 import productAlertRoutes from "./productAlert.routes";
 import paymentRoutes from "./payment.routes";
 import shippingSettingsRoutes from "./shippingSettings.routes";
+import internalAssetRoutes from "./internalAsset.routes";
 
 const router = Router();
 
@@ -70,5 +71,6 @@ router.use("/notifications", notificationRoutes);
 router.use("/product-alerts", productAlertRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/shipping-settings", shippingSettingsRoutes);
+router.use("/internal-assets", internalAssetRoutes);
 
 export default router;

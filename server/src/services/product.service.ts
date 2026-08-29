@@ -3,7 +3,12 @@ import { ProductModel, type IProduct } from "../models/Product.model";
 import { CategoryModel } from "../models/Category.model";
 import { ReviewModel } from "../models/Review.model";
 import { ApiError } from "../utils/ApiError";
-import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
+import {
+  purgeAssetsByPublicId,
+  retireInternalAsset,
+  uploadInternalFile,
+  type AssetActor,
+} from "./internalAsset.service";
 import { slugify } from "../utils/slugify";
 import {
   createPendingAction,
@@ -175,7 +180,7 @@ export async function createProduct(
     throw ApiError.badRequest("One or more categories are invalid");
   }
 
-  const uploadedImages = images && images.length > 0 ? await uploadProductImages(images) : [];
+  const uploadedImages = images && images.length > 0 ? await uploadProductImages(images, actor) : [];
 
   if (actor.role !== "super_admin") {
     const action = await createPendingAction(
@@ -251,9 +256,16 @@ registerPendingActionHandler("product.create", async (payload, reviewer) => {
   return { resource: "Product", resourceId: product._id.toString() };
 });
 
-registerPendingActionDenyHandler("product.create", async (payload) => {
+registerPendingActionDenyHandler("product.create", async (payload, reviewer) => {
   const images = ((payload as unknown as ProductCreatePayload).images ?? []) as { publicId: string }[];
-  await Promise.all(images.map((img) => deleteCloudinaryImage(img.publicId)));
+  // The Super Admin has already ruled against this submission, so its images
+  // go straight to purged rather than back into the review queue — routed
+  // through the registry so no row is left pointing at a deleted file.
+  await purgeAssetsByPublicId(
+    images.map((img) => img.publicId),
+    reviewer,
+    "Product creation request denied; uploaded images discarded."
+  );
 });
 
 export type UpdateProductResult = {
@@ -341,16 +353,16 @@ export async function updateProduct(
       throw ApiError.badRequest("A product can have at most 6 images");
     }
 
-    await Promise.all(removed.map((img) => deleteCloudinaryImage(img.publicId)));
-    const uploaded = images && images.length > 0 ? await uploadProductImages(images) : [];
+    await Promise.all(removed.map((img) => retireInternalAsset(img.publicId, actor, "Product image removed")));
+    const uploaded = images && images.length > 0 ? await uploadProductImages(images, actor) : [];
     product.images = [...kept, ...uploaded] as IProduct["images"];
   } else if (images && images.length > 0) {
     // No `existingImages` sent — legacy wholesale replace: clean up every
     // old image and swap in the newly uploaded set.
     await Promise.all(
-      product.images.map((img) => deleteCloudinaryImage(img.publicId))
+      product.images.map((img) => retireInternalAsset(img.publicId, actor, "Product images replaced"))
     );
-    product.images = await uploadProductImages(images);
+    product.images = await uploadProductImages(images, actor);
   }
 
   await product.save();
@@ -408,11 +420,13 @@ export async function updateProduct(
 export { AUDITED_PRODUCT_FIELDS };
 export type { AuditedProductField };
 
-async function removeProduct(id: string): Promise<{ id: string; name: string }> {
+async function removeProduct(id: string, actor: AssetActor): Promise<{ id: string; name: string }> {
   const product = await ProductModel.findById(id);
   if (!product) throw ApiError.notFound("Product not found");
   const summary = { id: product._id.toString(), name: product.name };
-  await Promise.all(product.images.map((img) => deleteCloudinaryImage(img.publicId)));
+  await Promise.all(
+    product.images.map((img) => retireInternalAsset(img.publicId, actor, "Product deleted"))
+  );
   await product.deleteOne();
   return summary;
 }
@@ -433,7 +447,7 @@ export async function deleteProduct(id: string, actor: { id: string; role: Role 
     return { kind: "pending", pendingActionId: action._id.toString() };
   }
 
-  const summary = await removeProduct(id);
+  const summary = await removeProduct(id, actor);
   await recordAuditLog({
     actor: actor.id,
     actorRole: actor.role,
@@ -447,7 +461,7 @@ export async function deleteProduct(id: string, actor: { id: string; role: Role 
 
 registerPendingActionHandler("product.delete", async (payload, reviewer) => {
   const productId = payload.productId as string;
-  const summary = await removeProduct(productId);
+  const summary = await removeProduct(productId, reviewer);
   await recordAuditLog({
     actor: reviewer.id,
     actorRole: reviewer.role,
@@ -460,10 +474,16 @@ registerPendingActionHandler("product.delete", async (payload, reviewer) => {
   return { resource: "Product", resourceId: summary.id };
 });
 
-async function uploadProductImages(files: Express.Multer.File[]) {
+async function uploadProductImages(files: Express.Multer.File[], actor: AssetActor) {
   const uploaded = await Promise.all(
     files.map((file) =>
-      uploadBufferToCloudinary(file.buffer, { folder: "saudi-authentic-product/products" })
+      uploadInternalFile(file, {
+        folder: "saudi-authentic-product/products",
+        resource: "Product",
+        fieldPath: "images",
+        module: "Catalog",
+        actor,
+      })
     )
   );
   return uploaded.map((img, index) => ({

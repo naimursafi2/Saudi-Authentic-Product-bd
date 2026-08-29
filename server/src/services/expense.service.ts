@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { ExpenseModel, type IExpense } from "../models/Expense.model";
 import { ApiError } from "../utils/ApiError";
-import { uploadBufferToCloudinary } from "../config/cloudinary";
+import { uploadInternalFile } from "./internalAsset.service";
 import { getApprovalSettings } from "./approvalSettings.service";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
 import { recordAuditLog } from "./auditLog.service";
@@ -31,8 +31,12 @@ export async function createExpense(
   // one or the other, never both, but a file is the more deliberate action
   // if somehow both arrived.
   const cashMemo = cashMemoFile
-    ? await uploadBufferToCloudinary(cashMemoFile.buffer, {
+    ? await uploadInternalFile(cashMemoFile, {
         folder: "saudi-authentic-product/expense-cash-memos",
+        resource: "Expense",
+        fieldPath: "cashMemo",
+        module: "Expenses",
+        actor,
       }).then((img) => ({ url: img.url, publicId: img.publicId }))
     : input.cashMemoUrl
       ? { url: input.cashMemoUrl }

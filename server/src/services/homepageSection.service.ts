@@ -4,13 +4,14 @@ import {
   type HomepageSectionType,
 } from "../models/HomepageSection.model";
 import { ApiError } from "../utils/ApiError";
-import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
+import { retireInternalAsset, uploadInternalFile, type AssetActor } from "./internalAsset.service";
 import type {
   CreateHomepageSectionInput,
   UpdateHomepageSectionInput,
 } from "../validators/homepageSection.validator";
 
 const FOLDER = "saudi-authentic-product/homepage";
+const MODULE = "Homepage";
 const CREATABLE_TYPES: HomepageSectionType[] = ["promoBanner", "productShowcase", "banner"];
 
 /** Idempotent — safe to call on every list request. Only inserts docs that don't exist yet. */
@@ -34,6 +35,7 @@ export async function listSections(includeHidden: boolean) {
 
 export async function createSection(
   input: CreateHomepageSectionInput,
+  actor: AssetActor,
   imageFile?: Express.Multer.File
 ) {
   const { type, ...rest } = input;
@@ -44,7 +46,7 @@ export async function createSection(
   const section = new HomepageSectionModel({ ...rest, type });
 
   if (imageFile) {
-    const uploaded = await uploadBufferToCloudinary(imageFile.buffer, { folder: FOLDER });
+    const uploaded = await uploadInternalFile(imageFile, { folder: FOLDER, resource: "HomepageSection", fieldPath: "image", module: MODULE, actor });
     section.image = { url: uploaded.url, publicId: uploaded.publicId };
   }
 
@@ -55,6 +57,7 @@ export async function createSection(
 export async function updateSection(
   id: string,
   input: UpdateHomepageSectionInput,
+  actor: AssetActor,
   imageFile?: Express.Multer.File
 ) {
   const section = await HomepageSectionModel.findById(id);
@@ -63,8 +66,8 @@ export async function updateSection(
   Object.assign(section, input);
 
   if (imageFile) {
-    if (section.image?.publicId) await deleteCloudinaryImage(section.image.publicId);
-    const uploaded = await uploadBufferToCloudinary(imageFile.buffer, { folder: FOLDER });
+    await retireInternalAsset(section.image?.publicId, actor, "Homepage section image replaced");
+    const uploaded = await uploadInternalFile(imageFile, { folder: FOLDER, resource: "HomepageSection", resourceId: id, fieldPath: "image", module: MODULE, actor });
     section.image = { url: uploaded.url, publicId: uploaded.publicId };
   }
 
@@ -72,7 +75,7 @@ export async function updateSection(
   return section;
 }
 
-export async function deleteSection(id: string) {
+export async function deleteSection(id: string, actor: AssetActor) {
   const section = await HomepageSectionModel.findById(id);
   if (!section) throw ApiError.notFound("Homepage section not found");
   if (!CREATABLE_TYPES.includes(section.type)) {
@@ -80,6 +83,6 @@ export async function deleteSection(id: string) {
       "Fixed homepage sections can't be deleted — hide them instead by turning visibility off."
     );
   }
-  if (section.image?.publicId) await deleteCloudinaryImage(section.image.publicId);
+  await retireInternalAsset(section.image?.publicId, actor, "Homepage section deleted");
   await section.deleteOne();
 }

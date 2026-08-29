@@ -47,7 +47,8 @@ messaging campaigns (email/SMS-ready/website notifications), reviews
 moderation, HR (leave, tasks, performance, salary, NID records), finance
 (investments, expenses, refunds, profit/loss, gross profit), a role &
 permission management system with custom roles, a Grant-Based Approval
-Workflow for high-risk actions, audit logging, homepage/navigation/footer/
+Workflow for high-risk actions, a centralized internal upload registry with a
+delete-approval flow and 15-day recycle bin, audit logging, homepage/navigation/footer/
 static-page content management, site settings, and sales/delivery
 analytics with CSV/PDF export.
 
@@ -154,8 +155,8 @@ groups: `/auth`, `/users`, `/categories`, `/products`, `/orders`,
 `/footer-columns`, `/static-pages`, `/site-settings`, `/audit-logs`,
 `/pending-actions`, `/approval-settings`, `/investments`, `/expenses`,
 `/refunds`, `/returns`, `/roles`, `/campaigns`, `/notifications`,
-`/product-alerts`, `/payments`, `/shipping-settings`. Auth is JWT via httpOnly
-cookies (or a bearer token for
+`/product-alerts`, `/payments`, `/shipping-settings`, `/internal-assets`. Auth
+is JWT via httpOnly cookies (or a bearer token for
 staff impersonation); most write routes require a specific permission. See
 `CLAUDE.md`'s route table for per-route access rules.
 

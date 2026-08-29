@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { sendSuccess } from "../utils/ApiResponse";
 import { paramStr } from "../utils/params";
+import { actorOf } from "../utils/actor";
 import * as categoryService from "../services/category.service";
 import type { ListCategoriesQuery } from "../validators/category.validator";
 
@@ -18,16 +19,21 @@ export const getCategory = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const createCategory = catchAsync(async (req: Request, res: Response) => {
-  const category = await categoryService.createCategory(req.body, req.file);
+  const category = await categoryService.createCategory(req.body, actorOf(req), req.file);
   sendSuccess(res, 201, "Category created", { category });
 });
 
 export const updateCategory = catchAsync(async (req: Request, res: Response) => {
-  const category = await categoryService.updateCategory(paramStr(req.params.id), req.body, req.file);
+  const category = await categoryService.updateCategory(
+    paramStr(req.params.id),
+    req.body,
+    actorOf(req),
+    req.file
+  );
   sendSuccess(res, 200, "Category updated", { category });
 });
 
 export const deleteCategory = catchAsync(async (req: Request, res: Response) => {
-  await categoryService.deleteCategory(paramStr(req.params.id));
+  await categoryService.deleteCategory(paramStr(req.params.id), actorOf(req));
   sendSuccess(res, 200, "Category deleted");
 });

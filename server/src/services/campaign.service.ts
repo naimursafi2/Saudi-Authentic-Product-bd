@@ -7,7 +7,7 @@ import {
 } from "../models/Campaign.model";
 import { UserModel } from "../models/User.model";
 import { ApiError } from "../utils/ApiError";
-import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
+import { retireInternalAsset, uploadInternalFile } from "./internalAsset.service";
 import { sendMail } from "../config/mailer";
 import { renderCampaignEmailHtml, sendCampaignSubmittedEmail, sendCampaignReviewedEmail } from "./email.service";
 import { sendSms } from "../config/sms";
@@ -169,7 +169,15 @@ export async function createCampaign(
   actor: CampaignActor,
   file?: Express.Multer.File
 ): Promise<ICampaign> {
-  const image = file ? await uploadBufferToCloudinary(file.buffer, { folder: CLOUDINARY_FOLDER }) : undefined;
+  const image = file
+    ? await uploadInternalFile(file, {
+        folder: CLOUDINARY_FOLDER,
+        resource: "Campaign",
+        fieldPath: "image",
+        module: "Campaigns",
+        actor,
+      })
+    : undefined;
 
   const campaign = await CampaignModel.create({
     title: input.title,
@@ -218,10 +226,10 @@ export async function updateCampaign(
   const oldValue = { title: campaign.title, status: campaign.status };
 
   if (file) {
-    if (campaign.image?.publicId) await deleteCloudinaryImage(campaign.image.publicId);
-    campaign.image = await uploadBufferToCloudinary(file.buffer, { folder: CLOUDINARY_FOLDER });
+    await retireInternalAsset(campaign.image?.publicId, actor, "Campaign image replaced");
+    campaign.image = await uploadInternalFile(file, { folder: CLOUDINARY_FOLDER, resource: "Campaign", resourceId: id, fieldPath: "image", module: "Campaigns", actor });
   } else if (input.removeImage && campaign.image?.publicId) {
-    await deleteCloudinaryImage(campaign.image.publicId);
+    await retireInternalAsset(campaign.image?.publicId, actor, "Campaign image removed");
     campaign.image = undefined;
   }
 
@@ -257,7 +265,7 @@ export async function updateCampaign(
 export async function deleteCampaign(id: string, actor: CampaignActor): Promise<void> {
   const campaign = await CampaignModel.findById(id);
   if (!campaign) throw ApiError.notFound("Campaign not found");
-  if (campaign.image?.publicId) await deleteCloudinaryImage(campaign.image.publicId);
+  await retireInternalAsset(campaign.image?.publicId, actor, "Campaign deleted");
   await campaign.deleteOne();
   await recordAuditLog({
     actor: actor.id,

@@ -456,6 +456,60 @@ export interface ApiCreatedPayment {
   status: PaymentStatus;
 }
 
+// -- Internal upload lifecycle (staff/admin uploads; customer uploads excluded) --
+
+export type InternalAssetStatus = "active" | "delete_requested" | "recycled" | "purged";
+export type InternalAssetKind = "image" | "document" | "other";
+
+export interface ApiInternalAssetEvent {
+  action:
+    | "uploaded"
+    | "delete_requested"
+    | "delete_rejected"
+    | "recycled"
+    | "restored"
+    | "purged"
+    | "purge_failed";
+  at: string;
+  by?: string | { _id: string; name: string; email: string };
+  byRole?: Role;
+  note?: string;
+}
+
+export interface ApiInternalAsset {
+  _id: string;
+  publicId: string;
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+  kind: InternalAssetKind;
+  bytes?: number;
+  /** Mongoose model the file hangs off — generic, so no module is hardcoded. */
+  resource: string;
+  resourceId?: string;
+  fieldPath?: string;
+  module?: string;
+  uploadedBy: string | { _id: string; name: string; email: string };
+  uploadedByRole: Role;
+  status: InternalAssetStatus;
+  deleteRequestedBy?: string | { _id: string; name: string; email: string };
+  deleteRequestedByRole?: Role;
+  deleteRequestedAt?: string;
+  deleteReason?: string;
+  reviewedBy?: string | { _id: string; name: string; email: string };
+  reviewedAt?: string;
+  reviewNote?: string;
+  recycledAt?: string;
+  /** When the scheduler may permanently delete it. Present only in the Recycle Bin. */
+  purgeAfter?: string;
+  purgedAt?: string;
+  purgeAttempts: number;
+  purgeError?: string;
+  history: ApiInternalAssetEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type CouponDiscountType = "percentage" | "fixed";
 export type CouponStatus = "scheduled" | "active" | "expired" | "disabled";
 

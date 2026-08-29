@@ -3,7 +3,7 @@ import { ProductModel } from "../models/Product.model";
 import { InventoryLogModel } from "../models/InventoryLog.model";
 import { OrderModel } from "../models/Order.model";
 import { ApiError } from "../utils/ApiError";
-import { deleteCloudinaryImage, uploadBufferToCloudinary } from "../config/cloudinary";
+import { retireInternalAsset, uploadInternalFile } from "./internalAsset.service";
 import { recordAuditLog } from "./auditLog.service";
 import { applyPurchaseStock } from "./inventory.service";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
@@ -95,7 +95,13 @@ async function buildCostItems(
   for (const [index, item] of items.entries()) {
     const file = byField.get(`costProof${index}`);
     const proof = file
-      ? await uploadBufferToCloudinary(file.buffer, { folder: PROOF_FOLDER })
+      ? await uploadInternalFile(file, {
+          folder: PROOF_FOLDER,
+          resource: "Purchase",
+          fieldPath: "costItems.proof",
+          module: "Purchases",
+          actor,
+        })
       : undefined;
     built.push({
       name: item.name,
@@ -262,7 +268,7 @@ export async function addCostItem(
   assertEditable(purchase);
 
   const proof = proofFile
-    ? await uploadBufferToCloudinary(proofFile.buffer, { folder: PROOF_FOLDER })
+    ? await uploadInternalFile(proofFile, { folder: PROOF_FOLDER, resource: "Purchase", resourceId: id, fieldPath: "costItems.proof", module: "Purchases", actor })
     : undefined;
 
   purchase.costItems.push({
@@ -308,8 +314,8 @@ export async function updateCostItem(
   item.note = input.note;
 
   if (proofFile) {
-    if (item.proof?.publicId) await deleteCloudinaryImage(item.proof.publicId);
-    const uploaded = await uploadBufferToCloudinary(proofFile.buffer, { folder: PROOF_FOLDER });
+    await retireInternalAsset(item.proof?.publicId, actor, "Purchase cost proof removed");
+    const uploaded = await uploadInternalFile(proofFile, { folder: PROOF_FOLDER, resource: "Purchase", resourceId: id, fieldPath: "costItems.proof", module: "Purchases", actor });
     item.proof = { url: uploaded.url, publicId: uploaded.publicId };
   }
 
@@ -339,7 +345,7 @@ export async function removeCostItem(
   const item = purchase.costItems.find((cost) => cost._id?.toString() === costId);
   if (!item) throw ApiError.notFound("Cost item not found");
 
-  if (item.proof?.publicId) await deleteCloudinaryImage(item.proof.publicId);
+  await retireInternalAsset(item.proof?.publicId, actor, "Purchase cost proof removed");
   purchase.costItems = purchase.costItems.filter((cost) => cost._id?.toString() !== costId);
   await purchase.save();
 
@@ -483,7 +489,7 @@ export async function deletePurchase(id: string, actor: PurchaseActor): Promise<
   }
 
   for (const item of purchase.costItems) {
-    if (item.proof?.publicId) await deleteCloudinaryImage(item.proof.publicId);
+    await retireInternalAsset(item.proof?.publicId, actor, "Purchase cost proof removed");
   }
   await purchase.deleteOne();
 

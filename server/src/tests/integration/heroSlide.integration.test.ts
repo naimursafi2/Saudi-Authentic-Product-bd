@@ -22,6 +22,7 @@ import { createApp } from "../../app";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { createAuthedUser, authHeader } from "./helpers";
 import { HeroSlideModel } from "../../models/HeroSlide.model";
+import { InternalAssetModel } from "../../models/InternalAsset.model";
 
 const app = createApp();
 const PIXEL = Buffer.from(
@@ -218,7 +219,13 @@ describe("Hero slides (homepage banner carousel)", () => {
 
     expect(res.status).toBe(200);
     expect(await HeroSlideModel.countDocuments()).toBe(0);
-    expect(deleteCloudinaryImage).toHaveBeenCalledWith("hero/banner");
+
+    // The slide is gone, but its image is NOT destroyed: staff deletions now
+    // hand the file to the internal-asset lifecycle so a Super Admin can still
+    // review and, if they choose, restore it. See internalAsset.service.ts.
+    expect(deleteCloudinaryImage).not.toHaveBeenCalled();
+    const asset = await InternalAssetModel.findOne({ publicId: "hero/banner" });
+    expect(asset?.status).toBe("delete_requested");
   });
 
   /**

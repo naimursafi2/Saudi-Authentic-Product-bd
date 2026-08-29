@@ -120,6 +120,14 @@ export const PERMISSIONS = [
   "campaigns.approve",
   "campaigns.send",
 
+  // -- Internal upload lifecycle --
+  // `assets.manage` is the Super Admin's whole surface: the centralized
+  // dashboard, delete-request review, the Recycle Bin, restore and permanent
+  // deletion. It is deliberately absent from every other role's defaults —
+  // internal staff can ask for a deletion, never carry one out.
+  "assets.request_delete",
+  "assets.manage",
+
   // -- Governance --
   "approvals.manage",
   "auditLogs.view",
@@ -261,6 +269,13 @@ export const PERMISSION_GROUPS: { group: string; permissions: { key: Permission;
     ],
   },
   {
+    group: "Internal Uploads",
+    permissions: [
+      { key: "assets.request_delete", label: "Request deletion of an internal upload" },
+      { key: "assets.manage", label: "Review, restore & permanently delete internal uploads" },
+    ],
+  },
+  {
     group: "Governance",
     permissions: [
       { key: "approvals.manage", label: "Grant or deny pending approvals" },
@@ -301,9 +316,18 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
   // Employee can see expenses and request a correction on one, but still
   // cannot submit a brand-new expense; that stays Co-Admin/Admin/Super Admin
   // only, unchanged.
-  employee: ["orders.view", "inventory.view", "expenses.view", "expenses.requestEdit", "auditLogs.view"],
+  employee: [
+    "orders.view",
+    "inventory.view",
+    "expenses.view",
+    "expenses.requestEdit",
+    // May ask for one of their uploads to be removed; only Super Admin can
+    // actually carry the deletion out.
+    "assets.request_delete",
+    "auditLogs.view",
+  ],
 
-  delivery_agent: ["orders.deliver", "auditLogs.view"],
+  delivery_agent: ["orders.deliver", "assets.request_delete", "auditLogs.view"],
 
   order_manager: [
     "orders.view",
@@ -317,6 +341,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     // Order Manager verifies and dispatches orders, so it must be able to see
     // whether a prepaid order's money actually landed.
     "payments.view",
+    "assets.request_delete",
     "auditLogs.view",
   ],
 
@@ -373,6 +398,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     // Same reasoning as Order Manager — read-only visibility of an order's
     // gateway payment. Co-Admin remains excluded from `finance.view`.
     "payments.view",
+    "assets.request_delete",
     "auditLogs.view",
     "roles.view",
     // Co-Admin creates and edits its own campaigns and submits them for
@@ -442,6 +468,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Exclude<Role, "super_admin">, Perm
     "returns.view",
     "returns.review",
     "payments.view",
+    "assets.request_delete",
     "auditLogs.view",
     "roles.view",
     "roles.manage",
