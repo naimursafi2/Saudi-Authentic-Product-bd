@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
-import { listProducts } from "@/lib/api/products";
-import { toProduct } from "@/lib/mappers";
 import { formatBDT } from "@/lib/utils";
+import { useProductSearchSuggestions } from "@/hooks/useProductSearchSuggestions";
 import { ProductMedia } from "@/components/ui/ProductMedia";
-import type { Product } from "@/types/product";
+
+export { getSearchableText, rankProductMatches } from "@/lib/searchRanking";
 
 interface SearchOverlayProps {
   open: boolean;
@@ -19,11 +19,12 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const { results, isSearching } = useProductSearchSuggestions(query);
 
   useEffect(() => {
     if (open) {
-      const t = setTimeout(() => inputRef.current?.focus(), 50);
-      return () => clearTimeout(t);
+      const t = window.setTimeout(() => inputRef.current?.focus(), 50);
+      return () => window.clearTimeout(t);
     }
   }, [open]);
 
@@ -38,36 +39,6 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const [results, setResults] = useState<Product[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    setIsSearching(true);
-    const t = setTimeout(() => {
-      listProducts({ q, limit: 5 })
-        .then(({ data }) => {
-          if (!cancelled) setResults(data.products.map(toProduct));
-        })
-        .catch(() => {
-          if (!cancelled) setResults([]);
-        })
-        .finally(() => {
-          if (!cancelled) setIsSearching(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [query]);
-
   if (!open) return null;
 
   function handleClose() {
@@ -76,7 +47,10 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
   }
 
   function goToShop() {
-    router.push(`/shop?q=${encodeURIComponent(query.trim())}`);
+    const nextQuery = query.trim();
+    router.push(
+      nextQuery ? `/shop?q=${encodeURIComponent(nextQuery)}` : "/shop",
+    );
     handleClose();
   }
 
@@ -84,43 +58,50 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
     <div className="fixed inset-0 z-[70] animate-fade-in">
       <button
         aria-label="Close search"
-        className="absolute inset-0 cursor-pointer bg-green-950/40 backdrop-blur-sm"
+        className="absolute inset-0 cursor-pointer bg-green-950/15"
         onClick={handleClose}
       />
-      <div className="relative mx-auto mt-24 w-[92%] max-w-2xl rounded-lg bg-cream-100 shadow-2xl">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            goToShop();
-          }}
-          className="flex items-center gap-3 border-b border-green-900/10 px-5 py-4"
-        >
-          <Search size={18} className="shrink-0 text-brown-500" />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for dates, gift boxes..."
-            className="w-full bg-transparent text-base text-green-950 placeholder:text-brown-500/60 focus:outline-none"
-          />
-          <button
-            type="button"
-            aria-label="Close search"
-            onClick={handleClose}
-            className="shrink-0 cursor-pointer text-brown-500 hover:text-green-950"
+      <div className="relative mx-auto mt-3 w-[94%] max-w-md rounded-[22px] border border-green-950/10 bg-surface/95 shadow-[0_18px_48px_rgba(12,36,22,0.18)] backdrop-blur-[2px]">
+        <div className="sticky top-0 z-10 rounded-t-[22px] border-b border-green-950/10 bg-surface/95 px-3 pb-2 pt-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              goToShop();
+            }}
+            className="flex items-center gap-2 rounded-2xl border border-green-950/10 bg-cream-100/80 px-3 py-2.5 shadow-inner shadow-green-950/5"
           >
-            <X size={18} />
-          </button>
-        </form>
+            <Search size={17} className="shrink-0 text-brown-500" />
+            <input
+              ref={inputRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search dates, gift boxes..."
+              aria-label="Search products"
+              className="w-full bg-transparent text-sm text-green-950 placeholder:text-brown-500/70 focus:outline-none"
+            />
+            <button
+              type="button"
+              aria-label="Close search"
+              onClick={handleClose}
+              className="shrink-0 cursor-pointer rounded-full p-1 text-brown-500 transition-colors hover:bg-green-950/5 hover:text-green-950"
+            >
+              <X size={16} />
+            </button>
+          </form>
+        </div>
 
         {query.trim() && (
-          <div className="max-h-[60vh] overflow-y-auto p-2">
+          <div className="max-h-[54vh] min-h-[120px] overflow-y-auto px-2 pb-2 pt-2">
             {isSearching ? (
-              <p className="px-4 py-6 text-center text-sm text-brown-500">Searching...</p>
+              <div className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-brown-500">
+                <span className="inline-block size-3 animate-pulse rounded-full bg-gold-500" />
+                Searching...
+              </div>
             ) : results.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-brown-500">
-                No products found for &ldquo;{query}&rdquo;.
-              </p>
+              <div className="px-4 py-5 text-center text-sm text-brown-500">
+                No products found
+              </div>
             ) : (
               <ul className="flex flex-col gap-1">
                 {results.map((product) => (
@@ -128,9 +109,9 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                     <Link
                       href={`/product/${product.slug}`}
                       onClick={handleClose}
-                      className="flex items-center gap-3 rounded-md p-2 hover:bg-green-950/5"
+                      className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-green-950/5"
                     >
-                      <span className="relative size-12 shrink-0 overflow-hidden rounded">
+                      <span className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-green-950/5 bg-cream-100">
                         <ProductMedia
                           src={product.images[0]?.url}
                           fallbackPhoto={product.fallbackPhoto}
@@ -144,9 +125,11 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                         <span className="block truncate text-sm font-semibold text-green-950">
                           {product.name}
                         </span>
-                        <span className="block text-xs text-brown-500">{product.origin}</span>
+                        <span className="block text-[11px] text-brown-500">
+                          {product.origin}
+                        </span>
                       </span>
-                      <span className="shrink-0 text-sm font-semibold text-green-950">
+                      <span className="shrink-0 text-xs font-semibold text-green-950">
                         {formatBDT(product.variants[0].priceBDT)}
                       </span>
                     </Link>
@@ -154,10 +137,11 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                 ))}
               </ul>
             )}
+
             {results.length > 0 && (
               <button
                 onClick={goToShop}
-                className="mt-1 w-full cursor-pointer rounded-md p-3 text-center text-xs font-bold uppercase tracking-[0.1em] text-green-900 hover:bg-green-950/5"
+                className="mt-2 w-full cursor-pointer rounded-xl border border-green-950/10 bg-green-950/[0.02] px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-green-900 transition-colors hover:bg-green-950/5"
               >
                 View all results
               </button>

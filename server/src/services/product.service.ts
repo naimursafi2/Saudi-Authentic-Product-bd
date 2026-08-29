@@ -16,7 +16,11 @@ import {
   registerPendingActionDenyHandler,
 } from "./pendingAction.service";
 import { recordAuditLog } from "./auditLog.service";
-import { requestVariantStockUpdate, type DesiredVariantStock, type StockActor } from "./inventory.service";
+import {
+  requestVariantStockUpdate,
+  type DesiredVariantStock,
+  type StockActor,
+} from "./inventory.service";
 import { notifyPriceDropSubscribers } from "./productAlert.service";
 import type {
   CreateProductInput,
@@ -41,7 +45,16 @@ export async function listProducts(query: ListProductsQuery) {
   }
 
   if (query.q) {
-    filter.$text = { $search: query.q };
+    const q = query.q.trim();
+    if (q) {
+      const searchPattern = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { name: { $regex: searchPattern, $options: "i" } },
+        { tagline: { $regex: searchPattern, $options: "i" } },
+        { description: { $regex: searchPattern, $options: "i" } },
+        { origin: { $regex: searchPattern, $options: "i" } },
+      ];
+    }
   }
 
   if (query.category) {
@@ -49,7 +62,12 @@ export async function listProducts(query: ListProductsQuery) {
     if (!category) {
       return {
         products: [],
-        pagination: { page: query.page, limit: query.limit, total: 0, totalPages: 1 },
+        pagination: {
+          page: query.page,
+          limit: query.limit,
+          total: 0,
+          totalPages: 1,
+        },
       };
     }
     filter.categories = category._id;
@@ -97,14 +115,17 @@ export async function listProducts(query: ListProductsQuery) {
 export async function getProductBySlug(slug: string) {
   const product = await ProductModel.findOne({ slug, isActive: true }).populate(
     "categories",
-    "name slug"
+    "name slug",
   );
   if (!product) throw ApiError.notFound("Product not found");
   return product;
 }
 
 export async function getProductById(id: string) {
-  const product = await ProductModel.findById(id).populate("categories", "name slug");
+  const product = await ProductModel.findById(id).populate(
+    "categories",
+    "name slug",
+  );
   if (!product) throw ApiError.notFound("Product not found");
   return product;
 }
@@ -169,25 +190,29 @@ export type CreateProductResult =
 export async function createProduct(
   input: CreateProductInput,
   actor: StockActor,
-  images?: Express.Multer.File[]
+  images?: Express.Multer.File[],
 ): Promise<CreateProductResult> {
   const slug = input.slug ?? slugify(input.name);
   const existing = await ProductModel.findOne({ slug });
-  if (existing) throw ApiError.conflict("A product with this slug already exists");
+  if (existing)
+    throw ApiError.conflict("A product with this slug already exists");
 
-  const categories = await CategoryModel.find({ _id: { $in: input.categories } });
+  const categories = await CategoryModel.find({
+    _id: { $in: input.categories },
+  });
   if (categories.length !== input.categories.length) {
     throw ApiError.badRequest("One or more categories are invalid");
   }
 
-  const uploadedImages = images && images.length > 0 ? await uploadProductImages(images, actor) : [];
+  const uploadedImages =
+    images && images.length > 0 ? await uploadProductImages(images, actor) : [];
 
   if (actor.role !== "super_admin") {
     const action = await createPendingAction(
       "product.create",
       { ...input, slug, images: uploadedImages },
       actor,
-      `New product "${input.name}" submitted for approval`
+      `New product "${input.name}" submitted for approval`,
     );
     return { kind: "pending", pendingActionId: action._id.toString() };
   }
@@ -218,12 +243,16 @@ registerPendingActionHandler("product.create", async (payload, reviewer) => {
   const existing = await ProductModel.findOne({ slug: data.slug });
   if (existing) {
     throw ApiError.conflict(
-      `Cannot grant: a product with slug "${data.slug}" was created while this request was pending`
+      `Cannot grant: a product with slug "${data.slug}" was created while this request was pending`,
     );
   }
-  const categories = await CategoryModel.find({ _id: { $in: data.categories } });
+  const categories = await CategoryModel.find({
+    _id: { $in: data.categories },
+  });
   if (categories.length !== data.categories.length) {
-    throw ApiError.badRequest("Cannot grant: one or more categories no longer exist");
+    throw ApiError.badRequest(
+      "Cannot grant: one or more categories no longer exist",
+    );
   }
 
   const product = new ProductModel({
@@ -256,17 +285,21 @@ registerPendingActionHandler("product.create", async (payload, reviewer) => {
   return { resource: "Product", resourceId: product._id.toString() };
 });
 
-registerPendingActionDenyHandler("product.create", async (payload, reviewer) => {
-  const images = ((payload as unknown as ProductCreatePayload).images ?? []) as { publicId: string }[];
-  // The Super Admin has already ruled against this submission, so its images
-  // go straight to permanent deletion rather than back into the review queue
-  // — routed through the registry so no row is left pointing at a deleted file.
-  await purgeAssetsByPublicId(
-    images.map((img) => img.publicId),
-    reviewer,
-    "Product creation request denied; uploaded images discarded."
-  );
-});
+registerPendingActionDenyHandler(
+  "product.create",
+  async (payload, reviewer) => {
+    const images = ((payload as unknown as ProductCreatePayload).images ??
+      []) as { publicId: string }[];
+    // The Super Admin has already ruled against this submission, so its images
+    // go straight to permanent deletion rather than back into the review queue
+    // — routed through the registry so no row is left pointing at a deleted file.
+    await purgeAssetsByPublicId(
+      images.map((img) => img.publicId),
+      reviewer,
+      "Product creation request denied; uploaded images discarded.",
+    );
+  },
+);
 
 export type UpdateProductResult = {
   product: IProduct;
@@ -285,18 +318,21 @@ export async function updateProduct(
   id: string,
   input: UpdateProductInput,
   actor: StockActor,
-  images?: Express.Multer.File[]
+  images?: Express.Multer.File[],
 ): Promise<UpdateProductResult> {
   const product = await ProductModel.findById(id);
   if (!product) throw ApiError.notFound("Product not found");
 
   if (input.slug && input.slug !== product.slug) {
     const existing = await ProductModel.findOne({ slug: input.slug });
-    if (existing) throw ApiError.conflict("A product with this slug already exists");
+    if (existing)
+      throw ApiError.conflict("A product with this slug already exists");
   }
 
   if (input.categories) {
-    const categories = await CategoryModel.find({ _id: { $in: input.categories } });
+    const categories = await CategoryModel.find({
+      _id: { $in: input.categories },
+    });
     if (categories.length !== input.categories.length) {
       throw ApiError.badRequest("One or more categories are invalid");
     }
@@ -310,7 +346,9 @@ export async function updateProduct(
   // id — pointing at the right variant instead of being orphaned by an
   // unrelated edit. An id the form didn't get from *this* product is dropped,
   // so the variant is treated as new rather than adopting a foreign id.
-  const existingById = new Map(product.variants.map((v) => [v._id!.toString(), v]));
+  const existingById = new Map(
+    product.variants.map((v) => [v._id!.toString(), v]),
+  );
   const { variants: submittedVariants, ...contentInput } = input;
   const requestedStocks = submittedVariants?.map((v) => v.stock) ?? [];
 
@@ -342,25 +380,40 @@ export async function updateProduct(
     // smuggle someone else's image into this product), in the order given,
     // then append any newly uploaded files. Anything dropped from the kept
     // list gets cleaned up from Cloudinary.
-    const keptPublicIds = new Set(input.existingImages.map((img) => img.publicId));
-    const currentByPublicId = new Map(product.images.map((img) => [img.publicId, img]));
+    const keptPublicIds = new Set(
+      input.existingImages.map((img) => img.publicId),
+    );
+    const currentByPublicId = new Map(
+      product.images.map((img) => [img.publicId, img]),
+    );
     const kept = input.existingImages
       .filter((img) => currentByPublicId.has(img.publicId))
       .map((img) => currentByPublicId.get(img.publicId)!);
-    const removed = product.images.filter((img) => !keptPublicIds.has(img.publicId));
+    const removed = product.images.filter(
+      (img) => !keptPublicIds.has(img.publicId),
+    );
 
     if (kept.length + (images?.length ?? 0) > 6) {
       throw ApiError.badRequest("A product can have at most 6 images");
     }
 
-    await Promise.all(removed.map((img) => retireInternalAsset(img.publicId, actor, "Product image removed")));
-    const uploaded = images && images.length > 0 ? await uploadProductImages(images, actor) : [];
+    await Promise.all(
+      removed.map((img) =>
+        retireInternalAsset(img.publicId, actor, "Product image removed"),
+      ),
+    );
+    const uploaded =
+      images && images.length > 0
+        ? await uploadProductImages(images, actor)
+        : [];
     product.images = [...kept, ...uploaded] as IProduct["images"];
   } else if (images && images.length > 0) {
     // No `existingImages` sent — legacy wholesale replace: clean up every
     // old image and swap in the newly uploaded set.
     await Promise.all(
-      product.images.map((img) => retireInternalAsset(img.publicId, actor, "Product images replaced"))
+      product.images.map((img) =>
+        retireInternalAsset(img.publicId, actor, "Product images replaced"),
+      ),
     );
     product.images = await uploadProductImages(images, actor);
   }
@@ -374,7 +427,11 @@ export async function updateProduct(
     for (const variant of product.variants) {
       const previous = existingById.get(variant._id!.toString());
       if (previous && variant.priceBDT < previous.priceBDT) {
-        await notifyPriceDropSubscribers(product._id.toString(), variant._id!.toString(), variant.priceBDT);
+        await notifyPriceDropSubscribers(
+          product._id.toString(),
+          variant._id!.toString(),
+          variant.priceBDT,
+        );
       }
     }
   }
@@ -386,8 +443,12 @@ export async function updateProduct(
       action: "product.update",
       resource: "Product",
       resourceId: product._id.toString(),
-      oldValue: Object.fromEntries(Object.entries(fieldChanges).map(([k, v]) => [k, v.from])),
-      newValue: Object.fromEntries(Object.entries(fieldChanges).map(([k, v]) => [k, v.to])),
+      oldValue: Object.fromEntries(
+        Object.entries(fieldChanges).map(([k, v]) => [k, v.from]),
+      ),
+      newValue: Object.fromEntries(
+        Object.entries(fieldChanges).map(([k, v]) => [k, v.to]),
+      ),
       note: `Edited: ${Object.keys(fieldChanges).join(", ")}`,
     });
   }
@@ -410,7 +471,8 @@ export async function updateProduct(
       productName: product.name,
       stocks,
     });
-    if (result?.kind === "pending") stockPendingActionId = result.pendingActionId;
+    if (result?.kind === "pending")
+      stockPendingActionId = result.pendingActionId;
   }
 
   return { product, stockPendingActionId };
@@ -420,18 +482,25 @@ export async function updateProduct(
 export { AUDITED_PRODUCT_FIELDS };
 export type { AuditedProductField };
 
-async function removeProduct(id: string, actor: AssetActor): Promise<{ id: string; name: string }> {
+async function removeProduct(
+  id: string,
+  actor: AssetActor,
+): Promise<{ id: string; name: string }> {
   const product = await ProductModel.findById(id);
   if (!product) throw ApiError.notFound("Product not found");
   const summary = { id: product._id.toString(), name: product.name };
   await Promise.all(
-    product.images.map((img) => retireInternalAsset(img.publicId, actor, "Product deleted"))
+    product.images.map((img) =>
+      retireInternalAsset(img.publicId, actor, "Product deleted"),
+    ),
   );
   await product.deleteOne();
   return summary;
 }
 
-export type DeleteProductResult = { kind: "deleted" } | { kind: "pending"; pendingActionId: string };
+export type DeleteProductResult =
+  | { kind: "deleted" }
+  | { kind: "pending"; pendingActionId: string };
 
 /**
  * Per ROLES_AND_PERMISSIONS_v2.md §6: `super_admin` deletes directly;
@@ -439,11 +508,18 @@ export type DeleteProductResult = { kind: "deleted" } | { kind: "pending"; pendi
  * `admin` has no product-deletion access at all — enforced at the route
  * level (see product.routes.ts) as well as here for defense in depth.
  */
-export async function deleteProduct(id: string, actor: { id: string; role: Role }): Promise<DeleteProductResult> {
+export async function deleteProduct(
+  id: string,
+  actor: { id: string; role: Role },
+): Promise<DeleteProductResult> {
   if (actor.role === "co_admin") {
     const product = await ProductModel.findById(id);
     if (!product) throw ApiError.notFound("Product not found");
-    const action = await createPendingAction("product.delete", { productId: id, productName: product.name }, actor);
+    const action = await createPendingAction(
+      "product.delete",
+      { productId: id, productName: product.name },
+      actor,
+    );
     return { kind: "pending", pendingActionId: action._id.toString() };
   }
 
@@ -474,7 +550,10 @@ registerPendingActionHandler("product.delete", async (payload, reviewer) => {
   return { resource: "Product", resourceId: summary.id };
 });
 
-async function uploadProductImages(files: Express.Multer.File[], actor: AssetActor) {
+async function uploadProductImages(
+  files: Express.Multer.File[],
+  actor: AssetActor,
+) {
   const uploaded = await Promise.all(
     files.map((file) =>
       uploadInternalFile(file, {
@@ -483,8 +562,8 @@ async function uploadProductImages(files: Express.Multer.File[], actor: AssetAct
         fieldPath: "images",
         module: "Catalog",
         actor,
-      })
-    )
+      }),
+    ),
   );
   return uploaded.map((img, index) => ({
     url: img.url,
@@ -497,7 +576,9 @@ async function uploadProductImages(files: Express.Multer.File[], actor: AssetAct
 export async function recomputeProductRating(productId: string) {
   const stats = await ReviewModel.aggregate([
     { $match: { product: new Types.ObjectId(productId), isApproved: true } },
-    { $group: { _id: "$product", avg: { $avg: "$rating" }, count: { $sum: 1 } } },
+    {
+      $group: { _id: "$product", avg: { $avg: "$rating" }, count: { $sum: 1 } },
+    },
   ]);
 
   const avg = stats[0]?.avg ?? 0;

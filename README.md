@@ -30,7 +30,9 @@ origins (client on Vercel, server on Render).
 
 ## Main features
 
-**Storefront**: catalog browsing with filters/search, product detail pages
+**Storefront**: catalog browsing with filters and live, database-driven
+search suggestions (single-character and partial matches, desktop dropdown +
+mobile overlay), product detail pages
 with gallery + reviews, cart & wishlist (client-side), coupon codes,
 checkout with bKash online payment (server-verified) or cash on delivery,
 order tracking (with/without an account), customer account

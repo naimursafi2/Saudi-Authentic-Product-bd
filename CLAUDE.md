@@ -578,6 +578,35 @@ skips the refresh path.
 backend or the account; no server-side model. Same for Recently Viewed and
 Product Comparison.
 
+**Header navigation** (`components/layout/Header.tsx`): row 1 (logo, search,
+actions) is always visible; row 2 (category nav) is `desktop-only`. Both
+animate via CSS `transform`, never a height/grid-rows collapse, so nothing
+fights live scroll input. Below `lg`, row 2 doesn't render at all — the
+hamburger button toggles a slide-in drawer (swapping to an X icon while
+open) and a fixed bottom nav bar (Home/Menu/Cart/Search/Account) is the
+primary mobile navigation. At `lg`+, row 1 hides via `translateY(-100%)` on
+scroll-down and reappears on scroll-up; row 2 is translated in lock-step by
+row 1's *measured* height (`ResizeObserver`, not a hardcoded pixel value) so
+it slides up to fill row 1's vacated space with no gap. **Stacking-context
+gotcha**: because both rows use `transform` for this animation, each becomes
+its own CSS stacking context, and row 2 — later in the DOM — always paints
+over row 1's content regardless of that content's own `z-index`. Any
+dropdown/popover anchored inside row 1 (e.g. the desktop search suggestions
+below) must render through `createPortal(..., document.body)`, not as a
+plain absolutely-positioned child, or it renders hidden behind row 2.
+
+**Product search** (`hooks/useProductSearchSuggestions.ts`,
+`lib/searchRanking.ts`): the desktop `HeaderSearchBar` dropdown and the
+mobile/compact `SearchOverlay` share one debounced (320ms) `GET
+/products?q=` hook and one client-side ranking function
+(`rankProductMatches`), so the two surfaces can't drift out of sync. The
+backend matches with a case-insensitive regex `$or` across
+`name`/`tagline`/`description`/`origin` — not MongoDB's `$text` index, which
+can't do partial or single-character matches — so `s`, `su`, `date` etc. all
+narrow correctly against whatever products actually exist; there is no
+hardcoded keyword-to-product mapping, and a newly added product is
+searchable immediately.
+
 **No form or state-management library** — hand-rolled `useState`/
 `useEffect` + the custom `lib/api` client. No react-hook-form, no SWR/React
 Query, no Redux/Zustand. Match this for new forms/pages.

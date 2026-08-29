@@ -10,10 +10,14 @@
  */
 const uploadBufferToCloudinary = jest
   .fn()
-  .mockResolvedValue({ url: "https://cdn.test/review.jpg", publicId: "reviews/photo" });
+  .mockResolvedValue({
+    url: "https://cdn.test/review.jpg",
+    publicId: "reviews/photo",
+  });
 
 jest.mock("../../config/cloudinary", () => ({
-  uploadBufferToCloudinary: (...args: unknown[]) => uploadBufferToCloudinary(...args),
+  uploadBufferToCloudinary: (...args: unknown[]) =>
+    uploadBufferToCloudinary(...args),
   deleteCloudinaryImage: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -28,7 +32,7 @@ import { OrderModel, type IOrder } from "../../models/Order.model";
 const app = createApp();
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64"
+  "base64",
 );
 
 const shippingAddress = {
@@ -42,7 +46,10 @@ const shippingAddress = {
 };
 
 async function seedProduct() {
-  const category = await CategoryModel.create({ name: "Dates", slug: `dates-${Date.now()}` });
+  const category = await CategoryModel.create({
+    name: "Dates",
+    slug: `dates-${Date.now()}`,
+  });
   return ProductModel.create({
     name: "Ajwa Dates",
     slug: `ajwa-dates-${Date.now()}`,
@@ -50,12 +57,18 @@ async function seedProduct() {
     description: "Premium Ajwa dates.",
     origin: "Madinah",
     categories: [category._id],
-    variants: [{ label: "500g", priceBDT: 1000, stock: 5, lowStockThreshold: 2 }],
+    variants: [
+      { label: "500g", priceBDT: 1000, stock: 5, lowStockThreshold: 2 },
+    ],
   });
 }
 
 /** A delivered order for `customerId` containing `productId` — the "verified purchase" fixture. */
-async function seedDeliveredOrder(customerId: string, productId: string, status: IOrder["status"] = "delivered") {
+async function seedDeliveredOrder(
+  customerId: string,
+  productId: string,
+  status: IOrder["status"] = "delivered",
+) {
   return OrderModel.create({
     orderNumber: `SAP-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
     customer: customerId,
@@ -95,6 +108,60 @@ describe("Product Reviews — verified purchase gate and photo uploads", () => {
     await disconnectTestDb();
   });
 
+  it("finds real database products for partial, case-insensitive searches", async () => {
+    const category = await CategoryModel.create({
+      name: "Dates",
+      slug: `dates-${Date.now()}`,
+    });
+    await ProductModel.create({
+      name: "Sukkari Dates",
+      slug: `sukkari-dates-${Date.now()}`,
+      tagline: "Soft and caramel-like",
+      description: "Premium Sukkari dates from Madinah.",
+      origin: "Madinah",
+      categories: [category._id],
+      variants: [
+        { label: "500g", priceBDT: 900, stock: 20, lowStockThreshold: 5 },
+      ],
+    });
+
+    await ProductModel.create({
+      name: "Royal Honey",
+      slug: `royal-honey-${Date.now()}`,
+      tagline: "Pure honey",
+      description: "Golden natural honey.",
+      origin: "Qassim",
+      categories: [category._id],
+      variants: [
+        { label: "500g", priceBDT: 850, stock: 15, lowStockThreshold: 5 },
+      ],
+    });
+
+    const bySingleLetter = await request(app).get(`/api/v1/products?q=s`);
+    expect(bySingleLetter.status).toBe(200);
+    expect(
+      bySingleLetter.body.data.products.some((product: { name: string }) =>
+        /sukkari/i.test(product.name),
+      ),
+    ).toBe(true);
+
+    const byPartial = await request(app).get(`/api/v1/products?q=su`);
+    expect(byPartial.status).toBe(200);
+    expect(
+      byPartial.body.data.products.some((product: { name: string }) =>
+        /sukkari/i.test(product.name),
+      ),
+    ).toBe(true);
+
+    const byWord = await request(app).get(`/api/v1/products?q=date`);
+    expect(byWord.status).toBe(200);
+    expect(
+      byWord.body.data.products.some((product: { name: string }) =>
+        /sukkari.*date|date/i.test(product.name),
+      ),
+    ).toBe(true);
+  });
+
   it("rejects a review from a customer who never purchased the product", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
     const product = await seedProduct();
@@ -102,7 +169,10 @@ describe("Product Reviews — verified purchase gate and photo uploads", () => {
     const res = await request(app)
       .post(`/api/v1/reviews/product/${product._id.toString()}`)
       .set(...authHeader(token))
-      .send({ rating: 5, comment: "Never bought this but leaving a review anyway." });
+      .send({
+        rating: 5,
+        comment: "Never bought this but leaving a review anyway.",
+      });
 
     expect(res.status).toBe(403);
   });
@@ -110,7 +180,11 @@ describe("Product Reviews — verified purchase gate and photo uploads", () => {
   it("rejects a review from a customer whose order for the product hasn't been delivered yet", async () => {
     const { token, user } = await createAuthedUser({ role: "customer" });
     const product = await seedProduct();
-    await seedDeliveredOrder(user._id.toString(), product._id.toString(), "processing");
+    await seedDeliveredOrder(
+      user._id.toString(),
+      product._id.toString(),
+      "processing",
+    );
 
     const res = await request(app)
       .post(`/api/v1/reviews/product/${product._id.toString()}`)
@@ -166,10 +240,14 @@ describe("Product Reviews — verified purchase gate and photo uploads", () => {
       .send({ rating: 3, comment: "It was okay." });
     const reviewId = created.body.data.review._id;
 
-    const del = await request(app).delete(`/api/v1/reviews/${reviewId}`).set(...authHeader(adminToken));
+    const del = await request(app)
+      .delete(`/api/v1/reviews/${reviewId}`)
+      .set(...authHeader(adminToken));
     expect(del.status).toBe(200);
 
-    const publicList = await request(app).get(`/api/v1/reviews/product/${product._id.toString()}`);
+    const publicList = await request(app).get(
+      `/api/v1/reviews/product/${product._id.toString()}`,
+    );
     expect(publicList.body.data.reviews).toHaveLength(0);
   });
 
@@ -197,10 +275,14 @@ describe("Product Reviews — verified purchase gate and photo uploads", () => {
       .send({ isApproved: false });
     expect(hide.status).toBe(200);
 
-    const hiddenFromPublic = await request(app).get(`/api/v1/reviews/product/${product._id.toString()}`);
+    const hiddenFromPublic = await request(app).get(
+      `/api/v1/reviews/product/${product._id.toString()}`,
+    );
     expect(hiddenFromPublic.body.data.reviews).toHaveLength(0);
 
-    const stillInAdminList = await request(app).get("/api/v1/reviews").set(...authHeader(adminToken));
+    const stillInAdminList = await request(app)
+      .get("/api/v1/reviews")
+      .set(...authHeader(adminToken));
     expect(stillInAdminList.body.data.reviews).toHaveLength(1);
     expect(stillInAdminList.body.data.reviews[0].isApproved).toBe(false);
 
@@ -210,7 +292,9 @@ describe("Product Reviews — verified purchase gate and photo uploads", () => {
       .send({ isApproved: true });
     expect(unhide.status).toBe(200);
 
-    const backInPublic = await request(app).get(`/api/v1/reviews/product/${product._id.toString()}`);
+    const backInPublic = await request(app).get(
+      `/api/v1/reviews/product/${product._id.toString()}`,
+    );
     expect(backInPublic.body.data.reviews).toHaveLength(1);
   });
 });
