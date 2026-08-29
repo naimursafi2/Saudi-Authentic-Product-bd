@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { KeyRound, LogIn, MapPin, Plus, ShieldCheck, UserPlus, X } from "lucide-react";
+import { KeyRound, LogIn, ShieldCheck, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -17,8 +17,8 @@ import { meetsPasswordRequirements } from "@/lib/passwordStrength";
 const GOOGLE_SIGN_IN_ENABLED = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
 const fieldClasses =
-  "w-full rounded border border-green-900/15 bg-cream-50 px-3.5 py-2.5 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
-const labelClasses = "mb-1.5 block text-xs font-bold uppercase tracking-[0.06em] text-brown-600";
+  "w-full rounded border border-green-900/15 bg-cream-50 px-3 py-2 text-sm text-green-950 placeholder:text-brown-500/50 focus:border-green-900/40 focus:outline-none";
+const labelClasses = "mb-1 block text-[11px] font-bold uppercase tracking-[0.06em] text-brown-600";
 
 type Tab = "login" | "register" | "forgot";
 
@@ -27,7 +27,7 @@ const HEADER: Record<Tab, { icon: typeof LogIn; title: string; subtitle: string 
   register: {
     icon: UserPlus,
     title: "Create Your Account",
-    subtitle: "Register to get started — a faster checkout and order history await.",
+    subtitle: "Takes less than a minute — then checkout is one tap.",
   },
   forgot: { icon: KeyRound, title: "Reset Password", subtitle: "We'll email you a link to reset your password." },
 };
@@ -44,18 +44,14 @@ export function AuthForms() {
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState("");
 
-  // Shared / login+register fields
+  // Shared / login+register fields. Registration is deliberately limited to
+  // the four fields the account itself needs: a phone number and a delivery
+  // address are collected later, in the account Address Book and at checkout,
+  // so signing up stays one short screen.
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  // Optional address, register only
-  const [showAddress, setShowAddress] = useState(false);
-  const [fullAddress, setFullAddress] = useState("");
-  const [district, setDistrict] = useState("");
-  const [cityArea, setCityArea] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,10 +72,6 @@ export function AuthForms() {
         setError("Passwords do not match.");
         return;
       }
-      if (showAddress && !phone) {
-        setError("Add a phone number above to save your delivery address.");
-        return;
-      }
     }
 
     setIsSubmitting(true);
@@ -90,14 +82,7 @@ export function AuthForms() {
           setChallengeToken(outcome.challengeToken);
         }
       } else if (tab === "register") {
-        await register({
-          name,
-          email,
-          password,
-          confirmPassword,
-          phone: phone || undefined,
-          address: showAddress && fullAddress && district && cityArea ? { fullAddress, district, cityArea } : undefined,
-        });
+        await register({ name, email, password, confirmPassword });
       } else {
         await forgotPassword(email);
         setForgotSent(true);
@@ -132,20 +117,20 @@ export function AuthForms() {
 
   if (challengeToken) {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
+      <div className="mx-auto flex max-w-sm flex-col gap-5 px-5 py-12 sm:py-16">
         <div className="text-center">
-          <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-brand-deep text-gold-500">
-            <ShieldCheck size={24} />
+          <span className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-brand-deep text-gold-500">
+            <ShieldCheck size={20} />
           </span>
-          <h1 className="font-serif text-3xl text-green-950">Two-Step Verification</h1>
-          <p className="mt-2 text-sm text-brown-500">
+          <h1 className="font-serif text-2xl text-green-950">Two-Step Verification</h1>
+          <p className="mt-1.5 text-sm text-brown-500">
             Enter the 6-digit code from your authenticator app, or one of your recovery codes.
           </p>
         </div>
 
         <form
           onSubmit={handleTwoFactorSubmit}
-          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+          className="flex flex-col gap-3.5 rounded-lg border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
         >
           <div>
             <label className={labelClasses}>Authentication Code</label>
@@ -160,7 +145,7 @@ export function AuthForms() {
             />
           </div>
           {error && <p className="text-sm text-danger">{error}</p>}
-          <Button type="submit" variant="primary" size="lg" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" variant="primary" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? "Verifying..." : "Verify & Sign In"}
           </Button>
           <button
@@ -178,13 +163,13 @@ export function AuthForms() {
   const Header = HEADER[tab];
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-8 px-6 py-16 sm:py-24">
+    <div className="mx-auto flex max-w-sm flex-col gap-5 px-5 py-12 sm:py-16">
       <div className="text-center">
-        <span className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-brand-deep text-gold-500">
-          <Header.icon size={24} />
+        <span className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-brand-deep text-gold-500">
+          <Header.icon size={20} />
         </span>
-        <h1 className="font-serif text-3xl text-green-950">{Header.title}</h1>
-        <p className="mt-2 text-sm text-brown-500">{Header.subtitle}</p>
+        <h1 className="font-serif text-2xl text-green-950">{Header.title}</h1>
+        <p className="mt-1.5 text-sm text-brown-500">{Header.subtitle}</p>
       </div>
 
       {tab !== "forgot" && (
@@ -197,7 +182,7 @@ export function AuthForms() {
                 setError(null);
               }}
               className={cn(
-                "flex-1 cursor-pointer rounded py-2 text-xs font-bold uppercase tracking-[0.08em] transition-colors",
+                "flex-1 cursor-pointer rounded py-1.5 text-xs font-bold uppercase tracking-[0.08em] transition-colors",
                 tab === t ? "bg-brand-deep-2 text-white" : "text-brown-600 hover:bg-green-950/5"
               )}
             >
@@ -208,7 +193,7 @@ export function AuthForms() {
       )}
 
       {tab === "forgot" && forgotSent ? (
-        <div className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 text-center shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
+        <div className="flex flex-col gap-3.5 rounded-lg border border-brown-600/10 bg-surface p-5 text-center shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <p className="text-sm text-brown-600">
             If an account exists for <span className="font-semibold text-green-950">{email}</span>, a
             reset link has been sent.
@@ -226,13 +211,14 @@ export function AuthForms() {
       ) : (
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-4 rounded-lg border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+          className="flex flex-col gap-3.5 rounded-lg border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
         >
           {tab === "register" && (
             <div>
               <label className={labelClasses}>Full Name</label>
               <input
                 required
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your Name"
@@ -245,125 +231,65 @@ export function AuthForms() {
             <input
               required
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               className={fieldClasses}
             />
           </div>
-          {tab === "register" && (
-            <div>
-              <label className={labelClasses}>Phone {showAddress ? "" : "(optional)"}</label>
-              <input
-                required={showAddress}
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+880 1XXXXXXXXX"
-                className={fieldClasses}
-              />
-            </div>
-          )}
+          {/* Register puts the two password fields side by side from `sm` up so
+              the whole form stays one short screen; on mobile the grid
+              collapses back to a single column. */}
           {tab !== "forgot" && (
-            <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <label className={cn(labelClasses, "mb-0")}>Password</label>
-                {tab === "login" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTab("forgot");
-                      setError(null);
-                    }}
-                    className="cursor-pointer text-xs font-semibold text-brown-500 underline hover:text-green-950"
-                  >
-                    Forgot password?
-                  </button>
-                )}
-              </div>
-              <PasswordInput
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                inputClassName={fieldClasses}
-              />
-              {tab === "register" && <PasswordStrengthMeter password={password} />}
-            </div>
-          )}
-          {tab === "register" && (
-            <div>
-              <label className={labelClasses}>Confirm Password</label>
-              <PasswordInput
-                required
-                minLength={8}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                inputClassName={cn(fieldClasses, passwordsMismatch && "border-danger/50")}
-              />
-              {passwordsMismatch && <p className="mt-1 text-xs text-danger">Passwords do not match.</p>}
-            </div>
-          )}
-
-          {tab === "register" &&
-            (showAddress ? (
-              <div className="flex flex-col gap-3 rounded-lg border border-brown-600/10 bg-cream-100 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.06em] text-brown-600">
-                    <MapPin size={13} /> Delivery Address
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddress(false);
-                      setFullAddress("");
-                      setDistrict("");
-                      setCityArea("");
-                    }}
-                    aria-label="Remove address"
-                    className="inline-flex cursor-pointer items-center justify-center rounded-full bg-danger-soft p-1 text-danger transition-colors duration-150 hover:bg-danger-soft-hover"
-                  >
-                    <X size={14} />
-                  </button>
+            <div className={cn(tab === "register" && "grid items-start gap-3.5 sm:grid-cols-2")}>
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label className={cn(labelClasses, "mb-0")}>Password</label>
+                  {tab === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTab("forgot");
+                        setError(null);
+                      }}
+                      className="cursor-pointer text-xs font-semibold text-brown-500 underline hover:text-green-950"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                 </div>
-                <input
+                <PasswordInput
                   required
-                  value={fullAddress}
-                  onChange={(e) => setFullAddress(e.target.value)}
-                  placeholder="House, Road, Area"
-                  className={fieldClasses}
+                  minLength={8}
+                  autoComplete={tab === "register" ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  inputClassName={fieldClasses}
                 />
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    required
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    placeholder="District"
-                    className={fieldClasses}
-                  />
-                  <input
-                    required
-                    value={cityArea}
-                    onChange={(e) => setCityArea(e.target.value)}
-                    placeholder="City / Area"
-                    className={fieldClasses}
-                  />
-                </div>
+                {tab === "register" && <PasswordStrengthMeter password={password} />}
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowAddress(true)}
-                className="flex cursor-pointer items-center gap-1.5 self-start text-xs font-bold uppercase tracking-[0.06em] text-green-900 hover:text-green-950"
-              >
-                <Plus size={13} /> Add delivery address (optional)
-              </button>
-            ))}
+              {tab === "register" && (
+                <div>
+                  <label className={labelClasses}>Confirm Password</label>
+                  <PasswordInput
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    inputClassName={cn(fieldClasses, passwordsMismatch && "border-danger/50")}
+                  />
+                  {passwordsMismatch && <p className="mt-1 text-xs text-danger">Passwords do not match.</p>}
+                </div>
+              )}
+            </div>
+          )}
 
           {error && <p className="text-sm text-danger">{error}</p>}
-          <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" disabled={isSubmitting}>
+          <Button type="submit" variant="primary" className="mt-0.5 w-full" disabled={isSubmitting}>
             {isSubmitting
               ? "Please wait..."
               : tab === "login"
@@ -384,7 +310,7 @@ export function AuthForms() {
 
           {tab !== "forgot" && GOOGLE_SIGN_IN_ENABLED && (
             <>
-              <div className="flex items-center gap-3 pt-1">
+              <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-brown-600/10" />
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-brown-500">
                   or continue with

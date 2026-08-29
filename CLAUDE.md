@@ -662,7 +662,12 @@ than the rewrite intercepts.
   other — both apply in grant order; the reviewer is warned, not blocked.
 - No `client/src/middleware.ts` — route protection is client-side
   (`RoleGuard`) plus real backend authorization.
-- Google Sign-In and SMS are both wired end-to-end but inactive (no
-  `GOOGLE_CLIENT_ID`/SMS provider provisioned on this machine).
+- SMS is wired end-to-end but inactive (no provider provisioned). Google
+  Sign-In is live: it is the Google Identity Services ID-token flow, so the
+  server only ever needs `GOOGLE_CLIENT_ID` (the client secret is not part of
+  this flow), and the same value must be set as `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+  on the client or the button hides itself. Any new deployment origin must be
+  added to the OAuth client's **Authorized JavaScript origins** — redirect
+  URIs are not used by this flow.
 - No arbitrary page/route creation anywhere — every admin-editable surface
   (homepage, static pages, nav, footer) is a fixed, known type.

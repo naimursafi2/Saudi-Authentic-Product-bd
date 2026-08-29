@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { ApiClientError } from "@/lib/api/client";
 
@@ -53,30 +53,67 @@ export function GoogleAuthButton({ onError, onStart }: { onError: (message: stri
     document.head.appendChild(script);
   }, []);
 
+  // Kept in a ref so the initialize/renderButton effect below depends only on
+  // the script being ready. Callers pass inline arrow functions (e.g.
+  // onStart={() => setError(null)}), which are new on every render — depending
+  // on them directly re-ran google.accounts.id.initialize() on each render and
+  // GIS warned that only the last instance would be used.
+  const handlersRef = useRef({ onError, onStart });
   useEffect(() => {
-    if (!CLIENT_ID || !scriptLoaded || !buttonRef.current || !window.google) return;
+    handlersRef.current = { onError, onStart };
+  }, [onError, onStart]);
 
-    window.google.accounts.id.initialize({
-      client_id: CLIENT_ID,
-      callback: async (response) => {
-        onStart?.();
-        try {
-          await loginWithGoogle(response.credential);
-        } catch (err) {
-          onError(err instanceof ApiClientError ? err.message : "Could not sign in with Google. Please try again.");
-        }
-      },
-    });
+  const handleCredential = useCallback(
+    async (response: GoogleCredentialResponse) => {
+      handlersRef.current.onStart?.();
+      try {
+        await loginWithGoogle(response.credential);
+      } catch (err) {
+        handlersRef.current.onError(
+          err instanceof ApiClientError ? err.message : "Could not sign in with Google. Please try again."
+        );
+      }
+    },
+    [loginWithGoogle]
+  );
+
+  // GIS only accepts a fixed pixel width (no percentage), so the button would
+  // otherwise sit at one hardcoded size and overflow or under-fill the card it
+  // is dropped into. Measuring the wrapper keeps it flush with the form's own
+  // submit button on every screen size. Google clamps `width` to 200-400px.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const measure = () => setWidth(Math.round(wrapper.getBoundingClientRect().width));
+    measure();
+    // Observing the wrapper rather than the render target avoids a feedback
+    // loop — the iframe GIS injects can never widen its own container.
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!CLIENT_ID || !scriptLoaded || !buttonRef.current || !window.google || !width) return;
+
+    window.google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredential });
     window.google.accounts.id.renderButton(buttonRef.current, {
       theme: "outline",
       size: "large",
       shape: "pill",
       text: "continue_with",
-      width: 320,
+      width: Math.min(400, Math.max(200, width)),
     });
-  }, [scriptLoaded, loginWithGoogle, onError, onStart]);
+  }, [scriptLoaded, handleCredential, width]);
 
   if (!CLIENT_ID) return null;
 
-  return <div ref={buttonRef} className="flex justify-center" />;
+  return (
+    <div ref={wrapperRef} className="w-full">
+      <div ref={buttonRef} className="flex justify-center" />
+    </div>
+  );
 }
