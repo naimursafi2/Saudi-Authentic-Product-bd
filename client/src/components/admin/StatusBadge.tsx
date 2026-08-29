@@ -55,6 +55,9 @@ const PALETTE: Record<string, string> = {
   returned: "bg-danger-soft text-danger",
   refunded: "bg-danger-soft text-danger",
   failed: "bg-danger-soft text-danger",
+  // An account locked out by failed sign-in attempts — needs to read as a
+  // problem, not as a neutral state, wherever it is shown.
+  locked: "bg-danger-soft text-danger",
   unverified: "bg-gold-soft text-gold-700",
 };
 

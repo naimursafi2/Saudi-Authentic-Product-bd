@@ -45,10 +45,6 @@ export interface IUser extends Document {
   failedLoginAttempts: number;
   lockedUntil?: Date;
   lastSeenAt?: Date;
-  twoFactorEnabled: boolean;
-  twoFactorSecret?: string;
-  twoFactorPendingSecret?: string;
-  twoFactorRecoveryCodes: string[];
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
@@ -109,10 +105,6 @@ const userSchema = new Schema<IUser>(
     failedLoginAttempts: { type: Number, default: 0 },
     lockedUntil: { type: Date },
     lastSeenAt: { type: Date },
-    twoFactorEnabled: { type: Boolean, default: false },
-    twoFactorSecret: { type: String, select: false },
-    twoFactorPendingSecret: { type: String, select: false },
-    twoFactorRecoveryCodes: { type: [String], default: [], select: false },
   },
   { timestamps: true }
 );
@@ -132,9 +124,6 @@ userSchema.set("toJSON", {
   transform: (_doc, ret) => {
     const obj = ret as unknown as Record<string, unknown>;
     delete obj.password;
-    delete obj.twoFactorSecret;
-    delete obj.twoFactorPendingSecret;
-    delete obj.twoFactorRecoveryCodes;
     delete obj.__v;
     return obj;
   },

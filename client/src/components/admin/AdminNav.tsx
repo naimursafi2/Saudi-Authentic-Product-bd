@@ -16,6 +16,7 @@ import {
   Wallet,
   Boxes,
   BarChart3,
+  ChartPie,
   LayoutPanelTop,
   Compass,
   PanelBottom,
@@ -63,6 +64,12 @@ interface NavItem {
  */
 const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  {
+    href: "/admin/analytics",
+    label: "Business Overview",
+    icon: ChartPie,
+    permissions: ["reports.view"],
+  },
   { href: "/admin/products", label: "Products", icon: Package, permissions: ["products.view"] },
   {
     href: "/admin/categories",

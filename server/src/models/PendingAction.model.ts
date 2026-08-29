@@ -20,6 +20,11 @@ export const PENDING_ACTION_TYPES = [
   "expense.confirm",
   "expense.edit",
   "purchase.receive",
+  /** A change to a staff member's identity document (NID number and/or card
+   * scan). Same "only Super Admin acts directly, everyone else requests a
+   * grant" shape as stock and confirmed-expense edits — an identity record
+   * should not be silently rewritable by whoever happens to hold HR access. */
+  "user.nid.update",
 ] as const;
 export type PendingActionType = (typeof PENDING_ACTION_TYPES)[number];
 

@@ -71,26 +71,7 @@ export const resendVerificationSchema = z.object({
   email: z.string().trim().email().toLowerCase(),
 });
 
-/** A 6-digit TOTP code or a 10-character recovery code. */
-const twoFactorCodeField = z.string().trim().min(6).max(20);
-
-export const enableTwoFactorSchema = z.object({
-  code: twoFactorCodeField,
-});
-
-export const disableTwoFactorSchema = z.object({
-  password: z.string().min(1),
-});
-
-export const verifyTwoFactorLoginSchema = z.object({
-  challengeToken: z.string().min(1),
-  code: twoFactorCodeField,
-});
-
 export type RegisterInput = z.infer<typeof registerSchema>;
-export type EnableTwoFactorInput = z.infer<typeof enableTwoFactorSchema>;
-export type DisableTwoFactorInput = z.infer<typeof disableTwoFactorSchema>;
-export type VerifyTwoFactorLoginInput = z.infer<typeof verifyTwoFactorLoginSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type GoogleAuthInput = z.infer<typeof googleAuthSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

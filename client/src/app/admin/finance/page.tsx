@@ -82,9 +82,23 @@ export default function AdminFinancePage() {
 
   function handleExportCsv() {
     downloadCsv(
-      `revenue-vs-expense-${groupBy}.csv`,
-      ["Period", "Revenue (BDT)", "Expense (BDT)", "Profit (BDT)"],
-      timeSeries.map((row) => [row.period, row.revenueBDT, row.expenseBDT, row.profitBDT])
+      `profit-and-loss-${groupBy}.csv`,
+      [
+        "Period",
+        "Net Selling Revenue (BDT)",
+        "Cost of Goods Sold (BDT)",
+        "Gross Profit (BDT)",
+        "Operating Expense (BDT)",
+        "Net Profit (BDT)",
+      ],
+      timeSeries.map((row) => [
+        row.period,
+        row.netSellingRevenueBDT,
+        row.costOfGoodsSoldBDT,
+        row.grossProfitBDT,
+        row.expenseBDT,
+        row.profitBDT,
+      ])
     );
   }
 
@@ -130,6 +144,7 @@ export default function AdminFinancePage() {
 
   const statCards = [
     { icon: ShoppingBag, label: "Total Revenue", value: formatBDT(summary.totalRevenueBDT), tone: "green" },
+    { icon: BadgeDollarSign, label: "Cost of Goods Sold", value: formatBDT(summary.costOfGoodsSoldBDT), tone: "brown" },
     { icon: TrendingDown, label: "Total Expenses", value: formatBDT(summary.totalExpensesBDT), tone: "brown" },
     { icon: PiggyBank, label: "Total Investment", value: formatBDT(summary.totalInvestmentBDT), tone: "gold" },
     {
@@ -139,6 +154,27 @@ export default function AdminFinancePage() {
       tone: summary.netProfitBDT >= 0 ? "green" : "red",
     },
     { icon: Wallet, label: "Cash Balance", value: formatBDT(summary.cashBalanceBDT), tone: "green" },
+  ];
+
+  /** The income statement, in the order an accountant reads it. */
+  const profitAndLoss: { label: string; value: number; hint?: string; emphasis?: boolean }[] = [
+    {
+      label: "Net selling revenue",
+      value: summary.netSellingRevenueBDT,
+      hint: "Subtotal minus discounts. Shipping is excluded — it is pass-through, not merchandise revenue.",
+    },
+    {
+      label: "Cost of goods sold",
+      value: -summary.costOfGoodsSoldBDT,
+      hint: "Each sold unit's real landed cost, taken from the Purchase batch it was drawn from at sale time.",
+    },
+    { label: "Gross profit", value: summary.grossProfitBDT, emphasis: true },
+    {
+      label: "Operating expenses",
+      value: -summary.totalExpensesBDT,
+      hint: "Confirmed expenses only. Stock purchases are not counted here — they enter the P&L through cost of goods sold as they sell.",
+    },
+    { label: "Net profit / loss", value: summary.netProfitBDT, emphasis: true },
   ];
 
   const categoryEntries = Object.entries(summary.expensesByCategory).filter(([, amount]) => amount > 0);
@@ -165,6 +201,51 @@ export default function AdminFinancePage() {
       </div>
 
       <div className="rounded-xl border border-brown-600/10 bg-surface p-6">
+        <h2 className="mb-1 flex items-center gap-2 font-serif text-lg text-green-950">
+          <BadgeDollarSign size={18} className="text-green-900" /> Profit &amp; Loss
+        </h2>
+        <p className="mb-4 text-xs text-brown-500">
+          Every figure is derived live from orders, purchase batches and confirmed expenses — nothing stored or
+          estimated.
+          {summary.ordersWithUnknownCostBasis > 0 && (
+            <span className="text-gold-700">
+              {" "}
+              {summary.ordersWithUnknownCostBasis} order(s) include an item with no purchase-batch cost history, so
+              the cost of goods sold is a partial total.
+            </span>
+          )}
+        </p>
+        <ul className="flex flex-col">
+          {profitAndLoss.map((line) => (
+            <li
+              key={line.label}
+              className={`flex flex-wrap items-baseline justify-between gap-2 border-b border-brown-600/10 py-2.5 last:border-none ${
+                line.emphasis ? "border-t border-t-brown-600/20" : ""
+              }`}
+            >
+              <span className={line.emphasis ? "text-sm font-semibold text-green-950" : "text-sm text-brown-600"}>
+                {line.label}
+                {line.hint && <span className="mt-0.5 block text-xs text-brown-500">{line.hint}</span>}
+              </span>
+              <span
+                className={`font-semibold ${
+                  line.emphasis
+                    ? line.value >= 0
+                      ? "text-green-900"
+                      : "text-danger"
+                    : line.value < 0
+                      ? "text-brown-600"
+                      : "text-green-950"
+                }`}
+              >
+                {line.value < 0 ? `- ${formatBDT(Math.abs(line.value))}` : formatBDT(line.value)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="rounded-xl border border-brown-600/10 bg-surface p-6">
         <h2 className="mb-4 flex items-center gap-2 font-serif text-lg text-green-950">
           <Landmark size={18} className="text-green-900" /> Expenses by Category
         </h2>
@@ -185,7 +266,7 @@ export default function AdminFinancePage() {
       <div className="rounded-xl border border-brown-600/10 bg-surface p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 font-serif text-lg text-green-950">
-            <TrendingUp size={18} className="text-green-900" /> Revenue vs Expense
+            <TrendingUp size={18} className="text-green-900" /> Profit &amp; Loss by Period
           </h2>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -209,28 +290,34 @@ export default function AdminFinancePage() {
         ) : timeSeries.length === 0 ? (
           <p className="text-sm text-brown-500">No revenue or expense activity in this range.</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
-                <th className="py-2">Period</th>
-                <th className="py-2">Revenue</th>
-                <th className="py-2">Expense</th>
-                <th className="py-2">Profit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {timeSeries.map((row) => (
-                <tr key={row.period} className="border-b border-brown-600/10 last:border-none">
-                  <td className="py-2 font-medium text-green-950">{row.period}</td>
-                  <td className="py-2 text-brown-600">{formatBDT(row.revenueBDT)}</td>
-                  <td className="py-2 text-brown-600">{formatBDT(row.expenseBDT)}</td>
-                  <td className={`py-2 font-semibold ${row.profitBDT >= 0 ? "text-green-900" : "text-danger"}`}>
-                    {formatBDT(row.profitBDT)}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-brown-600/10 text-xs uppercase tracking-wide text-brown-500">
+                  <th className="py-2">Period</th>
+                  <th className="py-2">Net Revenue</th>
+                  <th className="py-2">Goods Cost</th>
+                  <th className="py-2">Gross Profit</th>
+                  <th className="py-2">Expenses</th>
+                  <th className="py-2">Net Profit</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {timeSeries.map((row) => (
+                  <tr key={row.period} className="border-b border-brown-600/10 last:border-none">
+                    <td className="py-2 font-medium text-green-950">{row.period}</td>
+                    <td className="py-2 text-brown-600">{formatBDT(row.netSellingRevenueBDT)}</td>
+                    <td className="py-2 text-brown-600">{formatBDT(row.costOfGoodsSoldBDT)}</td>
+                    <td className="py-2 text-brown-600">{formatBDT(row.grossProfitBDT)}</td>
+                    <td className="py-2 text-brown-600">{formatBDT(row.expenseBDT)}</td>
+                    <td className={`py-2 font-semibold ${row.profitBDT >= 0 ? "text-green-900" : "text-danger"}`}>
+                      {formatBDT(row.profitBDT)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

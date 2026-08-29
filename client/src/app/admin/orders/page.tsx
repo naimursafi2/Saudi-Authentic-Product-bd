@@ -6,6 +6,7 @@ import { PackageSearch } from "lucide-react";
 import { listOrders, getOrder, updateOrderStatus, assignAgent } from "@/lib/api/orders";
 import { listUsers } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT } from "@/lib/utils";
 import { ORDER_STATUSES, nextGenericStatuses, orderStatusLabel } from "@/lib/orderStatus";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -153,6 +154,7 @@ function OrderDetailModal({
   onClose: () => void;
   onUpdated: () => void;
 }) {
+  const confirmDialog = useConfirm();
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +189,19 @@ function OrderDetailModal({
 
   async function handleUpdate() {
     if (!order || !nextStatus) return;
+    // "cancelled"/"returned" both unwind the order — restocking every item and
+    // releasing any coupon use — and neither has a transition back, so they
+    // get an explicit danger-toned warning rather than the neutral one.
+    const isUnwinding = nextStatus === "cancelled" || nextStatus === "returned";
+    const ok = await confirmDialog({
+      title: `Move order to ${orderStatusLabel(nextStatus)}`,
+      message: isUnwinding
+        ? `Set order ${order.orderNumber} to ${orderStatusLabel(nextStatus)}? Every item is returned to stock and any coupon use is released. This cannot be undone.`
+        : `Set order ${order.orderNumber} to ${orderStatusLabel(nextStatus)}? The customer sees this status update immediately.`,
+      confirmLabel: isUnwinding ? orderStatusLabel(nextStatus) : "Update Status",
+      tone: isUnwinding ? "danger" : "primary",
+    });
+    if (!ok) return;
     setUpdateError(null);
     setIsUpdating(true);
     try {
@@ -204,6 +219,13 @@ function OrderDetailModal({
 
   async function handleAssign() {
     if (!order || !selectedAgentId) return;
+    const agentName = agents.find((a) => a._id === selectedAgentId)?.name ?? "this agent";
+    const ok = await confirmDialog({
+      title: "Assign Delivery Agent",
+      message: `Assign order ${order.orderNumber} to ${agentName}? The order moves to "Assigned to Agent" and appears in their delivery dashboard.`,
+      confirmLabel: "Assign",
+    });
+    if (!ok) return;
     setAssignError(null);
     setIsAssigning(true);
     try {

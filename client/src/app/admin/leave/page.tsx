@@ -8,6 +8,7 @@ import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyS
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import type { ApiLeaveRequest, LeaveStatus } from "@/types/hr";
 import type { Pagination } from "@/types/api";
 
@@ -31,6 +32,7 @@ function formatDate(value: string) {
 }
 
 export default function AdminLeavePage() {
+  const confirmDialog = useConfirm();
   const [statusFilter, setStatusFilter] = useState<LeaveStatus | "all">("pending");
   const [leaves, setLeaves] = useState<ApiLeaveRequest[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -55,6 +57,12 @@ export default function AdminLeavePage() {
   useEffect(load, [statusFilter, page]);
 
   async function handleApprove(leave: ApiLeaveRequest) {
+    const ok = await confirmDialog({
+      title: "Approve Leave Request",
+      message: `Approve ${employeeName(leave.employee)}'s ${leave.type.replace(/_/g, " ")} leave from ${formatDate(leave.startDate)} to ${formatDate(leave.endDate)}?`,
+      confirmLabel: "Approve",
+    });
+    if (!ok) return;
     setActioningId(leave._id);
     try {
       await reviewLeaveRequest(leave._id, "approved");
@@ -65,6 +73,13 @@ export default function AdminLeavePage() {
   }
 
   async function handleReject(leave: ApiLeaveRequest) {
+    const ok = await confirmDialog({
+      title: "Reject Leave Request",
+      message: `Reject ${employeeName(leave.employee)}'s leave request? They will be notified of the decision.`,
+      confirmLabel: "Reject",
+      tone: "danger",
+    });
+    if (!ok) return;
     const note = window.prompt("Reason for rejection (optional):");
     // Cancelling the reason prompt must not reject the leave request anyway.
     if (note === null) return;

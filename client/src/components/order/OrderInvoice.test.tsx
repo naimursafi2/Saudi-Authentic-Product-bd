@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PrintInvoiceButton } from "./OrderInvoice";
+import { printWithFilename } from "@/lib/print";
 import type { ApiOrder, ApiPayment, ApiSiteSettings } from "@/types/api";
+
+vi.mock("@/lib/print", () => ({ printWithFilename: vi.fn() }));
 
 vi.mock("@/lib/api/siteSettings", () => ({
   getSiteSettings: () =>
@@ -98,5 +101,59 @@ describe("PrintInvoiceButton", () => {
     await waitFor(() => {
       expect(screen.getByText("BKH7X2QK91")).toBeInTheDocument();
     });
+  });
+
+  it("itemises subtotal, shipping and total, and shows a discount line only when one applies", async () => {
+    getPaymentForOrder.mockResolvedValue({ data: { payment: null } });
+    const user = userEvent.setup();
+    render(<PrintInvoiceButton order={order} />);
+    await user.click(screen.getByRole("button", { name: /print invoice/i }));
+
+    expect(screen.getByText("Subtotal")).toBeInTheDocument();
+    expect(screen.getByText("Shipping")).toBeInTheDocument();
+    // "Total" is also a line-items column header, so scope to the totals block.
+    expect(screen.getByText("Total", { selector: "span" })).toBeInTheDocument();
+    // This order carries no coupon, so no discount row is rendered at all.
+    expect(screen.queryByText(/^Discount/)).not.toBeInTheDocument();
+  });
+
+  it("names the coupon on the discount line when the order was discounted", async () => {
+    getPaymentForOrder.mockResolvedValue({ data: { payment: null } });
+    const user = userEvent.setup();
+    render(
+      <PrintInvoiceButton
+        order={{ ...order, discountBDT: 200, couponCode: "EID200", totalBDT: 2260 }}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /print invoice/i }));
+
+    expect(screen.getByText("Discount (EID200)")).toBeInTheDocument();
+  });
+
+  it("prints through the shared mechanism, naming the file after the order", async () => {
+    getPaymentForOrder.mockResolvedValue({ data: { payment: null } });
+    const user = userEvent.setup();
+    render(<PrintInvoiceButton order={order} />);
+
+    await user.click(screen.getByRole("button", { name: /print invoice/i }));
+    await user.click(screen.getByRole("button", { name: /^print$/i }));
+
+    // Every print in this project goes through printWithFilename() — never a
+    // bare window.print() or a server-generated file.
+    expect(printWithFilename).toHaveBeenCalledWith("Invoice-SAP-20260101-1234");
+  });
+
+  it("still renders a complete invoice when the payment lookup is unavailable", async () => {
+    // A viewer without payments.view (or an order with no gateway record)
+    // must not lose the invoice — the reference row is simply omitted.
+    getPaymentForOrder.mockRejectedValue(new Error("forbidden"));
+    const user = userEvent.setup();
+    render(<PrintInvoiceButton order={order} />);
+
+    await user.click(screen.getByRole("button", { name: /print invoice/i }));
+
+    expect(screen.getByText(/Order #SAP-20260101-1234/)).toBeInTheDocument();
+    expect(screen.getByText("Ajwa Dates")).toBeInTheDocument();
+    expect(screen.queryByText(/Reference:/)).not.toBeInTheDocument();
   });
 });

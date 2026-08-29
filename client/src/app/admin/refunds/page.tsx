@@ -6,6 +6,7 @@ import { approveRefund, createRefund, listRefunds, rejectRefund, reviewRefund } 
 import { listOrders } from "@/lib/api/orders";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -37,6 +38,7 @@ function orderLabel(order: ApiRefund["order"]): string {
 
 export default function AdminRefundsPage() {
   const { user } = useAuth();
+  const confirmDialog = useConfirm();
   const canReview = user?.role === "order_manager" || user?.role === "admin" || user?.role === "super_admin";
   const canApprove = user?.role === "admin" || user?.role === "super_admin";
 
@@ -112,6 +114,16 @@ export default function AdminRefundsPage() {
   }
 
   async function handleReview(refund: ApiRefund, decision: "approve" | "reject") {
+    const ok = await confirmDialog({
+      title: decision === "approve" ? "Recommend Refund" : "Reject Refund Request",
+      message:
+        decision === "approve"
+          ? `Recommend the ${formatBDT(refund.requestedAmountBDT)} refund on order ${orderLabel(refund.order)} for financial approval?`
+          : `Reject the refund request on order ${orderLabel(refund.order)}? The requester will be notified.`,
+      confirmLabel: decision === "approve" ? "Recommend" : "Reject",
+      tone: decision === "approve" ? "primary" : "danger",
+    });
+    if (!ok) return;
     setActionError(null);
     setActingId(refund._id);
     try {
@@ -125,6 +137,13 @@ export default function AdminRefundsPage() {
   }
 
   async function handleReject(refund: ApiRefund) {
+    const ok = await confirmDialog({
+      title: "Reject Refund",
+      message: `Reject the ${formatBDT(refund.requestedAmountBDT)} refund on order ${orderLabel(refund.order)}? This closes the request.`,
+      confirmLabel: "Reject",
+      tone: "danger",
+    });
+    if (!ok) return;
     const reason = prompt("Reason for rejecting (optional):");
     // `prompt()` returns null only when the user cancels — an empty string
     // means they clicked OK with no text entered, which should still reject.
@@ -143,6 +162,12 @@ export default function AdminRefundsPage() {
   }
 
   async function handleApprove(refund: ApiRefund) {
+    const ok = await confirmDialog({
+      title: "Approve Refund",
+      message: `Financially approve a ${formatBDT(refund.requestedAmountBDT)} refund on order ${orderLabel(refund.order)}? Depending on the approval threshold this either takes effect immediately or goes to Super Admin for review.`,
+      confirmLabel: "Approve Refund",
+    });
+    if (!ok) return;
     setActionError(null);
     setActingId(refund._id);
     try {

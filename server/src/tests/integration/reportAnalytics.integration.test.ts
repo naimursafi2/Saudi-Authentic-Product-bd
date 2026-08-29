@@ -125,12 +125,41 @@ describe("Reporting & analytics additions", () => {
       .get("/api/v1/finance/revenue-vs-expense?groupBy=month")
       .set(...authHeader(token));
     expect(res.status).toBe(200);
-    const series: { period: string; revenueBDT: number; expenseBDT: number; profitBDT: number }[] =
-      res.body.data.timeSeries;
+    const series: {
+      period: string;
+      revenueBDT: number;
+      netSellingRevenueBDT: number;
+      costOfGoodsSoldBDT: number;
+      grossProfitBDT: number;
+      expenseBDT: number;
+      profitBDT: number;
+    }[] = res.body.data.timeSeries;
     const march = series.find((s) => s.period === "2026-03");
     const april = series.find((s) => s.period === "2026-04");
-    expect(march).toEqual({ period: "2026-03", revenueBDT: 3000, expenseBDT: 0, profitBDT: 3000 });
-    expect(april).toEqual({ period: "2026-04", revenueBDT: 0, expenseBDT: 500, profitBDT: -500 });
+
+    // The seeded order has no purchase batch behind it, so cost of goods sold
+    // is zero and gross profit equals the sale — the point of this test is the
+    // period merge, not the costing (see profitAndLoss.integration.test.ts).
+    expect(march).toEqual({
+      period: "2026-03",
+      revenueBDT: 3000,
+      netSellingRevenueBDT: 3000,
+      costOfGoodsSoldBDT: 0,
+      grossProfitBDT: 3000,
+      expenseBDT: 0,
+      profitBDT: 3000,
+    });
+    // April has an expense but no sales, so it still appears with the revenue
+    // side zeroed rather than being dropped.
+    expect(april).toEqual({
+      period: "2026-04",
+      revenueBDT: 0,
+      netSellingRevenueBDT: 0,
+      costOfGoodsSoldBDT: 0,
+      grossProfitBDT: 0,
+      expenseBDT: 500,
+      profitBDT: -500,
+    });
   });
 
   it("includes out-of-stock count, recent orders and recent activities on the admin dashboard", async () => {

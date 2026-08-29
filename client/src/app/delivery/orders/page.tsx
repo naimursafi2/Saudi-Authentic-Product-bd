@@ -12,6 +12,7 @@ import {
   markDeliveryFailed,
 } from "@/lib/api/orders";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -153,6 +154,7 @@ function DeliveryOrderModal({
   onClose: () => void;
   onUpdated: () => void;
 }) {
+  const confirmDialog = useConfirm();
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -249,6 +251,13 @@ function DeliveryOrderModal({
 
   async function handleMarkFailed() {
     if (!order || !failureReason.trim()) return;
+    const ok = await confirmDialog({
+      title: "Mark Delivery Failed",
+      message: `Record order ${order.orderNumber} as a failed delivery? The customer and the operations team are notified, and the order has to be re-assigned before it can be attempted again.`,
+      confirmLabel: "Mark Failed",
+      tone: "danger",
+    });
+    if (!ok) return;
     setActionError(null);
     setIsActing(true);
     try {

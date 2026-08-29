@@ -6,6 +6,7 @@ import { createSalaryPayment, listSalaryPayments, updateSalaryStatus, notifySala
 import { listUsers } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { formatBDT } from "@/lib/utils";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
@@ -23,6 +24,7 @@ function personName(person: string | { name: string }): string {
 
 export default function AdminSalaryPage() {
   const { hasPermission } = useAuth();
+  const confirmDialog = useConfirm();
   const isRestricted = !hasPermission("salary.view");
 
   const [payments, setPayments] = useState<ApiSalaryPayment[]>([]);
@@ -79,6 +81,13 @@ export default function AdminSalaryPage() {
   }
 
   async function handleMarkPaid(payment: ApiSalaryPayment) {
+    const total = payment.amountBDT + payment.dailyAllowanceBDT;
+    const ok = await confirmDialog({
+      title: "Mark Salary as Paid",
+      message: `Mark ${personName(payment.employee)}'s ${MONTH_NAMES[payment.month - 1]} ${payment.year} payment of ${formatBDT(total)} (including ${formatBDT(payment.dailyAllowanceBDT)} daily allowance) as paid? This records a completed payroll payment.`,
+      confirmLabel: "Mark as Paid",
+    });
+    if (!ok) return;
     await updateSalaryStatus(payment._id, "paid");
     load();
   }

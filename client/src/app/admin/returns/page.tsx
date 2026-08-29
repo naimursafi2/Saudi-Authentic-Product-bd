@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RefreshCcw } from "lucide-react";
 import { listReturnRequests, reviewReturnRequest } from "@/lib/api/returns";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -20,6 +21,7 @@ function orderLabel(order: ApiReturnRequest["order"]): string {
 }
 
 export default function AdminReturnsPage() {
+  const confirmDialog = useConfirm();
   const [requests, setRequests] = useState<ApiReturnRequest[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
@@ -44,6 +46,15 @@ export default function AdminReturnsPage() {
   useEffect(load, [page]);
 
   async function handleApprove(request: ApiReturnRequest) {
+    const ok = await confirmDialog({
+      title: request.type === "exchange" ? "Approve Exchange" : "Approve Return",
+      message:
+        request.type === "exchange"
+          ? `Approve the exchange on order ${orderLabel(request.order)}? There is no automated replacement-order flow — approving commits you to handling the swap manually.`
+          : `Approve the return on order ${orderLabel(request.order)}? This moves the order to "returned", restocks its items and unlocks a refund request.`,
+      confirmLabel: "Approve",
+    });
+    if (!ok) return;
     setActionError(null);
     setActingId(request._id);
     try {
@@ -57,6 +68,13 @@ export default function AdminReturnsPage() {
   }
 
   async function handleReject(request: ApiReturnRequest) {
+    const ok = await confirmDialog({
+      title: "Reject Request",
+      message: `Reject ${personName(request.customer)}'s ${request.type} request on order ${orderLabel(request.order)}? The customer will be notified.`,
+      confirmLabel: "Reject",
+      tone: "danger",
+    });
+    if (!ok) return;
     const reason = prompt("Reason for rejecting (optional):");
     // `prompt()` returns null only on Cancel — an empty string means OK with
     // no text, which should still reject (see CLAUDE.md's note on this).

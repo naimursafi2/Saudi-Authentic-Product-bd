@@ -82,32 +82,6 @@ export function verifyEmailVerificationToken(token: string): EmailVerificationPa
   return payload;
 }
 
-export interface TwoFactorChallengePayload {
-  sub: string;
-  tokenVersion: number;
-  purpose: "two_factor_challenge";
-}
-
-/**
- * Issued when a password login succeeds but the account has 2FA on — proves
- * the password step passed without granting a session. Carries
- * `tokenVersion` so a password change mid-challenge invalidates it, and
- * expires quickly since it's only meant to bridge one login screen.
- */
-export function signTwoFactorChallengeToken(payload: Omit<TwoFactorChallengePayload, "purpose">): string {
-  return jwt.sign({ ...payload, purpose: "two_factor_challenge" }, env.JWT_ACCESS_SECRET, {
-    expiresIn: "10m",
-  });
-}
-
-export function verifyTwoFactorChallengeToken(token: string): TwoFactorChallengePayload {
-  const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as TwoFactorChallengePayload;
-  if (payload.purpose !== "two_factor_challenge") {
-    throw new Error("Invalid token purpose");
-  }
-  return payload;
-}
-
 /**
  * A support-login token for the target user, stamped with the Super Admin who
  * started it. Deliberately short-lived and never paired with a refresh token,

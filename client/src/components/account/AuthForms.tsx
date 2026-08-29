@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { KeyRound, LogIn, ShieldCheck, UserPlus } from "lucide-react";
+import { KeyRound, LogIn, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -37,12 +37,7 @@ export function AuthForms() {
   // Lets the navbar's "Sign Up" link (/account?tab=register) open straight
   // into the register step instead of always landing on login.
   const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "register" ? "register" : "login");
-  const { login, register, completeTwoFactorLogin } = useAuth();
-
-  // Set once the password step succeeds on a 2FA-enabled account — the form
-  // then swaps to the code-entry step until it's cleared.
-  const [challengeToken, setChallengeToken] = useState<string | null>(null);
-  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const { login, register } = useAuth();
 
   // Shared / login+register fields. Registration is deliberately limited to
   // the four fields the account itself needs: a phone number and a delivery
@@ -77,10 +72,7 @@ export function AuthForms() {
     setIsSubmitting(true);
     try {
       if (tab === "login") {
-        const outcome = await login(email, password);
-        if ("challengeToken" in outcome) {
-          setChallengeToken(outcome.challengeToken);
-        }
+        await login(email, password);
       } else if (tab === "register") {
         await register({ name, email, password, confirmPassword });
       } else {
@@ -92,72 +84,6 @@ export function AuthForms() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  async function handleTwoFactorSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!challengeToken) return;
-    setError(null);
-    setIsSubmitting(true);
-    try {
-      await completeTwoFactorLogin(challengeToken, twoFactorCode.trim());
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  function cancelTwoFactor() {
-    setChallengeToken(null);
-    setTwoFactorCode("");
-    setPassword("");
-    setError(null);
-  }
-
-  if (challengeToken) {
-    return (
-      <div className="mx-auto flex max-w-sm flex-col gap-5 px-5 py-12 sm:py-16">
-        <div className="text-center">
-          <span className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-brand-deep text-gold-500">
-            <ShieldCheck size={20} />
-          </span>
-          <h1 className="font-serif text-2xl text-green-950">Two-Step Verification</h1>
-          <p className="mt-1.5 text-sm text-brown-500">
-            Enter the 6-digit code from your authenticator app, or one of your recovery codes.
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleTwoFactorSubmit}
-          className="flex flex-col gap-3.5 rounded-lg border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
-        >
-          <div>
-            <label className={labelClasses}>Authentication Code</label>
-            <input
-              required
-              autoFocus
-              autoComplete="one-time-code"
-              value={twoFactorCode}
-              onChange={(e) => setTwoFactorCode(e.target.value)}
-              placeholder="123456"
-              className={cn(fieldClasses, "text-center text-lg tracking-[0.3em]")}
-            />
-          </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <Button type="submit" variant="primary" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Verifying..." : "Verify & Sign In"}
-          </Button>
-          <button
-            type="button"
-            onClick={cancelTwoFactor}
-            className="cursor-pointer text-center text-xs font-bold uppercase tracking-[0.08em] text-brown-500 hover:text-green-950"
-          >
-            Back to Sign In
-          </button>
-        </form>
-      </div>
-    );
   }
 
   const Header = HEADER[tab];

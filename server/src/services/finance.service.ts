@@ -10,14 +10,21 @@ import {
 import { getTotalInvestmentBDT } from "./investment.service";
 import { getInventoryValuation } from "./inventory.service";
 
-/**
- * Revenue is deliberately NOT re-derived here — `report.service.ts#getSalesSummary`
- * already computes it from live Order data, and duplicating that aggregation
- * would risk the two figures drifting apart. This only adds the pieces that
- * don't already exist anywhere else: expenses, investment, and the profit/
- * loss and cash-balance figures derived from combining all three.
- */
-export async function getFinanceSummary(filter: SalesSummaryFilter) {
+/** The order-side `$match` shared by every sales/COGS aggregation, so the
+ * revenue and cost halves of the P&L always cover exactly the same orders. */
+function orderMatch(filter: SalesSummaryFilter): Record<string, unknown> {
+  const match: Record<string, unknown> = { status: { $nin: ["cancelled", "refunded"] } };
+  if (filter.from || filter.to) {
+    const range: Record<string, Date> = {};
+    if (filter.from) range.$gte = filter.from;
+    if (filter.to) range.$lte = filter.to;
+    match.createdAt = range;
+  }
+  return match;
+}
+
+/** The Expense-side `$match` — confirmed spend only, dated by `incurredAt`. */
+function expenseMatch(filter: SalesSummaryFilter): Record<string, unknown> {
   const match: Record<string, unknown> = { status: "confirmed" };
   if (filter.from || filter.to) {
     const range: Record<string, Date> = {};
@@ -25,9 +32,91 @@ export async function getFinanceSummary(filter: SalesSummaryFilter) {
     if (filter.to) range.$lte = filter.to;
     match.incurredAt = range;
   }
+  return match;
+}
 
-  const [sales, totalInvestmentBDT, expenseTotals, byCategory] = await Promise.all([
+/**
+ * Cost of goods sold for a date range, collapsed to one total — the same
+ * frozen `unitLandedCostBDT × quantity` per order item that
+ * `getGrossProfitTimeSeries` buckets by period, so the summary tile and the
+ * period table can never disagree. `netSellingRevenueBDT` (subtotal minus
+ * discount, excluding the shipping pass-through) comes back alongside it
+ * because gross profit is only meaningful against that figure, not against
+ * the shipping-inclusive top line.
+ */
+export async function getCostOfGoodsSold(filter: SalesSummaryFilter) {
+  const [row] = await OrderModel.aggregate([
+    { $match: orderMatch(filter) },
+    {
+      $addFields: {
+        netSellingRevenueBDT: { $subtract: ["$subtotalBDT", "$discountBDT"] },
+        cogsBDT: {
+          $sum: {
+            $map: {
+              input: "$items",
+              as: "item",
+              in: { $multiply: ["$$item.unitLandedCostBDT", "$$item.quantity"] },
+            },
+          },
+        },
+        hasUnknownCostBasis: {
+          $anyElementTrue: {
+            $map: { input: "$items", as: "item", in: { $eq: ["$$item.costBasisKnown", false] } },
+          },
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        netSellingRevenueBDT: { $sum: "$netSellingRevenueBDT" },
+        costOfGoodsSoldBDT: { $sum: "$cogsBDT" },
+        ordersWithUnknownCostBasis: { $sum: { $cond: ["$hasUnknownCostBasis", 1, 0] } },
+      },
+    },
+  ]);
+
+  return {
+    netSellingRevenueBDT: (row?.netSellingRevenueBDT as number) ?? 0,
+    costOfGoodsSoldBDT: (row?.costOfGoodsSoldBDT as number) ?? 0,
+    ordersWithUnknownCostBasis: (row?.ordersWithUnknownCostBasis as number) ?? 0,
+  };
+}
+
+/**
+ * The whole profit-and-loss picture for a date range, every figure derived
+ * live from Orders, Purchases (through each sold item's frozen landed cost)
+ * and confirmed Expenses — nothing stored, nothing estimated.
+ *
+ * Revenue is deliberately NOT re-derived here — `report.service.ts#getSalesSummary`
+ * already computes it from live Order data, and duplicating that aggregation
+ * would risk the two figures drifting apart.
+ *
+ * The P&L reads top to bottom as a real income statement:
+ *
+ *   net selling revenue  (subtotal − discount; shipping excluded as pass-through)
+ *   − cost of goods sold (each sold unit's actual landed cost from its Purchase batch)
+ *   = gross profit
+ *   − operating expenses (confirmed Expense documents)
+ *   = net profit / loss
+ *
+ * `netProfitBDT` therefore nets **both** the merchandise cost and operational
+ * spend. Purchase batches are still never summed into `totalExpensesBDT`
+ * directly: a batch is inventory until it sells, and only the portion that
+ * actually sold enters the P&L, through COGS. That is what keeps stock
+ * purchases from double-counting against manually-logged expenses while still
+ * charging real product cost against profit.
+ *
+ * `ordersWithUnknownCostBasis` counts orders holding at least one item that
+ * had no purchase-batch history at sale time, so a partial COGS figure can be
+ * labelled as such rather than silently reading as "this sold at zero cost".
+ */
+export async function getFinanceSummary(filter: SalesSummaryFilter) {
+  const match = expenseMatch(filter);
+
+  const [sales, cogs, totalInvestmentBDT, expenseTotals, byCategory] = await Promise.all([
     getSalesSummary(filter),
+    getCostOfGoodsSold(filter),
     getTotalInvestmentBDT(),
     ExpenseModel.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: "$amountBDT" } } }]),
     ExpenseModel.aggregate([
@@ -42,12 +131,22 @@ export async function getFinanceSummary(filter: SalesSummaryFilter) {
     expensesByCategory[row._id as string] = row.total;
   }
 
-  const netProfitBDT = sales.totalRevenueBDT - totalExpensesBDT;
+  const grossProfitBDT = cogs.netSellingRevenueBDT - cogs.costOfGoodsSoldBDT;
+  const netProfitBDT = grossProfitBDT - totalExpensesBDT;
+  // Cash on hand, not profit: investment in, sales in, operating spend out.
+  // Stock purchases are excluded on purpose — a received batch converts cash
+  // into inventory, and `getInventoryValuation()` is where that value is
+  // reported, so subtracting it here as well would understate the business
+  // twice over.
   const cashBalanceBDT = totalInvestmentBDT + sales.totalRevenueBDT - totalExpensesBDT;
 
   return {
     totalRevenueBDT: sales.totalRevenueBDT,
     totalOrders: sales.totalOrders,
+    netSellingRevenueBDT: cogs.netSellingRevenueBDT,
+    costOfGoodsSoldBDT: cogs.costOfGoodsSoldBDT,
+    grossProfitBDT,
+    ordersWithUnknownCostBasis: cogs.ordersWithUnknownCostBasis,
     totalInvestmentBDT,
     totalExpensesBDT,
     netProfitBDT,
@@ -57,27 +156,26 @@ export async function getFinanceSummary(filter: SalesSummaryFilter) {
 }
 
 /**
- * Revenue-vs-Expense (and derived profit), bucketed by day/week/month — the
- * "Profit Report" and "Revenue vs Expense" analytics view. Revenue comes
- * from `getSalesTimeSeries` (never re-derived); the expense side is grouped
- * by the same date-bucket format so the two line up period-for-period, then
- * merged by period key rather than assuming both sides produced the same
- * set of periods (a period with expenses but no orders, or vice versa,
- * still needs to appear once with the other side at zero).
+ * The full per-period P&L, bucketed by day/week/month — what the Finance
+ * page's "Revenue vs Expense" table and the Analytics profit chart both read.
+ *
+ * All three sides (revenue, merchandise cost, operating expense) are grouped
+ * on the same `dateBucketFormat`, then merged by period key rather than
+ * assuming they produced the same set of periods — a period with expenses but
+ * no orders, or sales but no expenses, still has to appear once with the
+ * other sides at zero.
+ *
+ * `profitBDT` is the true bottom line for the period: net selling revenue
+ * minus cost of goods sold minus operating expenses. It used to be revenue
+ * minus expenses alone, which ignored what the goods actually cost and so
+ * overstated profit by the whole merchandise cost.
  */
 export async function getRevenueVsExpenseTimeSeries(filter: SalesSummaryFilter, groupBy: SalesGroupBy) {
-  const match: Record<string, unknown> = { status: "confirmed" };
-  if (filter.from || filter.to) {
-    const range: Record<string, Date> = {};
-    if (filter.from) range.$gte = filter.from;
-    if (filter.to) range.$lte = filter.to;
-    match.incurredAt = range;
-  }
-
-  const [revenueRows, expenseRows] = await Promise.all([
+  const [revenueRows, cogsRows, expenseRows] = await Promise.all([
     getSalesTimeSeries(filter, groupBy),
+    getGrossProfitTimeSeries(filter, groupBy),
     ExpenseModel.aggregate([
-      { $match: match },
+      { $match: expenseMatch(filter) },
       {
         $group: {
           _id: { $dateToString: { format: dateBucketFormat(groupBy), date: "$incurredAt" } },
@@ -87,20 +185,38 @@ export async function getRevenueVsExpenseTimeSeries(filter: SalesSummaryFilter, 
     ]),
   ]);
 
-  const byPeriod = new Map<string, { period: string; revenueBDT: number; expenseBDT: number }>();
-  for (const row of revenueRows) {
-    byPeriod.set(row.period, { period: row.period, revenueBDT: row.revenueBDT, expenseBDT: 0 });
+  interface Row {
+    period: string;
+    revenueBDT: number;
+    netSellingRevenueBDT: number;
+    costOfGoodsSoldBDT: number;
+    expenseBDT: number;
   }
-  for (const row of expenseRows) {
-    const period = row._id as string;
-    const existing = byPeriod.get(period);
-    if (existing) existing.expenseBDT = row.expenseBDT as number;
-    else byPeriod.set(period, { period, revenueBDT: 0, expenseBDT: row.expenseBDT as number });
+  const byPeriod = new Map<string, Row>();
+  const rowFor = (period: string): Row => {
+    let row = byPeriod.get(period);
+    if (!row) {
+      row = { period, revenueBDT: 0, netSellingRevenueBDT: 0, costOfGoodsSoldBDT: 0, expenseBDT: 0 };
+      byPeriod.set(period, row);
+    }
+    return row;
+  };
+
+  for (const row of revenueRows) rowFor(row.period).revenueBDT = row.revenueBDT;
+  for (const row of cogsRows) {
+    const target = rowFor(row.period);
+    target.netSellingRevenueBDT = row.netSellingRevenueBDT;
+    target.costOfGoodsSoldBDT = row.costOfGoodsSoldBDT;
   }
+  for (const row of expenseRows) rowFor(row._id as string).expenseBDT = row.expenseBDT as number;
 
   return [...byPeriod.values()]
     .sort((a, b) => a.period.localeCompare(b.period))
-    .map((row) => ({ ...row, profitBDT: row.revenueBDT - row.expenseBDT }));
+    .map((row) => ({
+      ...row,
+      grossProfitBDT: row.netSellingRevenueBDT - row.costOfGoodsSoldBDT,
+      profitBDT: row.netSellingRevenueBDT - row.costOfGoodsSoldBDT - row.expenseBDT,
+    }));
 }
 
 /**
@@ -121,16 +237,8 @@ export async function getRevenueVsExpenseTimeSeries(filter: SalesSummaryFilter, 
  * zero.
  */
 export async function getGrossProfitTimeSeries(filter: SalesSummaryFilter, groupBy: SalesGroupBy) {
-  const match: Record<string, unknown> = { status: { $nin: ["cancelled", "refunded"] } };
-  if (filter.from || filter.to) {
-    const range: Record<string, Date> = {};
-    if (filter.from) range.$gte = filter.from;
-    if (filter.to) range.$lte = filter.to;
-    match.createdAt = range;
-  }
-
   const rows = await OrderModel.aggregate([
-    { $match: match },
+    { $match: orderMatch(filter) },
     {
       $addFields: {
         netSellingRevenueBDT: { $subtract: ["$subtotalBDT", "$discountBDT"] },

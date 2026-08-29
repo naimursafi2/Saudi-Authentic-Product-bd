@@ -5,8 +5,6 @@ import { validate } from "../middlewares/validate.middleware";
 import { authLimiter } from "../middlewares/rateLimit.middleware";
 import {
   changePasswordSchema,
-  disableTwoFactorSchema,
-  enableTwoFactorSchema,
   forgotPasswordSchema,
   googleAuthSchema,
   loginSchema,
@@ -14,7 +12,6 @@ import {
   resendVerificationSchema,
   resetPasswordSchema,
   verifyEmailSchema,
-  verifyTwoFactorLoginSchema,
 } from "../validators/auth.validator";
 
 const router = Router();
@@ -55,27 +52,6 @@ router.post(
   authLimiter,
   validate({ body: resendVerificationSchema }),
   authController.resendVerification
-);
-
-// -- Two-factor authentication --
-router.post(
-  "/2fa/verify",
-  authLimiter,
-  validate({ body: verifyTwoFactorLoginSchema }),
-  authController.verifyTwoFactorLogin
-);
-router.post("/2fa/setup", authenticate, authController.startTwoFactorSetup);
-router.post(
-  "/2fa/enable",
-  authenticate,
-  validate({ body: enableTwoFactorSchema }),
-  authController.enableTwoFactor
-);
-router.post(
-  "/2fa/disable",
-  authenticate,
-  validate({ body: disableTwoFactorSchema }),
-  authController.disableTwoFactor
 );
 
 export default router;

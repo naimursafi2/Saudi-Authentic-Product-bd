@@ -528,13 +528,14 @@ body {
    on-screen card chrome (border, rounded corners, shadow, background) here
    so it reads as plain professional paper, not a copy of the on-screen
    card — per the "simple, clean, no decorative styling" requirement for
-   printed output. Body/table text is bumped to 12pt (normal
-   Word-document body-text size) since the on-screen admin UI runs smaller
-   (11–14px) for on-screen density; headings and small caption/label text
-   keep their own sizes so the printed hierarchy still reads clearly. No
-   PDF library anywhere in this project — "export as PDF" is always the
-   browser's own "Save as PDF" print destination on a print-isolated view
-   like this one. */
+   printed output. ALL text in `.print-area` is normalized to 12pt (normal
+   Word-document body-text size) since the on-screen admin UI mixes many
+   different sizes (11–24px) for on-screen density/hierarchy that don't
+   belong on a printed document — `h1`/`h2` get one deliberate, modest bump
+   back on top of that so the invoice title and section labels still read as
+   a hierarchy, not a wall of identical text. No PDF library anywhere in
+   this project — "export as PDF" is always the browser's own "Save as PDF"
+   print destination on a print-isolated view like this one. */
 @media print {
   body * {
     visibility: hidden;
@@ -555,17 +556,35 @@ body {
     box-shadow: none;
     background: transparent;
   }
+  /* A `.print-area` dropped inside a Modal (e.g. OrderInvoice) sits inside a
+     panel that is `position: relative` + `overflow-y-auto` + `max-h-[90vh]`
+     for normal on-screen scrolling. That makes the panel both the absolute-
+     positioned `.print-area`'s containing block AND its clipping ancestor —
+     content beyond ~90vh of on-screen height was silently cut from the
+     printed page (only the top of the document, e.g. just the "Invoice"
+     heading, would show). Resetting position/overflow/max-height here lets
+     `.print-area`'s own `position: absolute; top: 0; left: 0` resolve
+     against the actual page box instead, exactly as the rule above intends. */
+  .modal-root:has(.print-area) {
+    position: static !important;
+  }
+  .modal-panel:has(.print-area) {
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
   /* Plain black-on-white text — the on-screen brand colors (green/brown)
      read as "excessive color" on a printed page. */
   .print-area,
   .print-area * {
     color: #1b1b1b !important;
-  }
-  .print-area table,
-  .print-area td,
-  .print-area th,
-  .print-area p {
     font-size: 12pt !important;
+  }
+  .print-area h1 {
+    font-size: 18pt !important;
+  }
+  .print-area h2 {
+    font-size: 10pt !important;
   }
   .print-area tr,
   .print-area td,

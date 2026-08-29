@@ -73,11 +73,17 @@ describe("AdminNav permission filtering", () => {
     // combination, so it can only come from the permission list.
     expect(renderNavFor(["marketing.view", "content.homepage.manage", "reports.view"])).toEqual([
       "Dashboard",
+      "Business Overview",
       "Coupons",
       "Reports",
       "Homepage",
       "Profile",
     ]);
+  });
+
+  it("shows Business Overview to anyone who can view reports, and nobody else", () => {
+    expect(renderNavFor(["reports.view"])).toContain("Business Overview");
+    expect(renderNavFor(["orders.view"])).not.toContain("Business Overview");
   });
 
   it("falls back to just Dashboard and Profile when a role carries no admin permissions", () => {

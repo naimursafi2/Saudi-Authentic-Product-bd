@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { Button } from "@/components/ui/Button";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import type { ApiUser, CustomerStats, Pagination } from "@/types/api";
 
 function isLocked(user: ApiUser): boolean {
@@ -255,31 +255,27 @@ export default function AdminCustomersPage() {
                   </td>
                   {(canManageStatus || canImpersonate) && (
                     <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+                      <ActionButtonGroup>
                         {canManageStatus && isLocked(customer) && (
-                          <Button
-                            variant="primary"
-                            size="sm"
+                          <ActionButton
+                            tone="success"
                             disabled={updatingId === customer._id}
                             onClick={() => handleUnlock(customer)}
                           >
                             Unlock
-                          </Button>
+                          </ActionButton>
                         )}
                         {canImpersonate && customer.isActive && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <ActionButton
                             disabled={updatingId === customer._id}
                             onClick={() => handleImpersonate(customer)}
                           >
                             Sign in as
-                          </Button>
+                          </ActionButton>
                         )}
                         {canManageStatus && (
-                          <Button
-                            variant={customer.isActive ? "danger" : "primary"}
-                            size="sm"
+                          <ActionButton
+                            tone={customer.isActive ? "danger" : "success"}
                             disabled={updatingId === customer._id}
                             onClick={() => handleToggleStatus(customer)}
                           >
@@ -288,9 +284,9 @@ export default function AdminCustomersPage() {
                               : customer.isActive
                                 ? "Deactivate"
                                 : "Reactivate"}
-                          </Button>
+                          </ActionButton>
                         )}
-                      </div>
+                      </ActionButtonGroup>
                     </td>
                   )}
                 </tr>

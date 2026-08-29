@@ -9,12 +9,9 @@ import {
   verifyPasswordResetToken,
   signEmailVerificationToken,
   verifyEmailVerificationToken,
-  signTwoFactorChallengeToken,
-  verifyTwoFactorChallengeToken,
 } from "../utils/jwt";
 import { sendPasswordResetEmail, sendVerificationEmail, sendAccountLockedEmail } from "./email.service";
 import { verifyGoogleIdToken } from "../config/google";
-import { verifyTwoFactorCode } from "./twoFactor.service";
 import {
   ACCOUNT_LOCK_DURATION_MS,
   MAX_FAILED_LOGIN_ATTEMPTS,
@@ -101,9 +98,10 @@ export async function googleAuth(idToken: string) {
   return { user, tokens: issueTokens(user) };
 }
 
-export type LoginResult =
-  | { kind: "session"; user: IUser; tokens: ReturnType<typeof issueTokens> }
-  | { kind: "two-factor-required"; challengeToken: string };
+export interface LoginResult {
+  user: IUser;
+  tokens: ReturnType<typeof issueTokens>;
+}
 
 /**
  * A wrong password increments `failedLoginAttempts`; hitting
@@ -147,38 +145,6 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   user.lockedUntil = undefined;
   user.lastSeenAt = new Date();
   await user.save();
-
-  if (user.twoFactorEnabled) {
-    return {
-      kind: "two-factor-required",
-      challengeToken: signTwoFactorChallengeToken({
-        sub: user._id.toString(),
-        tokenVersion: user.tokenVersion,
-      }),
-    };
-  }
-
-  return { kind: "session", user, tokens: issueTokens(user) };
-}
-
-/** Second step of a 2FA login — exchanges a valid challenge token plus a
- * TOTP/recovery code for a real session. */
-export async function completeTwoFactorLogin(challengeToken: string, code: string) {
-  let payload;
-  try {
-    payload = verifyTwoFactorChallengeToken(challengeToken);
-  } catch {
-    throw ApiError.unauthorized("This sign-in attempt has expired — please log in again");
-  }
-
-  const user = await UserModel.findById(payload.sub);
-  if (!user || !user.isActive || user.tokenVersion !== payload.tokenVersion) {
-    throw ApiError.unauthorized("This sign-in attempt has expired — please log in again");
-  }
-
-  if (!(await verifyTwoFactorCode(user._id.toString(), code))) {
-    throw ApiError.unauthorized("That authentication code is not valid");
-  }
 
   return { user, tokens: issueTokens(user) };
 }

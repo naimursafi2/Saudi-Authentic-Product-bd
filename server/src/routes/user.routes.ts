@@ -8,6 +8,7 @@ import {
   addAddressSchema,
   createStaffSchema,
   listUsersQuerySchema,
+  requestNidEditSchema,
   updateAddressSchema,
   updateMyProfileSchema,
   updateStaffMetaSchema,
@@ -31,6 +32,17 @@ router.patch(
   userController.updateMyAddress
 );
 router.delete("/me/addresses/:addressId", userController.removeAddress);
+
+// -- A staff member's own identity document: request a correction, never make
+// one. Self-scoped by construction (the subject is always `req.user`), so it
+// needs no permission — the same convention as `POST /orders`. Multer passes a
+// plain-JSON request through untouched, so the scan is optional. --
+router.post(
+  "/me/staff-meta/nid-edit-request",
+  upload.single("nidImage"),
+  validate({ body: requestNidEditSchema }),
+  userController.requestMyNidEdit
+);
 
 // -- Staff management (Super Admin / Admin only) --
 router.post(

@@ -3,13 +3,12 @@
 import { useRef, useState } from "react";
 import { Camera, CheckCircle2, IdCard, MailCheck, Trash2, User as UserIcon } from "lucide-react";
 import Image from "next/image";
-import { updateMyProfile, updateMyAvatar, removeMyAvatar } from "@/lib/api/users";
+import { updateMyProfile, updateMyAvatar, removeMyAvatar, requestMyNidEdit } from "@/lib/api/users";
 import { changePassword, resendVerification } from "@/lib/api/auth";
 import { ApiClientError } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/Button";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { TwoFactorSection } from "@/components/account/TwoFactorSection";
 import type { ApiUser } from "@/types/api";
 
 const fieldClasses =
@@ -225,14 +224,44 @@ function EmailVerificationSection({ user }: { user: ApiUser }) {
 }
 
 /**
- * Read-only — only an Admin/Super Admin can set a staff member's NID (see
- * `/admin/employees`'s Employee form). This just lets the staff member
- * confirm what's on file for them.
+ * Read-only by design: an identity document on file is never editable by its
+ * own subject. A staff member can see what is recorded for them and submit a
+ * correction request, which only a Super Admin can approve — the request never
+ * touches the record itself.
  */
 function NidInformationSection({ user }: { user: ApiUser }) {
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [nidNumber, setNidNumber] = useState("");
+  const [reason, setReason] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
   if (!user.staffMeta) return null;
-  const { nidNumber, nidImage } = user.staffMeta;
-  if (!nidNumber && !nidImage) return null;
+  const { nidNumber: currentNid, nidImage } = user.staffMeta;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nidNumber.trim() && !file) {
+      setError("Provide a corrected NID number, a new scan, or both.");
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await requestMyNidEdit({ reason: reason.trim(), nidNumber: nidNumber.trim() || undefined }, file ?? undefined);
+      setSubmitted(true);
+      setIsRequesting(false);
+      setNidNumber("");
+      setReason("");
+      setFile(null);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Could not submit your request.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="rounded-xl border border-brown-600/10 bg-surface p-6 shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
@@ -246,9 +275,67 @@ function NidInformationSection({ user }: { user: ApiUser }) {
           </span>
         )}
         <p className="text-sm text-green-950">
-          NID Number: <span className="font-medium">{nidNumber ?? "Not on file"}</span>
+          NID Number: <span className="font-medium">{currentNid ?? "Not on file"}</span>
         </p>
       </div>
+
+      <p className="mt-4 text-xs text-brown-500">
+        Identity records are held by HR and cannot be edited here. Submit a correction request and a Super Admin
+        will review it.
+      </p>
+
+      {submitted && (
+        <p className="mt-3 flex items-center gap-1.5 text-sm text-green-900">
+          <CheckCircle2 size={15} /> Request submitted — a Super Admin will review it.
+        </p>
+      )}
+
+      {!isRequesting ? (
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => setIsRequesting(true)}>
+          Request a Correction
+        </Button>
+      ) : (
+        <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3 border-t border-brown-600/10 pt-4">
+          <div>
+            <label className={labelClasses}>Corrected NID Number</label>
+            <input
+              value={nidNumber}
+              onChange={(e) => setNidNumber(e.target.value)}
+              placeholder={currentNid ?? "Not on file"}
+              className={fieldClasses}
+            />
+          </div>
+          <div>
+            <label className={labelClasses}>Reason (required)</label>
+            <input
+              required
+              minLength={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why does this need correcting?"
+              className={fieldClasses}
+            />
+          </div>
+          <div>
+            <label className={labelClasses}>New NID Card Scan (optional)</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className={fieldClasses}
+            />
+          </div>
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" variant="primary" size="sm" disabled={isSubmitting}>
+              {isSubmitting ? "Submitting..." : "Submit Request"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsRequesting(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -332,8 +419,6 @@ export function ProfileSection({ user }: { user: ApiUser }) {
         <h2 className="mb-4 font-serif text-lg text-green-950">Change Password</h2>
         <ChangePasswordForm />
       </div>
-
-      <TwoFactorSection user={user} />
     </div>
   );
 }

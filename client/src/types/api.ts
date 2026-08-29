@@ -60,7 +60,6 @@ export interface ApiUser {
   avatar?: { url: string; publicId: string };
   isActive: boolean;
   isEmailVerified: boolean;
-  twoFactorEnabled: boolean;
   /** Set while a failed-login lockout is in effect. */
   lockedUntil?: string;
   addresses: ApiAddress[];
@@ -707,11 +706,23 @@ export interface ApiDeliveryAgentPerformance {
   averageDeliveryHours: number | null;
 }
 
+/** The profit-and-loss statement for a date range. Reads top to bottom:
+ * net selling revenue − cost of goods sold = gross profit, then − operating
+ * expenses = net profit/loss. See `server/src/services/finance.service.ts`. */
 export interface FinanceSummary {
+  /** Top-line sales including the shipping charged to customers. */
   totalRevenueBDT: number;
   totalOrders: number;
+  /** Subtotal minus discount — shipping excluded, since it is pass-through rather than merchandise revenue. */
+  netSellingRevenueBDT: number;
+  /** Each sold unit's actual landed cost, frozen onto the order at sale time from its Purchase batch. */
+  costOfGoodsSoldBDT: number;
+  grossProfitBDT: number;
+  /** Orders holding at least one item with no purchase-batch cost history — the COGS figure is a partial total. */
+  ordersWithUnknownCostBasis: number;
   totalInvestmentBDT: number;
   totalExpensesBDT: number;
+  /** Gross profit minus operating expenses — nets both merchandise cost and operational spend. */
   netProfitBDT: number;
   cashBalanceBDT: number;
   expensesByCategory: Record<ExpenseCategory, number>;

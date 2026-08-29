@@ -28,9 +28,6 @@ export const INACTIVITY_ENFORCED_ROLES: Role[] = [
 /** An impersonation session is short-lived and cannot be refreshed. */
 export const IMPERSONATION_TOKEN_TTL = "30m";
 
-/** Number of single-use recovery codes issued when 2FA is enabled. */
-export const TWO_FACTOR_RECOVERY_CODE_COUNT = 8;
-
 /** How long a delivery verification OTP stays valid before it must be resent. */
 export const DELIVERY_OTP_TTL_MINUTES = 5;
 

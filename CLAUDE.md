@@ -70,8 +70,8 @@ authorization gate — see Roles & Permissions below), `authorize(...roles)`
 
 | Base path | Covers | Default access beyond `authenticate` |
 | --- | --- | --- |
-| `/auth` | register/login/google/refresh/logout(-all)/`me`/change-password/forgot-reset-password/verify-email/2FA | mostly public; `/me`,`/2fa/*` need auth |
-| `/users` | own profile/avatar/addresses; staff CRUD, unlock, impersonate, customer-stats | staff-create/role/status: `admin`+; impersonate: `super_admin` only |
+| `/auth` | register/login/google/refresh/logout(-all)/`me`/change-password/forgot-reset-password/verify-email | mostly public; `/me` needs auth |
+| `/users` | own profile/avatar/addresses; own NID edit-request; staff CRUD, unlock, impersonate, customer-stats | staff-create/role/status: `admin`+; impersonate: `super_admin` only; NID writes gated (see Approval-gate) |
 | `/categories`, `/products` | public list/get; staff create/update/delete | `admin`,`super_admin`,`co_admin` (product delete: `co_admin`+`super_admin` only, `admin` excluded) |
 | `/orders` | customer create/list-own; public `/track`; staff list/update-status; delivery-agent self-scoped endpoints | see "Order pipeline" below |
 | `/reviews` | public read; verified-purchase customer create; staff moderate | delete/visibility: `admin`,`super_admin`,`co_admin` |
@@ -141,7 +141,8 @@ high-risk action types — not a bespoke flow per feature.
 - `models/PendingAction.model.ts` — `PENDING_ACTION_TYPES` enum (currently:
   `coupon.create/.update`, `product.create/.delete/.stock.update`,
   `inventory.adjust`, `refund.request/.approve`, `expense.confirm/.edit`,
-  `purchase.receive`). `payload` is applied **verbatim** on grant.
+  `purchase.receive`, `user.nid.update`). `payload` is applied **verbatim**
+  on grant.
 - `services/pendingAction.service.ts` — `createPendingAction()`,
   `grantPendingAction()`/`denyPendingAction()` (`super_admin` only, via
   `PATCH /pending-actions/:id/grant`|`/deny`). Emails the requester on
@@ -173,8 +174,32 @@ Automatic stock movement (order placed/cancelled/returned) is **never**
 gated. Same "only super_admin bypasses the gate" shape applies to product
 creation (`admin`/`co_admin` submissions are queued, not published),
 product deletion (`co_admin` requests, `admin` has no access at all,
-`super_admin` deletes directly), and receiving a purchase batch that's
-linked to a catalogue variant.
+`super_admin` deletes directly), receiving a purchase batch that's
+linked to a catalogue variant, and staff **identity documents** (below).
+
+**Sensitive documents are never edited or deleted directly by the staff who
+hold them.** Two separate mechanisms already cover this — reuse them, don't
+build a third:
+
+- **Deleting a file** goes through the internal-asset lifecycle
+  (`retireInternalAsset()` → `delete_requested` → Super Admin approves/
+  rejects → Recycle Bin → restore or purge), which applies to *every*
+  internal upload — NID scans, cash memos, purchase proofs, delivery proof
+  photos — with a full append-only `history[]` of who did what and when.
+- **Changing a document's contents** goes through the approval gate.
+  `user.nid.update` covers a staff member's NID number and card scan: only
+  `super_admin` writes one directly, everyone else's change is queued (the
+  live record keeps its old value until granted), and a rejected replacement
+  scan is retired by the registered deny-handler rather than left orphaned.
+  `applyNidChange()` in `user.service.ts` is the single write path both
+  routes converge on, so the audit entry and the old scan's retirement can't
+  be skipped by either one. Ordinary employment fields (department,
+  designation, salary) are *not* gated — only the identity document is.
+- A staff member can ask for a correction to **their own** document via
+  `POST /users/me/staff-meta/nid-edit-request`, which is self-scoped by
+  construction (the subject is always `req.user`) and so needs no permission.
+  It has no branch that writes the record, deliberately: the subject of a
+  document is never the person who approves changes to it.
 
 **Variant identity across edits**: the product form round-trips each
 variant's `_id`; `updateProduct` reuses it so cart lines/order items never
@@ -209,7 +234,7 @@ dictionaries (direct actions, and gated actions × `.request`/`.grant`/
 ## Database models (`src/models`)
 
 `User` (bcrypt password, 7-role enum, `tokenVersion` for logout-all,
-embedded `addresses[]`, optional `staffMeta`, 2FA/lockout fields — see
+embedded `addresses[]`, optional `staffMeta`, lockout fields — see
 Security below), `Category`, `Product` (embedded `variants[]`,
 auto-derived `minPriceBDT`), `Order` (embedded items/shipping snapshot,
 `statusHistory[]`, OTP fields — see Order pipeline), `Coupon`, `Review`,
@@ -266,6 +291,20 @@ cost keeps changing after the sale) — `Order.model.ts` then derives
 values. Cancelling/returning an order credits the exact same batches back.
 This whole path is keyed only off `{product, variantId}` — no
 product-type/category branching, ever.
+
+**Profit & loss** (`finance.service.ts`): the frozen landed costs above are
+what the finance module nets against revenue, so the P&L reads as a real
+income statement — net selling revenue (subtotal − discount; shipping excluded
+as pass-through) − cost of goods sold = gross profit, − confirmed operating
+expenses = net profit/loss. `getCostOfGoodsSold()` collapses the same
+aggregation `getGrossProfitTimeSeries()` buckets by period, and `orderMatch()`/
+`expenseMatch()` are shared by every query in the file, so the single-figure
+summary and the period rows can never disagree. `getFinanceSummary()` and
+`getRevenueVsExpenseTimeSeries()` both subtract COGS: a "profit" figure
+anywhere in this codebase that is only revenue minus expenses is a bug.
+`cashBalanceBDT` is deliberately *not* a profit figure — it is cash on hand
+(investment + revenue − expenses) and excludes stock purchases, which convert
+cash into inventory rather than spending it.
 
 **Internal upload lifecycle** (`models/InternalAsset.model.ts`,
 `services/internalAsset.service.ts`): every file uploaded by internal staff is
@@ -450,9 +489,6 @@ submits every field.
   don't bypass for new routes. All mutating routes require `authenticate`.
 - **Account lockout**: 5 failed attempts → 15-minute lock (`auth.service.ts`,
   `constants/security.ts`). `PATCH /users/:id/unlock` clears it early.
-- **2FA**: TOTP via `otplib` (**pinned to v12** — v13 is ESM-only and breaks
-  the CommonJS ts-jest setup; don't upgrade without migrating Jest config
-  first) + `qrcode`. Two-step enrolment, 8 bcrypt-hashed recovery codes.
 - **Idle-session timeout**: staff roles only (30 min), customers exempt.
   Per-*user* (`lastSeenAt`), not per-device.
 - **Impersonation** (`POST /users/:id/impersonate`, `super_admin` only):
@@ -506,6 +542,23 @@ Product Comparison.
 **No form or state-management library** — hand-rolled `useState`/
 `useEffect` + the custom `lib/api` client. No react-hook-form, no SWR/React
 Query, no Redux/Zustand. Match this for new forms/pages.
+
+**No charting library either** — `components/admin/charts/TrendChart.tsx` is
+hand-rolled SVG (`TrendChart` for grouped bars over time, `BreakdownBars` for
+category shares), same reasoning as `lib/csvExport.ts`. Colors come from
+theme tokens via Tailwind `fill-*`/`stroke-*` utilities so charts invert with
+dark mode, exact figures ride in native `<title>` tooltips, and every chart
+renders an `sr-only` data table beside it. Reuse these two for any new chart;
+don't add Recharts/Chart.js/d3.
+
+**`/admin/analytics` (Business Overview)** is composed entirely from the
+existing `/reports/*` and `/finance/*` endpoints — there is no
+analytics-specific API and no stored snapshot, so its numbers are by
+construction the same ones Reports and Finance show. Its sales half needs
+`reports.view` and its profit half `finance.view` (which Co-Admin does not
+hold), and a viewer without the latter never requests cost/profit data at
+all. Add a new metric by adding it to the owning report/finance service, not
+by giving this page an endpoint of its own.
 
 **Design tokens** (`app/globals.css`, Tailwind v4 `@theme`, no
 `tailwind.config.js`): tokens are **role-based, not literal** —
@@ -652,10 +705,14 @@ than the rewrite intercepts.
 - No SMS gateway connected — `sendSms` is a gateway-ready no-op abstraction;
   delivery OTP and campaign SMS both degrade gracefully (email/other
   channels still work).
-- 2FA is opt-in, not enforceable — no admin-side reset if a user loses
-  their authenticator and all recovery codes (manual DB edit only).
-- Purchase costs aren't fed into the finance summary (would double-count
-  against manually-logged expenses) — deliberate, not an oversight.
+- A purchase batch's cost is never summed into `totalExpensesBDT` — only the
+  portion that actually sold enters the P&L, as cost of goods sold. That is
+  what keeps stock purchases from double-counting against manually-logged
+  expenses while still charging real product cost against profit. Unsold
+  stock shows up in `getInventoryValuation()` instead.
+- COGS is a partial total when an item sold with no purchase-batch history
+  behind it; `ordersWithUnknownCostBasis` reports how many orders that
+  affects rather than letting the gap read as a zero-cost sale.
 - A received purchase batch's cost breakdown is immutable — no edit/
   reversal/delete; correction is a new batch.
 - Two queued stock changes to the same variant aren't locked against each

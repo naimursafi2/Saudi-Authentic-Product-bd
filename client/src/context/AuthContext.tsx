@@ -8,9 +8,6 @@ import type { Permission } from "@/lib/permissions";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
-/** `null` when the password step still needs a 2FA code before a session exists. */
-export type LoginOutcome = { user: ApiUser } | { challengeToken: string };
-
 interface AuthContextValue {
   user: ApiUser | null;
   status: AuthStatus;
@@ -25,8 +22,7 @@ interface AuthContextValue {
   hasPermission: (...required: Permission[]) => boolean;
   /** True while a Super Admin is acting as this user via support-login. */
   isImpersonating: boolean;
-  login: (email: string, password: string) => Promise<LoginOutcome>;
-  completeTwoFactorLogin: (challengeToken: string, code: string) => Promise<ApiUser>;
+  login: (email: string, password: string) => Promise<ApiUser>;
   loginWithGoogle: (idToken: string) => Promise<ApiUser>;
   register: (payload: authApi.RegisterPayload) => Promise<ApiUser>;
   logout: () => Promise<void>;
@@ -78,34 +74,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * Login/register/Google responses carry the user but not their permission
-   * list, so each sign-in path re-reads `GET /auth/me` to pick it up. Without
-   * this the admin nav would render empty until the next page load.
+   * Login/register/Google responses now carry `permissions` directly
+   * (computed once, server-side, in the same request — see auth.controller),
+   * so sign-in sets full auth state immediately instead of following up with
+   * a second `GET /auth/me` round-trip just to learn what the user can do.
+   * That second round-trip used to double the wait on every sign-in action;
+   * `isImpersonating` is always false here since none of these flows can
+   * ever be an impersonation session.
    */
-  const login = useCallback(
-    async (email: string, password: string): Promise<LoginOutcome> => {
-      const { data } = await authApi.login(email, password);
-      if (data.requiresTwoFactor) {
-        return { challengeToken: data.challengeToken };
-      }
-      setUser(data.user);
-      setStatus("authenticated");
-      await refreshUser();
-      return { user: data.user };
-    },
-    [refreshUser]
-  );
-
-  const completeTwoFactorLogin = useCallback(
-    async (challengeToken: string, code: string) => {
-      const { data } = await authApi.verifyTwoFactorLogin(challengeToken, code);
-      setUser(data.user);
-      setStatus("authenticated");
-      await refreshUser();
-      return data.user;
-    },
-    [refreshUser]
-  );
+  const login = useCallback(async (email: string, password: string): Promise<ApiUser> => {
+    const { data } = await authApi.login(email, password);
+    setUser(data.user);
+    setPermissions(data.permissions ?? []);
+    setIsImpersonating(false);
+    setStatus("authenticated");
+    return data.user;
+  }, []);
 
   const startImpersonation = useCallback(
     async (token: string) => {
@@ -120,27 +104,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshUser();
   }, [refreshUser]);
 
-  const register = useCallback(
-    async (payload: authApi.RegisterPayload) => {
-      const { data } = await authApi.register(payload);
-      setUser(data.user);
-      setStatus("authenticated");
-      await refreshUser();
-      return data.user;
-    },
-    [refreshUser]
-  );
+  const register = useCallback(async (payload: authApi.RegisterPayload) => {
+    const { data } = await authApi.register(payload);
+    setUser(data.user);
+    setPermissions(data.permissions ?? []);
+    setIsImpersonating(false);
+    setStatus("authenticated");
+    return data.user;
+  }, []);
 
-  const loginWithGoogle = useCallback(
-    async (idToken: string) => {
-      const { data } = await authApi.googleAuth(idToken);
-      setUser(data.user);
-      setStatus("authenticated");
-      await refreshUser();
-      return data.user;
-    },
-    [refreshUser]
-  );
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const { data } = await authApi.googleAuth(idToken);
+    setUser(data.user);
+    setPermissions(data.permissions ?? []);
+    setIsImpersonating(false);
+    setStatus("authenticated");
+    return data.user;
+  }, []);
 
   const logout = useCallback(async () => {
     // Signing out while impersonating must end the impersonation, not the
@@ -174,7 +154,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         hasPermission,
         isImpersonating,
         login,
-        completeTwoFactorLogin,
         loginWithGoogle,
         register,
         logout,

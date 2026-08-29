@@ -101,6 +101,9 @@ export async function updateUserStatus(id: string, isActive: boolean) {
   return api.patch<{ user: ApiUser }>(`/users/${id}/status`, { isActive });
 }
 
+/** Employment fields apply immediately; an `nidNumber` change comes back with
+ * a `pendingActionId` for everyone but Super Admin — it is queued for approval,
+ * not applied. */
 export async function updateStaffMeta(
   id: string,
   payload: {
@@ -111,13 +114,28 @@ export async function updateStaffMeta(
     nidNumber?: string;
   }
 ) {
-  return api.patch<{ user: ApiUser }>(`/users/${id}/staff-meta`, payload);
+  return api.patch<{ user: ApiUser; pendingActionId?: string }>(`/users/${id}/staff-meta`, payload);
 }
 
+/** Returns a `pendingActionId` unless the caller is Super Admin, in which case
+ * the scan is replaced immediately. */
 export async function uploadStaffNidImage(id: string, file: File) {
   const form = new FormData();
   form.set("nidImage", file);
-  return api.patchForm<{ user: ApiUser }>(`/users/${id}/staff-meta/nid-image`, form);
+  return api.patchForm<{ user: ApiUser; pendingActionId?: string }>(
+    `/users/${id}/staff-meta/nid-image`,
+    form
+  );
+}
+
+/** A staff member asking Super Admin to correct their own identity document.
+ * Always a request — this endpoint has no path that writes the record. */
+export async function requestMyNidEdit(payload: { reason: string; nidNumber?: string }, nidImage?: File) {
+  const form = new FormData();
+  form.set("reason", payload.reason);
+  if (payload.nidNumber) form.set("nidNumber", payload.nidNumber);
+  if (nidImage) form.set("nidImage", nidImage);
+  return api.postForm<{ pendingActionId: string }>("/users/me/staff-meta/nid-edit-request", form);
 }
 
 export async function unlockUser(id: string) {

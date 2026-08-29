@@ -58,14 +58,48 @@ export const updateStatus = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const updateStaffMeta = catchAsync(async (req: Request, res: Response) => {
-  const user = await userService.updateStaffMeta(paramStr(req.params.id), req.body);
-  sendSuccess(res, 200, "Staff details updated", { user });
+  const { user, pendingActionId } = await userService.updateStaffMeta(
+    paramStr(req.params.id),
+    req.body,
+    actorOf(req)
+  );
+  sendSuccess(
+    res,
+    200,
+    pendingActionId
+      ? "Staff details updated. The NID number change was submitted for Super Admin approval and is not live yet."
+      : "Staff details updated",
+    { user, pendingActionId }
+  );
 });
 
 export const uploadStaffNidImage = catchAsync(async (req: Request, res: Response) => {
   if (!req.file) throw ApiError.badRequest("An NID card image is required");
-  const user = await userService.updateStaffNidImage(paramStr(req.params.id), req.file, actorOf(req));
-  sendSuccess(res, 200, "NID card image updated", { user });
+  const { user, pendingActionId } = await userService.updateStaffNidImage(
+    paramStr(req.params.id),
+    req.file,
+    actorOf(req)
+  );
+  sendSuccess(
+    res,
+    200,
+    pendingActionId
+      ? "NID card scan submitted for Super Admin approval — the current scan stays in place until it is granted."
+      : "NID card image updated",
+    { user, pendingActionId }
+  );
+});
+
+/** A staff member requesting a correction to their own identity document. */
+export const requestMyNidEdit = catchAsync(async (req: Request, res: Response) => {
+  const action = await userService.requestOwnNidEdit(
+    actorOf(req),
+    { nidNumber: req.body.nidNumber, file: req.file },
+    req.body.reason
+  );
+  sendSuccess(res, 201, "Request submitted for Super Admin review", {
+    pendingActionId: action._id.toString(),
+  });
 });
 
 export const unlockAccount = catchAsync(async (req: Request, res: Response) => {

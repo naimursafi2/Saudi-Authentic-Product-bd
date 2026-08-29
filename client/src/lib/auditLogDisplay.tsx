@@ -47,6 +47,7 @@ const DIRECT_ACTION_LABELS: Record<string, string> = {
   "expense.reject": "Expense Rejected",
   "expense.edit": "Expense Edited",
   "expense.delete": "Expense Deleted",
+  "user.nid.update": "NID Document Updated",
   "investment.create": "Investment Recorded",
   "payment.initiated": "Payment Initiated",
   "payment.verified": "Payment Verified",
@@ -88,6 +89,7 @@ const GATED_ACTION_LABELS: Record<string, { request: string; grant: string; deny
   "expense.confirm": { request: "Expense Confirmation Requested", grant: "Expense Confirmed", deny: "Expense Confirmation Denied", resource: "Expense" },
   "expense.edit": { request: "Expense Edit Requested", grant: "Expense Edit Approved", deny: "Expense Edit Request Denied", resource: "Expense" },
   "purchase.receive": { request: "Purchase Receipt Requested", grant: "Purchase Received", deny: "Purchase Receipt Denied", resource: "Purchase" },
+  "user.nid.update": { request: "NID Document Change Requested", grant: "NID Document Change Approved", deny: "NID Document Change Denied", resource: "Employee" },
 };
 
 const GATE_SUFFIXES = ["request", "grant", "deny"] as const;

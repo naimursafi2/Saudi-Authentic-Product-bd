@@ -5,6 +5,7 @@ import { Plus, Boxes } from "lucide-react";
 import { adjustStock, listInventoryLogs, listLowStockProducts, listOutOfStockProducts } from "@/lib/api/inventory";
 import { listProducts } from "@/lib/api/products";
 import { ApiClientError } from "@/lib/api/client";
+import { useConfirm } from "@/context/ConfirmDialogContext";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
@@ -25,6 +26,7 @@ function refName(ref: string | { name: string }): string {
 }
 
 export default function AdminInventoryPage() {
+  const confirmDialog = useConfirm();
   const [lowStock, setLowStock] = useState<LowStockEntry[]>([]);
   const [isLowStockLoading, setIsLowStockLoading] = useState(true);
 
@@ -87,6 +89,15 @@ export default function AdminInventoryPage() {
   }, []);
 
   async function handleAdjust(values: InventoryAdjustFormResult) {
+    const productName = products.find((p) => p._id === values.productId)?.name ?? "this product";
+    const direction = values.delta < 0 ? "Remove" : "Add";
+    const ok = await confirmDialog({
+      title: "Adjust Stock",
+      message: `${direction} ${Math.abs(values.delta)} unit(s) ${values.delta < 0 ? "from" : "to"} ${productName}? Stock changes are audited, and unless you are Super Admin this is submitted for approval rather than applied immediately.`,
+      confirmLabel: "Adjust Stock",
+      tone: values.delta < 0 ? "danger" : "primary",
+    });
+    if (!ok) return;
     setFormError(null);
     setIsSubmitting(true);
     try {

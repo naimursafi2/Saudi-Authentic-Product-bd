@@ -3,6 +3,11 @@ import { ApiError } from "../utils/ApiError";
 import { retireInternalAsset, uploadInternalFile, type AssetActor } from "./internalAsset.service";
 import { sendStaffWelcomeEmail, sendVerificationEmail } from "./email.service";
 import { recordAuditLog } from "./auditLog.service";
+import {
+  createPendingAction,
+  registerPendingActionDenyHandler,
+  registerPendingActionHandler,
+} from "./pendingAction.service";
 import { signImpersonationToken, signEmailVerificationToken } from "../utils/jwt";
 import type {
   AddAddressInput,
@@ -44,34 +49,159 @@ export async function createStaffAccount(input: CreateStaffInput) {
   return user;
 }
 
-export async function updateStaffMeta(id: string, input: UpdateStaffMetaInput) {
+const NID_FOLDER = "saudi-authentic-product/staff-nid";
+
+/** Loads a staff account, rejecting a customer or a missing user the same way
+ * every staff-meta path needs to. */
+async function loadStaffAccount(id: string) {
   const user = await UserModel.findById(id);
   if (!user) throw ApiError.notFound("User not found");
   if (!user.staffMeta) throw ApiError.badRequest("This user is not a staff account");
-
-  Object.assign(user.staffMeta, input);
-  await user.save();
   return user;
 }
 
-/** Uploads/replaces a staff member's NID card photo — same pattern as `updateMyAvatar`. */
-export async function updateStaffNidImage(id: string, file: Express.Multer.File, actor: AssetActor) {
-  const user = await UserModel.findById(id);
-  if (!user) throw ApiError.notFound("User not found");
-  if (!user.staffMeta) throw ApiError.badRequest("This user is not a staff account");
-
-  await retireInternalAsset(user.staffMeta.nidImage?.publicId, actor, "Staff NID image replaced");
+/** Uploads a proposed NID scan and registers it in the internal-asset registry
+ * straight away, so the file is traceable and recoverable from the moment it
+ * exists — including while it is only a proposal awaiting review. */
+async function uploadNidScan(userId: string, file: Express.Multer.File, actor: AssetActor) {
   const uploaded = await uploadInternalFile(file, {
-    folder: "saudi-authentic-product/staff-nid",
+    folder: NID_FOLDER,
     resource: "User",
-    resourceId: id,
+    resourceId: userId,
     fieldPath: "staffMeta.nidImage",
     module: "Employees",
     actor,
   });
-  user.staffMeta.nidImage = { url: uploaded.url, publicId: uploaded.publicId };
+  return { url: uploaded.url, publicId: uploaded.publicId };
+}
+
+/**
+ * Applies an approved identity-document change. The single place a stored NID
+ * number or scan is ever written, whether it got here through a Super Admin
+ * acting directly or through a granted request — so the audit trail and the
+ * old scan's retirement can never be bypassed by one of the two paths.
+ */
+async function applyNidChange(
+  userId: string,
+  change: { nidNumber?: string; nidImage?: { url: string; publicId: string } },
+  actor: AssetActor
+) {
+  const user = await loadStaffAccount(userId);
+  const before = { nidNumber: user.staffMeta!.nidNumber, nidImage: user.staffMeta!.nidImage };
+
+  if (change.nidNumber !== undefined) user.staffMeta!.nidNumber = change.nidNumber;
+  if (change.nidImage) {
+    // The superseded scan is never destroyed — it enters the internal-asset
+    // lifecycle so a Super Admin still sees the document's full history.
+    await retireInternalAsset(user.staffMeta!.nidImage?.publicId, actor, "Staff NID image replaced");
+    user.staffMeta!.nidImage = change.nidImage;
+  }
   await user.save();
+
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "user.nid.update",
+    resource: "User",
+    resourceId: userId,
+    oldValue: { nidNumber: before.nidNumber, nidImagePublicId: before.nidImage?.publicId },
+    newValue: {
+      nidNumber: user.staffMeta!.nidNumber,
+      nidImagePublicId: user.staffMeta!.nidImage?.publicId,
+    },
+    note: "Staff identity document updated",
+  });
+
   return user;
+}
+
+/**
+ * HR fields (department, designation, salary, join date) apply immediately —
+ * they are ordinary employment data. The NID number is not: it is an identity
+ * document, so anyone but a Super Admin can only *propose* a change to it, and
+ * the proposal waits in the approval queue. The two halves are handled
+ * separately rather than gating the whole request, so correcting someone's
+ * department is not blocked behind a document review.
+ */
+export async function updateStaffMeta(
+  id: string,
+  input: UpdateStaffMetaInput,
+  actor: AssetActor
+): Promise<{ user: Awaited<ReturnType<typeof loadStaffAccount>>; pendingActionId?: string }> {
+  const user = await loadStaffAccount(id);
+
+  const { nidNumber, ...employmentFields } = input;
+  Object.assign(user.staffMeta!, employmentFields);
+  await user.save();
+
+  if (nidNumber === undefined) return { user };
+
+  if (actor.role === "super_admin") {
+    return { user: await applyNidChange(id, { nidNumber }, actor) };
+  }
+
+  const action = await createPendingAction(
+    "user.nid.update",
+    { userId: id, nidNumber, name: user.name },
+    actor,
+    "NID number correction"
+  );
+  return { user, pendingActionId: action._id.toString() };
+}
+
+/**
+ * Uploads/replaces a staff member's NID card photo. Super Admin replaces it
+ * directly; every other role's upload is parked as a proposal — the live
+ * record keeps the scan it already had until the change is granted.
+ */
+export async function updateStaffNidImage(
+  id: string,
+  file: Express.Multer.File,
+  actor: AssetActor
+): Promise<{ user: Awaited<ReturnType<typeof loadStaffAccount>>; pendingActionId?: string }> {
+  const user = await loadStaffAccount(id);
+  const nidImage = await uploadNidScan(id, file, actor);
+
+  if (actor.role === "super_admin") {
+    return { user: await applyNidChange(id, { nidImage }, actor) };
+  }
+
+  const action = await createPendingAction(
+    "user.nid.update",
+    { userId: id, nidImage, name: user.name },
+    actor,
+    "NID card scan replacement"
+  );
+  return { user, pendingActionId: action._id.toString() };
+}
+
+/**
+ * A staff member asking for a correction to their *own* identity document.
+ * Self-scoped by construction — the caller's own id is the subject, never a
+ * parameter — so it needs no permission, the same convention as `POST /orders`
+ * and `GET /orders/mine`. It can only ever create a proposal: there is no
+ * branch here that writes to the record, not even for a Super Admin, because
+ * the point of the endpoint is that the subject of a document is not the
+ * person who approves changes to it.
+ */
+export async function requestOwnNidEdit(
+  actor: AssetActor,
+  input: { nidNumber?: string; file?: Express.Multer.File },
+  reason: string
+) {
+  const user = await loadStaffAccount(actor.id);
+  if (input.nidNumber === undefined && !input.file) {
+    throw ApiError.badRequest("Provide a new NID number, a new NID card scan, or both");
+  }
+
+  const nidImage = input.file ? await uploadNidScan(actor.id, input.file, actor) : undefined;
+  const action = await createPendingAction(
+    "user.nid.update",
+    { userId: actor.id, nidNumber: input.nidNumber, nidImage, name: user.name },
+    actor,
+    reason
+  );
+  return action;
 }
 
 export async function listUsers(filter: {
@@ -318,3 +448,32 @@ export async function removeMyAvatar(userId: string) {
   await user.save();
   return user;
 }
+
+/**
+ * Grant handler for `user.nid.update` — the Super Admin has approved a
+ * proposed identity-document change, so it is applied through the same
+ * `applyNidChange` path a direct Super Admin edit takes.
+ */
+registerPendingActionHandler("user.nid.update", async (payload, reviewer) => {
+  const userId = payload.userId as string;
+  await applyNidChange(
+    userId,
+    {
+      nidNumber: payload.nidNumber as string | undefined,
+      nidImage: payload.nidImage as { url: string; publicId: string } | undefined,
+    },
+    reviewer
+  );
+  return { resource: "User", resourceId: userId };
+});
+
+/**
+ * Deny handler — the proposed scan was uploaded before review (so it could be
+ * looked at), so a rejection has to hand that orphaned file to the
+ * internal-asset lifecycle rather than leave it live forever. Same shape as
+ * `product.create`'s deny handler.
+ */
+registerPendingActionDenyHandler("user.nid.update", async (payload, reviewer) => {
+  const nidImage = payload.nidImage as { publicId?: string } | undefined;
+  await retireInternalAsset(nidImage?.publicId, reviewer, "Proposed NID scan rejected");
+});

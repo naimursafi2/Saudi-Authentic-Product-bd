@@ -20,7 +20,9 @@ import { PageHeader } from "@/components/admin/PageHeader";
 import { EmptyState, TableSkeleton, ErrorState } from "@/components/admin/EmptyState";
 import { Modal } from "@/components/admin/Modal";
 import { AccessModal } from "@/components/admin/AccessModal";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { ActionButton, ActionButtonGroup } from "@/components/ui/ActionButton";
 import { EmployeeForm, type EmployeeFormValues } from "@/components/admin/EmployeeForm";
 import type { ApiUser } from "@/types/api";
 
@@ -47,11 +49,19 @@ export default function AdminEmployeesPage() {
   /** The staff member whose role assignment + effective permissions are open. */
   const [managingAccess, setManagingAccess] = useState<ApiUser | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Shown when an identity-document change was queued for Super Admin review
+   * rather than applied — same pattern as the Inventory page's stock notice. */
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
 
   async function handleUploadNidImage(file: File) {
     if (!editing || editing === "new") return;
     const { data } = await uploadStaffNidImage(editing._id, file);
     setEditing(data.user);
+    if (data.pendingActionId) {
+      setPendingNotice(
+        "The replacement NID scan was submitted for Super Admin approval — the current scan stays in place until it is granted."
+      );
+    }
     load();
   }
 
@@ -129,13 +139,23 @@ export default function AdminEmployeesPage() {
         const id = editing._id;
         if (values.role !== editing.role) await updateUserRole(id, values.role);
         if (values.isActive !== editing.isActive) await updateUserStatus(id, values.isActive);
-        await updateStaffMeta(id, {
+        // The NID is an identity document: sending it at all is what asks for
+        // a change, and for anyone but Super Admin that opens an approval
+        // request. Only send it when it actually differs, so editing someone's
+        // department doesn't queue a pointless document review.
+        const nidChanged = (values.nidNumber || "") !== (editing.staffMeta?.nidNumber ?? "");
+        const { data } = await updateStaffMeta(id, {
           department: values.department || undefined,
           designation: values.designation || undefined,
           baseSalaryBDT,
           joinedAt: values.joinedAt || undefined,
-          nidNumber: values.nidNumber || undefined,
+          nidNumber: nidChanged ? values.nidNumber || undefined : undefined,
         });
+        if (data.pendingActionId) {
+          setPendingNotice(
+            "The NID number change was submitted for Super Admin approval — the record still shows the previous number until it is granted."
+          );
+        }
       }
       setEditing(null);
       load();
@@ -161,6 +181,12 @@ export default function AdminEmployeesPage() {
       />
 
       {actionError && <p className="mb-4 text-sm text-danger">{actionError}</p>}
+
+      {pendingNotice && (
+        <div className="mb-6 rounded-lg border border-gold-500/40 bg-gold-soft p-4 text-sm text-gold-700">
+          {pendingNotice}
+        </div>
+      )}
 
       {isLoading ? (
         <TableSkeleton />
@@ -204,18 +230,8 @@ export default function AdminEmployeesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
-                          person.isActive ? "bg-success-soft text-green-900" : "bg-cream-300 text-brown-500"
-                        }`}
-                      >
-                        {person.isActive ? "Active" : "Inactive"}
-                      </span>
-                      {isLocked(person) && (
-                        <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-danger">
-                          Locked
-                        </span>
-                      )}
+                      <StatusBadge status={person.isActive ? "active" : "inactive"} />
+                      {isLocked(person) && <StatusBadge status="locked" />}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-brown-600">
@@ -226,38 +242,29 @@ export default function AdminEmployeesPage() {
                   {canManage && (
                     <td className="px-4 py-3 text-right">
                       {person.role !== "super_admin" && (
-                        <div className="flex justify-end gap-3">
+                        <ActionButtonGroup>
                           {isLocked(person) && (
-                            <button
+                            <ActionButton
+                              tone="success"
                               onClick={() => handleUnlock(person)}
                               disabled={actingId === person._id}
-                              className="inline-flex cursor-pointer items-center rounded-full bg-success-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-green-900 transition-colors duration-150 hover:bg-success-soft-hover disabled:opacity-50"
                             >
                               Unlock
-                            </button>
+                            </ActionButton>
                           )}
                           {canImpersonate && person.isActive && (
-                            <button
+                            <ActionButton
                               onClick={() => handleImpersonate(person)}
                               disabled={actingId === person._id}
-                              className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-600 hover:underline disabled:opacity-50"
                             >
                               Sign in as
-                            </button>
+                            </ActionButton>
                           )}
-                          <button
-                            onClick={() => setManagingAccess(person)}
-                            className="cursor-pointer text-xs font-bold uppercase tracking-wide text-brown-600 hover:underline"
-                          >
-                            Access
-                          </button>
-                          <button
-                            onClick={() => setEditing(person)}
-                            className="inline-flex cursor-pointer items-center rounded-full bg-info-soft px-3 py-1 text-xs font-bold uppercase tracking-wide text-info transition-colors duration-150 hover:bg-info-soft-hover"
-                          >
+                          <ActionButton onClick={() => setManagingAccess(person)}>Access</ActionButton>
+                          <ActionButton tone="info" onClick={() => setEditing(person)}>
                             Edit
-                          </button>
-                        </div>
+                          </ActionButton>
+                        </ActionButtonGroup>
                       )}
                     </td>
                   )}

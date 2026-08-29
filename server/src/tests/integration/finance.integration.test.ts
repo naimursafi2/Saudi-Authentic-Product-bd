@@ -389,6 +389,12 @@ describe("Finance module (Investment, Expense, Refund)", () => {
     expect(summary.status).toBe(200);
     expect(summary.body.data.summary.totalInvestmentBDT).toBe(50000);
     expect(summary.body.data.summary.totalExpensesBDT).toBe(2000);
-    expect(summary.body.data.summary.netProfitBDT).toBe(summary.body.data.summary.totalRevenueBDT - 2000);
+    // Net profit is gross profit (net selling revenue minus cost of goods
+    // sold) minus operating expenses — not revenue minus expenses. With no
+    // orders in this test both revenue sides are zero, so the whole ৳2,000
+    // expense is the loss. See profitAndLoss.integration.test.ts for the
+    // version of this with real sales and purchase batches behind it.
+    expect(summary.body.data.summary.grossProfitBDT).toBe(0);
+    expect(summary.body.data.summary.netProfitBDT).toBe(-2000);
   });
 });

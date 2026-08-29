@@ -34,7 +34,7 @@ with gallery + reviews, cart & wishlist (client-side), coupon codes,
 checkout with bKash online payment (server-verified) or cash on delivery,
 order tracking (with/without an account), customer account
 dashboard (orders, addresses, price-drop/back-in-stock alerts, refunds/
-returns), dark/light mode, Google Sign-In, 2FA, email verification.
+returns), dark/light mode, Google Sign-In, email verification.
 
 **Admin/Co-Admin/Super Admin/Order Manager portal**: product & category
 management (with a Super-Admin approval gate for new products, stock
@@ -49,8 +49,9 @@ moderation, HR (leave, tasks, performance, salary, NID records), finance
 permission management system with custom roles, a Grant-Based Approval
 Workflow for high-risk actions, a centralized internal upload registry with a
 delete-approval flow and 15-day recycle bin, audit logging, homepage/navigation/footer/
-static-page content management, site settings, and sales/delivery
-analytics with CSV/PDF export.
+static-page content management, site settings, a Business Overview dashboard
+charting sales, orders and profit/loss over a day/week/month/custom range, and
+sales/delivery analytics with CSV/PDF export.
 
 **Employee portal**: tasks, leave requests, performance reviews, salary
 history, read-only stock lookup, expense submission, profile.

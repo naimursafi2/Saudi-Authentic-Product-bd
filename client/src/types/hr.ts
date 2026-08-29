@@ -134,9 +134,17 @@ export interface SalesTimeSeriesPoint {
   orders: number;
 }
 
+/** One period of the full P&L: revenue, merchandise cost and operating spend
+ * for the same bucket. `profitBDT` is the bottom line — net selling revenue
+ * minus cost of goods sold minus expenses. */
 export interface RevenueVsExpensePoint {
   period: string;
+  /** Top-line sales including shipping. */
   revenueBDT: number;
+  /** Subtotal minus discount, shipping excluded — what gross profit is measured against. */
+  netSellingRevenueBDT: number;
+  costOfGoodsSoldBDT: number;
+  grossProfitBDT: number;
   expenseBDT: number;
   profitBDT: number;
 }

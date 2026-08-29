@@ -29,6 +29,15 @@ export const updateStaffMetaSchema = z.object({
   nidNumber: z.string().trim().min(1).max(30).optional(),
 });
 
+/** A staff member's own request to correct their identity document. Sent as
+ * multipart when a replacement scan is attached, so `nidNumber` arrives as a
+ * string either way and no `z.coerce` is involved. A reason is mandatory —
+ * the Super Admin reviewing it has no other context for the request. */
+export const requestNidEditSchema = z.object({
+  nidNumber: z.string().trim().min(1).max(30).optional(),
+  reason: z.string().trim().min(3).max(500),
+});
+
 export const updateUserRoleSchema = z.object({
   role: z.enum(ROLES),
 });

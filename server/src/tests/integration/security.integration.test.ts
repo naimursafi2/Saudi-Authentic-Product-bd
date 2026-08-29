@@ -1,5 +1,4 @@
 import request from "supertest";
-import { authenticator } from "otplib";
 import { createApp } from "../../app";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { createAuthedUser, authHeader } from "./helpers";
@@ -8,7 +7,7 @@ import { MAX_FAILED_LOGIN_ATTEMPTS, STAFF_INACTIVITY_TIMEOUT_MS } from "../../co
 
 const app = createApp();
 
-describe("Security hardening (lockout, 2FA, inactivity, impersonation)", () => {
+describe("Security hardening (lockout, inactivity, impersonation)", () => {
   beforeAll(async () => {
     await connectTestDb();
   }, 60000);
@@ -64,102 +63,6 @@ describe("Security hardening (lockout, 2FA, inactivity, impersonation)", () => {
       const user = await UserModel.findOne({ email });
       expect(user?.failedLoginAttempts).toBe(0);
       expect(user?.lockedUntil).toBeUndefined();
-    });
-  });
-
-  describe("two-factor authentication", () => {
-    it("enrols, then requires a TOTP code at login before issuing a session", async () => {
-      const email = "twofactor@example.com";
-      const { token } = await createAuthedUser({ email, password: "Password123", role: "admin" });
-
-      const setup = await request(app)
-        .post("/api/v1/auth/2fa/setup")
-        .set(...authHeader(token))
-        .send({});
-      expect(setup.status).toBe(200);
-      const secret = setup.body.data.secret as string;
-      expect(setup.body.data.qrDataUrl).toMatch(/^data:image\/png;base64,/);
-
-      // Not active until a real code from the authenticator confirms it.
-      let user = await UserModel.findOne({ email });
-      expect(user?.twoFactorEnabled).toBe(false);
-
-      const enable = await request(app)
-        .post("/api/v1/auth/2fa/enable")
-        .set(...authHeader(token))
-        .send({ code: authenticator.generate(secret) });
-      expect(enable.status).toBe(200);
-      const recoveryCodes = enable.body.data.recoveryCodes as string[];
-      expect(recoveryCodes).toHaveLength(8);
-
-      user = await UserModel.findOne({ email });
-      expect(user?.twoFactorEnabled).toBe(true);
-
-      // Password alone now only earns a challenge, not a session.
-      const login = await request(app).post("/api/v1/auth/login").send({ email, password: "Password123" });
-      expect(login.status).toBe(200);
-      expect(login.body.data.requiresTwoFactor).toBe(true);
-      expect(login.body.data.user).toBeUndefined();
-      const challengeToken = login.body.data.challengeToken as string;
-
-      const badCode = await request(app)
-        .post("/api/v1/auth/2fa/verify")
-        .send({ challengeToken, code: "000000" });
-      expect(badCode.status).toBe(401);
-
-      const verified = await request(app)
-        .post("/api/v1/auth/2fa/verify")
-        .send({ challengeToken, code: authenticator.generate(secret) });
-      expect(verified.status).toBe(200);
-      expect(verified.body.data.user.email).toBe(email);
-    });
-
-    it("accepts a recovery code once and then burns it", async () => {
-      const email = "recovery@example.com";
-      const { token } = await createAuthedUser({ email, password: "Password123", role: "admin" });
-
-      const setup = await request(app)
-        .post("/api/v1/auth/2fa/setup")
-        .set(...authHeader(token))
-        .send({});
-      const secret = setup.body.data.secret as string;
-      const enable = await request(app)
-        .post("/api/v1/auth/2fa/enable")
-        .set(...authHeader(token))
-        .send({ code: authenticator.generate(secret) });
-      const [recoveryCode] = enable.body.data.recoveryCodes as string[];
-
-      const firstLogin = await request(app).post("/api/v1/auth/login").send({ email, password: "Password123" });
-      const firstUse = await request(app)
-        .post("/api/v1/auth/2fa/verify")
-        .send({ challengeToken: firstLogin.body.data.challengeToken, code: recoveryCode });
-      expect(firstUse.status).toBe(200);
-
-      const secondLogin = await request(app).post("/api/v1/auth/login").send({ email, password: "Password123" });
-      const replay = await request(app)
-        .post("/api/v1/auth/2fa/verify")
-        .send({ challengeToken: secondLogin.body.data.challengeToken, code: recoveryCode });
-      expect(replay.status).toBe(401);
-    });
-
-    it("never leaks the secret or recovery codes through a user payload", async () => {
-      const { token, user } = await createAuthedUser({ role: "admin" });
-      const setup = await request(app)
-        .post("/api/v1/auth/2fa/setup")
-        .set(...authHeader(token))
-        .send({});
-      await request(app)
-        .post("/api/v1/auth/2fa/enable")
-        .set(...authHeader(token))
-        .send({ code: authenticator.generate(setup.body.data.secret) });
-
-      const me = await request(app)
-        .get("/api/v1/auth/me")
-        .set(...authHeader(token));
-      expect(me.body.data.user.twoFactorEnabled).toBe(true);
-      expect(me.body.data.user.twoFactorSecret).toBeUndefined();
-      expect(me.body.data.user.twoFactorRecoveryCodes).toBeUndefined();
-      void user;
     });
   });
 
