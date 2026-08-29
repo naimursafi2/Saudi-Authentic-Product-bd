@@ -17,12 +17,12 @@ export function AddToCartButton({
     <Button
       type="button"
       variant="addToCart"
-      size="xs"
+      size="sm"
       aria-label="Add to cart"
       onClick={() => addItem(productId, variantId, 1)}
       className="w-full gap-2"
     >
-      <ShoppingCart size={14} />
+      <ShoppingCart size={16} />
       Add to Cart
     </Button>
   );

@@ -27,26 +27,38 @@ import { toCategory } from "@/lib/mappers";
  * server-side fetch instead of a client-side waterfall," not caching.
  */
 async function getSiteChrome() {
-  const [categoriesResult, navLinksResult, settingsResult] = await Promise.allSettled([
-    listCategories(),
-    listNavLinks(),
-    getSiteSettings(),
-  ]);
+  const [categoriesResult, navLinksResult, settingsResult] =
+    await Promise.allSettled([
+      listCategories(),
+      listNavLinks(),
+      getSiteSettings(),
+    ]);
 
   return {
     categories:
       categoriesResult.status === "fulfilled"
-        ? categoriesResult.value.data.categories.map(toCategory).sort((a, b) => a.sortOrder - b.sortOrder)
+        ? categoriesResult.value.data.categories
+            .map(toCategory)
+            .sort((a, b) => a.sortOrder - b.sortOrder)
         : [],
     navLinks:
       navLinksResult.status === "fulfilled"
-        ? [...navLinksResult.value.data.navLinks].sort((a, b) => a.sortOrder - b.sortOrder)
+        ? [...navLinksResult.value.data.navLinks].sort(
+            (a, b) => a.sortOrder - b.sortOrder,
+          )
         : [],
-    settings: settingsResult.status === "fulfilled" ? settingsResult.value.data.settings : null,
+    settings:
+      settingsResult.status === "fulfilled"
+        ? settingsResult.value.data.settings
+        : null,
   };
 }
 
-export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+export default async function SiteLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { categories, navLinks, settings } = await getSiteChrome();
 
   return (
@@ -55,8 +67,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         enabled={settings?.announcementEnabled}
         text={settings?.announcementText}
       />
-      <Header initialCategories={categories} initialNavLinks={navLinks} initialSettings={settings} />
-      <main className="flex-1">{children}</main>
+      <Header
+        initialCategories={categories}
+        initialNavLinks={navLinks}
+        initialSettings={settings}
+      />
+      <main className="mobile-bottom-offset flex-1">{children}</main>
       <Footer settings={settings} />
     </>
   );

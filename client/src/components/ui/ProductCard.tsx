@@ -26,7 +26,11 @@ const badgeClasses: Record<NonNullable<Product["badge"]>, string> = {
   Limited: "bg-danger-soft text-danger",
 };
 
-export function ProductCard({ product, className, showCompareToggle }: ProductCardProps) {
+export function ProductCard({
+  product,
+  className,
+  showCompareToggle,
+}: ProductCardProps) {
   const { addItem } = useCart();
   const { isWishlisted, toggleWishlist } = useWishlist();
   const { isComparing, toggleCompare } = useCompare();
@@ -38,9 +42,12 @@ export function ProductCard({ product, className, showCompareToggle }: ProductCa
   // whose default size sold out still adds something real to the cart.
   const addableVariant = firstAvailableVariant(product);
   const discountPercent =
-    defaultVariant.compareAtPriceBDT && defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT
+    defaultVariant.compareAtPriceBDT &&
+    defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT
       ? Math.round(
-          ((defaultVariant.compareAtPriceBDT - defaultVariant.priceBDT) / defaultVariant.compareAtPriceBDT) * 100
+          ((defaultVariant.compareAtPriceBDT - defaultVariant.priceBDT) /
+            defaultVariant.compareAtPriceBDT) *
+            100,
         )
       : null;
 
@@ -48,7 +55,7 @@ export function ProductCard({ product, className, showCompareToggle }: ProductCa
     <div
       className={cn(
         "group flex flex-1 flex-col overflow-hidden rounded-lg border border-gold-500/30 bg-cream-100 shadow-[0_4px_15px_rgba(61,43,31,0.05)] transition-shadow hover:shadow-[0_8px_24px_rgba(61,43,31,0.1)]",
-        className
+        className,
       )}
     >
       <Link
@@ -69,7 +76,7 @@ export function ProductCard({ product, className, showCompareToggle }: ProductCa
             <span
               className={cn(
                 "rounded-full border border-black/5 px-3 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]",
-                badgeClasses[product.badge]
+                badgeClasses[product.badge],
               )}
             >
               {product.badge}
@@ -95,7 +102,10 @@ export function ProductCard({ product, className, showCompareToggle }: ProductCa
           }}
           className="absolute right-3 top-3 flex size-7 cursor-pointer items-center justify-center rounded-full bg-white/85 text-brown-500 backdrop-blur transition-colors hover:text-danger"
         >
-          <Heart size={14} className={wishlisted ? "fill-danger text-danger" : ""} />
+          <Heart
+            size={14}
+            className={wishlisted ? "fill-danger text-danger" : ""}
+          />
         </button>
       </Link>
       <div className="flex flex-1 flex-col gap-1 p-3.5">
@@ -104,30 +114,37 @@ export function ProductCard({ product, className, showCompareToggle }: ProductCa
             {product.name}
           </h3>
         </Link>
-        {product.ratingCount > 0 && <StarRating rating={product.ratingAverage} size={12} />}
+        {product.ratingCount > 0 && (
+          <StarRating rating={product.ratingAverage} size={12} />
+        )}
         <div className="mt-auto flex flex-col gap-2 pt-2">
           <span className="flex items-baseline gap-2">
             <span className="text-lg font-semibold leading-none text-green-950">
               {formatBDT(defaultVariant.priceBDT)}
             </span>
-            {defaultVariant.compareAtPriceBDT && defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT && (
-              <span className="text-xs leading-none text-brown-500/60 line-through">
-                {formatBDT(defaultVariant.compareAtPriceBDT)}
-              </span>
-            )}
+            {defaultVariant.compareAtPriceBDT &&
+              defaultVariant.compareAtPriceBDT > defaultVariant.priceBDT && (
+                <span className="text-xs leading-none text-brown-500/60 line-through">
+                  {formatBDT(defaultVariant.compareAtPriceBDT)}
+                </span>
+              )}
           </span>
           <Button
             type="button"
             variant="addToCart"
-            size="xs"
+            size="sm"
             disabled={!addableVariant}
             aria-label={
-              addableVariant ? `Add ${product.name} to cart` : `${product.name} is out of stock`
+              addableVariant
+                ? `Add ${product.name} to cart`
+                : `${product.name} is out of stock`
             }
-            onClick={() => addableVariant && addItem(product.id, addableVariant.id, 1)}
+            onClick={() =>
+              addableVariant && addItem(product.id, addableVariant.id, 1)
+            }
             className="w-full gap-2"
           >
-            <ShoppingCart size={14} />
+            <ShoppingCart size={16} />
             {addableVariant ? "Add to Cart" : "Stock Out"}
           </Button>
           {showCompareToggle && (
@@ -138,7 +155,7 @@ export function ProductCard({ product, className, showCompareToggle }: ProductCa
                 "flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors",
                 comparing
                   ? "border-green-900 bg-green-950/5 text-green-950"
-                  : "border-brown-600/15 text-brown-500 hover:border-green-900/30 hover:text-green-950"
+                  : "border-brown-600/15 text-brown-500 hover:border-green-900/30 hover:text-green-950",
               )}
             >
               <Scale size={12} />
