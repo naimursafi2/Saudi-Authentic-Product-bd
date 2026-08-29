@@ -104,7 +104,7 @@ export async function recordInternalAsset(input: RecordAssetInput): Promise<IInt
           ],
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
     );
   } catch (err) {
     console.error(

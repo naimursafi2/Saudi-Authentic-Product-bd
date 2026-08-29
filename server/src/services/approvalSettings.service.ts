@@ -12,7 +12,7 @@ export async function getApprovalSettings() {
   return ApprovalSettingsModel.findOneAndUpdate(
     {},
     { $setOnInsert: APPROVAL_SETTINGS_DEFAULTS },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   );
 }
 

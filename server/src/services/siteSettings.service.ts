@@ -11,7 +11,7 @@ export async function getSettings() {
   return SiteSettingsModel.findOneAndUpdate(
     {},
     { $setOnInsert: SITE_SETTINGS_DEFAULTS },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   );
 }
 

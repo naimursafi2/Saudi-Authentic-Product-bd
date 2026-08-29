@@ -152,7 +152,7 @@ export async function consumeStockForSale(input: {
     const updated = await ProductModel.findOneAndUpdate(
       { _id: input.productId, "variants._id": input.variantId },
       { $inc: { "variants.$.stock": -take } },
-      { new: true }
+      { returnDocument: "after" }
     );
     const variant = updated?.variants.find((v) => v._id?.toString() === input.variantId);
     latestStock = variant?.stock ?? latestStock - take;
@@ -253,7 +253,7 @@ export async function restockFromSale(
   const updated = await ProductModel.findOneAndUpdate(
     { _id: item.product, "variants._id": item.variantId },
     { $inc: { "variants.$.stock": item.quantity } },
-    { new: true }
+    { returnDocument: "after" }
   );
   const variant = updated?.variants.find((v) => v._id?.toString() === item.variantId);
   const newStock = variant?.stock ?? 0;

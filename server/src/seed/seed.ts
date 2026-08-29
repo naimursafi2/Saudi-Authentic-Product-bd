@@ -443,7 +443,7 @@ async function seed() {
     const doc = await CategoryModel.findOneAndUpdate(
       { slug },
       { $set: { ...cat, slug } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
     );
     categoryIdByName.set(cat.name, doc._id.toString());
   }

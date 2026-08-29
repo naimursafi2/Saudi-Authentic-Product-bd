@@ -147,7 +147,7 @@ export async function updateUserRole(id: string, role: Role, actor: { id: string
   if (!before) throw ApiError.notFound("User not found");
   const previousRole = before.role;
 
-  const user = await UserModel.findByIdAndUpdate(id, { role }, { new: true });
+  const user = await UserModel.findByIdAndUpdate(id, { role }, { returnDocument: "after" });
   if (!user) throw ApiError.notFound("User not found");
 
   await recordAuditLog({
@@ -171,7 +171,7 @@ export async function updateUserStatus(id: string, isActive: boolean, actor: { i
   if (!before) throw ApiError.notFound("User not found");
   const previousStatus = before.isActive;
 
-  const user = await UserModel.findByIdAndUpdate(id, { isActive }, { new: true });
+  const user = await UserModel.findByIdAndUpdate(id, { isActive }, { returnDocument: "after" });
   if (!user) throw ApiError.notFound("User not found");
 
   await recordAuditLog({

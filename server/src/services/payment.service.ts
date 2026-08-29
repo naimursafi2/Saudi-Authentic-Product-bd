@@ -114,7 +114,7 @@ async function confirmOrderAfterPayment(orderId: Types.ObjectId, actor: PaymentA
   const claimed = await OrderModel.findOneAndUpdate(
     { _id: orderId, isPaid: false },
     { $set: { isPaid: true } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!claimed) return;
 
@@ -353,7 +353,7 @@ async function settleVerifiedPayment(
       },
       $unset: { failureReason: "" },
     },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!settled) {

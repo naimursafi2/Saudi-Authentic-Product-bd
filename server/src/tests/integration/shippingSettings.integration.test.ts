@@ -15,7 +15,7 @@ async function seedProduct(priceBDT = 1000) {
   const category = await CategoryModel.findOneAndUpdate(
     { slug: "dates" },
     { $setOnInsert: { name: "Dates", slug: "dates" } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   );
   return ProductModel.create({
     name: `Ajwa Dates ${seedCounter}`,

@@ -35,7 +35,7 @@ export async function getShippingSettings() {
   const settings = await ShippingSettingsModel.findOneAndUpdate(
     {},
     { $setOnInsert: SHIPPING_SETTINGS_DEFAULTS },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   );
   setCachedShippingRates(toRates(settings));
   return settings;
