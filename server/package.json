@@ -8,7 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "node scripts/dev-dns-fix.cjs",
+    "dev:plain": "tsx watch src/server.ts",
     "dev:dns-fix": "node scripts/dev-dns-fix.cjs",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/start.cjs",

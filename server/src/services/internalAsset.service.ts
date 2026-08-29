@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import {
   InternalAssetModel,
   RECYCLE_BIN_RETENTION_DAYS,
@@ -159,8 +160,70 @@ export async function uploadInternalFile(
   return uploaded;
 }
 
+/**
+ * Links an upload that had to be sent to Cloudinary before its parent document
+ * existed (for example, an Expense cash memo) back to that newly-created
+ * document. Keeping this link complete makes a later permanent deletion able
+ * to remove the parent document's file reference too.
+ *
+ * This is deliberately best-effort, like registration itself: an upload must
+ * never make the parent create operation fail merely because the dashboard
+ * index is unavailable.
+ */
+export async function linkInternalAssetToResource(publicId: string, resourceId: string): Promise<void> {
+  if (!publicId) return;
+  try {
+    await InternalAssetModel.updateOne({ publicId }, { $set: { resourceId } });
+  } catch (err) {
+    console.error(`[assets] failed to link ${publicId} to ${resourceId}:`, (err as Error).message);
+  }
+}
+
 function pushHistory(asset: IInternalAsset, event: IInternalAsset["history"][number]) {
   asset.history.push(event);
+}
+
+const SAFE_FIELD_PATH = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/;
+
+/**
+ * A permanent deletion must also sever the parent document's reference to the
+ * deleted Cloudinary object. Otherwise an Expense, Product, or another source
+ * record can keep exposing a dead URL to staff after the asset registry row is
+ * gone. We match by the globally-unique Cloudinary public id, so this also
+ * repairs older registry rows that were created before their resourceId was
+ * known.
+ */
+async function detachAssetFromSource(asset: IInternalAsset): Promise<number> {
+  if (!asset.fieldPath) return 0;
+  if (!SAFE_FIELD_PATH.test(asset.fieldPath)) {
+    throw new Error(`Unsafe asset field path: ${asset.fieldPath}`);
+  }
+
+  const sourceModel = mongoose.models[asset.resource];
+  if (!sourceModel) {
+    throw new Error(`Asset source model is not registered: ${asset.resource}`);
+  }
+
+  const fieldPublicId = `${asset.fieldPath}.publicId`;
+  const result = await sourceModel.updateMany(
+    { [fieldPublicId]: asset.publicId },
+    { $unset: { [asset.fieldPath]: 1 } }
+  );
+  return result.modifiedCount;
+}
+
+async function recordPurgeFailure(asset: IInternalAsset, actor: AssetActor | null, error: unknown): Promise<void> {
+  asset.purgeAttempts += 1;
+  asset.purgeError = error instanceof Error ? error.message : String(error);
+  pushHistory(asset, {
+    action: "purge_failed",
+    at: new Date(),
+    by: actor?.id as unknown as IInternalAsset["history"][number]["by"],
+    byRole: actor?.role,
+    note: asset.purgeError,
+  });
+  await asset.save();
+  console.error(`[assets] permanent deletion failed for ${asset.publicId}:`, asset.purgeError);
 }
 
 /**
@@ -367,6 +430,49 @@ export async function approveAssetDeletion(
 }
 
 /**
+ * Super Admin's direct delete action. Unlike a staff deletion request this
+ * does not enter the review queue: an active asset goes straight to the
+ * Recycle Bin, where it remains recoverable for the normal retention period.
+ */
+export async function recycleAssetDirectly(
+  assetId: string,
+  actor: AssetActor,
+  note?: string
+): Promise<IInternalAsset> {
+  const asset = await InternalAssetModel.findById(assetId);
+  if (!asset) throw ApiError.notFound("File not found");
+  if (asset.status !== "active") {
+    throw ApiError.badRequest("Only active files can be moved directly to the Recycle Bin");
+  }
+
+  const now = new Date();
+  asset.status = "recycled";
+  asset.recycledAt = now;
+  asset.purgeAfter = new Date(now.getTime() + RECYCLE_BIN_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  pushHistory(asset, {
+    action: "recycled",
+    at: now,
+    by: actor.id as unknown as IInternalAsset["history"][number]["by"],
+    byRole: actor.role,
+    note: note ?? "Directly moved to the Recycle Bin by Super Admin.",
+  });
+  await asset.save();
+
+  await recordAuditLog({
+    actor: actor.id,
+    actorRole: actor.role,
+    action: "internalAsset.recycle.direct",
+    resource: "InternalAsset",
+    resourceId: asset._id.toString(),
+    oldValue: { status: "active", fileName: asset.fileName },
+    newValue: { status: "recycled", purgeAfter: asset.purgeAfter },
+    note: note ?? `Directly moved to the Recycle Bin; recoverable for ${RECYCLE_BIN_RETENTION_DAYS} days.`,
+  });
+
+  return asset;
+}
+
+/**
  * Brings a recycled asset back. The Cloudinary file was never removed, so the
  * original `url`/`publicId` are simply reactivated — no re-upload, no
  * duplicate file, and the parent document's existing reference keeps working.
@@ -374,9 +480,6 @@ export async function approveAssetDeletion(
 export async function restoreAsset(assetId: string, actor: AssetActor): Promise<IInternalAsset> {
   const asset = await InternalAssetModel.findById(assetId);
   if (!asset) throw ApiError.notFound("File not found");
-  if (asset.status === "purged") {
-    throw ApiError.badRequest("This file was permanently deleted and cannot be restored");
-  }
   if (asset.status !== "recycled") {
     throw ApiError.badRequest("Only files in the Recycle Bin can be restored");
   }
@@ -410,11 +513,9 @@ export async function restoreAsset(assetId: string, actor: AssetActor): Promise<
 }
 
 /**
- * Removes the file from Cloudinary for good and marks the row `purged`.
- *
- * The row itself is kept rather than deleted: it is the permanent audit record
- * of a file that existed, who uploaded it, who approved its removal and when
- * it went. A `purged` asset can never be restored.
+ * Removes the file from Cloudinary for good and deletes its registry row.
+ * The audit log keeps the durable record of who permanently deleted it; an
+ * InternalAsset record must not survive once its underlying file is gone.
  *
  * Returns false and records the failure instead of throwing when Cloudinary
  * cleanup fails, so the scheduler can move on and retry this one later rather
@@ -428,31 +529,20 @@ export async function purgeAsset(
   try {
     await deleteCloudinaryImage(asset.publicId);
   } catch (err) {
-    asset.purgeAttempts += 1;
-    asset.purgeError = (err as Error).message;
-    pushHistory(asset, {
-      action: "purge_failed",
-      at: new Date(),
-      by: actor?.id as unknown as IInternalAsset["history"][number]["by"],
-      byRole: actor?.role,
-      note: asset.purgeError,
-    });
-    await asset.save();
-    console.error(`[assets] permanent deletion failed for ${asset.publicId}:`, asset.purgeError);
+    await recordPurgeFailure(asset, actor, err);
     return false;
   }
 
-  asset.status = "purged";
-  asset.purgedAt = new Date();
-  asset.purgeError = undefined;
-  pushHistory(asset, {
-    action: "purged",
-    at: new Date(),
-    by: actor?.id as unknown as IInternalAsset["history"][number]["by"],
-    byRole: actor?.role,
-    note,
-  });
-  await asset.save();
+  let detachedSourceReferences: number;
+  try {
+    detachedSourceReferences = await detachAssetFromSource(asset);
+  } catch (err) {
+    // Cloudinary destroy is idempotent ("not found" is success), so retaining
+    // the recycle-bin row lets a retry finish database cleanup instead of
+    // silently leaving a stale parent reference.
+    await recordPurgeFailure(asset, actor, err);
+    return false;
+  }
 
   if (actor) {
     await recordAuditLog({
@@ -461,10 +551,11 @@ export async function purgeAsset(
       action: "internalAsset.purge",
       resource: "InternalAsset",
       resourceId: asset._id.toString(),
-      oldValue: { publicId: asset.publicId, fileName: asset.fileName },
+      oldValue: { publicId: asset.publicId, fileName: asset.fileName, detachedSourceReferences },
       note,
     });
   }
+  await asset.deleteOne();
   return true;
 }
 
@@ -493,7 +584,6 @@ export async function purgeAssetsByPublicId(
         await deleteCloudinaryImage(publicId);
         continue;
       }
-      if (asset.status === "purged") continue;
       await purgeAsset(asset, actor, note);
     } catch (err) {
       console.error(`[assets] cleanup failed for ${publicId}:`, (err as Error).message);
@@ -502,10 +592,9 @@ export async function purgeAssetsByPublicId(
 }
 
 /** Super Admin skips the retention window. Irreversible. */
-export async function purgeAssetNow(assetId: string, actor: AssetActor): Promise<IInternalAsset> {
+export async function purgeAssetNow(assetId: string, actor: AssetActor): Promise<void> {
   const asset = await InternalAssetModel.findById(assetId);
   if (!asset) throw ApiError.notFound("File not found");
-  if (asset.status === "purged") return asset;
   if (asset.status !== "recycled") {
     throw ApiError.badRequest("Only files in the Recycle Bin can be permanently deleted");
   }
@@ -514,7 +603,6 @@ export async function purgeAssetNow(assetId: string, actor: AssetActor): Promise
   if (!ok) {
     throw new ApiError(502, "Could not remove the file from storage. Nothing was changed — please try again.");
   }
-  return asset;
 }
 
 /**
@@ -568,7 +656,10 @@ export interface ListAssetsFilter {
 /** Super Admin's centralized view. Every filter the dashboard offers is applied here. */
 export async function listInternalAssets(filter: ListAssetsFilter) {
   const query: Record<string, unknown> = {};
-  if (filter.status) query.status = filter.status;
+  // Legacy installations may still contain rows created by the old retained
+  // `purged` lifecycle. New permanent deletions remove their row entirely;
+  // exclude any legacy rows so no permanently deleted file is shown again.
+  query.status = filter.status ?? { $ne: "purged" };
   if (filter.kind) query.kind = filter.kind;
   if (filter.uploadedBy) query.uploadedBy = filter.uploadedBy;
   if (filter.role) query.uploadedByRole = filter.role;
@@ -603,6 +694,11 @@ export async function listInternalAssets(filter: ListAssetsFilter) {
       totalPages: Math.max(1, Math.ceil(total / filter.limit)),
     },
   };
+}
+
+/** Staff-facing list. It is always scoped to the caller's own uploads. */
+export async function listMyInternalAssets(ownerId: string, filter: ListAssetsFilter) {
+  return listInternalAssets({ ...filter, uploadedBy: ownerId });
 }
 
 export async function getInternalAsset(assetId: string) {

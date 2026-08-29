@@ -3,8 +3,8 @@
  *
  * Runs `tsx watch src/server.ts` with NODE_OPTIONS set so the DNS preload
  * (see dev-dns-preload.cjs) reaches the actual server process that tsx
- * spawns for hot-reload, not just this wrapper. Not used by `npm run dev`,
- * `npm start`, or any production path.
+ * spawns for hot-reload, not just this wrapper. This is the default local
+ * `npm run dev` path on this Windows workspace; production remains unaffected.
  */
 const path = require("path");
 const { spawn } = require("child_process");

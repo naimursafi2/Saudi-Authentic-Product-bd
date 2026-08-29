@@ -186,6 +186,28 @@ export function ExpensesManager() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(load, [selectedMonth, page]);
 
+  // A Super Admin can permanently remove a receipt from the centralized
+  // Uploads & Recycle Bin while this page is open in another staff session.
+  // Refresh when the user comes back to the tab so a stale cash-memo link is
+  // never presented as still usable after its source file has been deleted.
+  useEffect(() => {
+    const refreshAfterReturning = () => {
+      if (document.visibilityState === "visible") {
+        load();
+        loadMonths();
+      }
+    };
+    window.addEventListener("focus", refreshAfterReturning);
+    document.addEventListener("visibilitychange", refreshAfterReturning);
+    return () => {
+      window.removeEventListener("focus", refreshAfterReturning);
+      document.removeEventListener("visibilitychange", refreshAfterReturning);
+    };
+    // `load` and `loadMonths` intentionally use the current selected month
+    // from this render; resubscribe whenever the list parameters change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth, page]);
+
   function handleCashMemoSelect(file: File | undefined) {
     if (!file) {
       setCashMemoFile(null);

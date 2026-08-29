@@ -259,8 +259,8 @@ registerPendingActionHandler("product.create", async (payload, reviewer) => {
 registerPendingActionDenyHandler("product.create", async (payload, reviewer) => {
   const images = ((payload as unknown as ProductCreatePayload).images ?? []) as { publicId: string }[];
   // The Super Admin has already ruled against this submission, so its images
-  // go straight to purged rather than back into the review queue — routed
-  // through the registry so no row is left pointing at a deleted file.
+  // go straight to permanent deletion rather than back into the review queue
+  // — routed through the registry so no row is left pointing at a deleted file.
   await purgeAssetsByPublicId(
     images.map((img) => img.publicId),
     reviewer,

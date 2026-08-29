@@ -18,6 +18,7 @@ import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { createAuthedUser, authHeader } from "./helpers";
 import { InternalAssetModel, RECYCLE_BIN_RETENTION_DAYS } from "../../models/InternalAsset.model";
 import { AuditLogModel } from "../../models/AuditLog.model";
+import { ExpenseModel } from "../../models/Expense.model";
 import {
   recordInternalAsset,
   retireInternalAsset,
@@ -44,7 +45,7 @@ function fakeFile(name = "memo.pdf", mime = "application/pdf"): Express.Multer.F
 }
 
 async function seedAsset(opts: { role: Role; publicId?: string; resource?: string; module?: string }) {
-  const { user } = await createAuthedUser({ role: opts.role });
+  const { user, token } = await createAuthedUser({ role: opts.role });
   const asset = await recordInternalAsset({
     publicId: opts.publicId ?? `pid-${Math.random().toString(36).slice(2)}`,
     url: "https://cdn.test/file.pdf",
@@ -56,7 +57,7 @@ async function seedAsset(opts: { role: Role; publicId?: string; resource?: strin
     mimeType: "application/pdf",
     actor: { id: user._id.toString(), role: opts.role },
   });
-  return { user, asset: asset! };
+  return { user, token, asset: asset! };
 }
 
 describe("Internal upload management & recycle bin", () => {
@@ -174,6 +175,9 @@ describe("Internal upload management & recycle bin", () => {
         (await request(app).patch(`/api/v1/internal-assets/${id}/restore`).set(...authHeader(token))).status
       ).toBe(403);
       expect(
+        (await request(app).patch(`/api/v1/internal-assets/${id}/recycle`).set(...authHeader(token))).status
+      ).toBe(403);
+      expect(
         (
           await request(app)
             .post(`/api/v1/internal-assets/${id}/purge`)
@@ -273,6 +277,103 @@ describe("Internal upload management & recycle bin", () => {
     expect(deleteCloudinaryImage).not.toHaveBeenCalled();
   });
 
+  it("lets only Super Admin directly recycle an active file and records the action", async () => {
+    const { asset } = await seedAsset({ role: "employee", publicId: "direct-recycle" });
+    const { token: superToken } = await createAuthedUser({ role: "super_admin" });
+    const id = asset._id.toString();
+
+    const res = await request(app)
+      .patch(`/api/v1/internal-assets/${id}/recycle`)
+      .set(...authHeader(superToken))
+      .send({ reason: "No longer required" });
+
+    expect(res.status).toBe(200);
+    const stored = await InternalAssetModel.findById(id);
+    expect(stored?.status).toBe("recycled");
+    expect(stored?.recycledAt).toBeTruthy();
+    expect(stored?.history.at(-1)?.action).toBe("recycled");
+    expect(deleteCloudinaryImage).not.toHaveBeenCalled();
+    expect(await AuditLogModel.countDocuments({ action: "internalAsset.recycle.direct" })).toBe(1);
+  });
+
+  it("completely removes permanently deleted files from employee, Co-Admin and Super Admin asset lists", async () => {
+    const { asset, token: ownerToken } = await seedAsset({ role: "employee" });
+    const { asset: coAdminAsset, token: coAdminToken } = await seedAsset({ role: "co_admin" });
+    const { token: superToken } = await createAuthedUser({ role: "super_admin" });
+    const id = asset._id.toString();
+    const coAdminId = coAdminAsset._id.toString();
+
+    await request(app).patch(`/api/v1/internal-assets/${id}/recycle`).set(...authHeader(superToken)).send({});
+    await request(app).patch(`/api/v1/internal-assets/${coAdminId}/recycle`).set(...authHeader(superToken)).send({});
+    await request(app)
+      .post(`/api/v1/internal-assets/${id}/purge`)
+      .set(...authHeader(superToken))
+      .send({ confirm: true });
+    await request(app)
+      .post(`/api/v1/internal-assets/${coAdminId}/purge`)
+      .set(...authHeader(superToken))
+      .send({ confirm: true });
+
+    const superAdminDefault = await request(app).get("/api/v1/internal-assets").set(...authHeader(superToken));
+    expect(superAdminDefault.body.data.assets.map((item: { _id: string }) => item._id)).not.toContain(id);
+    expect(superAdminDefault.body.data.assets.map((item: { _id: string }) => item._id)).not.toContain(coAdminId);
+
+    const staffDefault = await request(app).get("/api/v1/internal-assets/mine").set(...authHeader(ownerToken));
+    expect(staffDefault.body.data.assets.map((item: { _id: string }) => item._id)).not.toContain(id);
+    const coAdminDefault = await request(app).get("/api/v1/internal-assets/mine").set(...authHeader(coAdminToken));
+    expect(coAdminDefault.body.data.assets.map((item: { _id: string }) => item._id)).not.toContain(coAdminId);
+
+    expect(await InternalAssetModel.findById(id)).toBeNull();
+    expect(await InternalAssetModel.findById(coAdminId)).toBeNull();
+    expect(deleteCloudinaryImage).toHaveBeenCalledWith(asset.publicId);
+    expect(deleteCloudinaryImage).toHaveBeenCalledWith(coAdminAsset.publicId);
+  });
+
+  it("removes a permanently deleted cash memo from its Expense record for every role, including legacy uploads without resourceId", async () => {
+    const { user: coAdmin, token: coAdminToken } = await createAuthedUser({ role: "co_admin" });
+    const { token: superToken } = await createAuthedUser({ role: "super_admin" });
+    const expense = await ExpenseModel.create({
+      category: "shipping",
+      amountBDT: 222,
+      incurredAt: new Date("2026-08-29T00:00:00.000Z"),
+      reason: "Receipt must disappear after permanent deletion",
+      cashMemo: { url: "https://cdn.test/expense-memo.jpg", publicId: "expense-memo" },
+      status: "pending",
+      recordedBy: coAdmin._id,
+      recordedByRole: "co_admin",
+    });
+    // This is intentionally missing resourceId: it represents the existing
+    // rows created before an Expense's id was linked after upload.
+    const asset = await recordInternalAsset({
+      publicId: "expense-memo",
+      url: "https://cdn.test/expense-memo.jpg",
+      resource: "Expense",
+      fieldPath: "cashMemo",
+      module: "Expenses",
+      actor: { id: coAdmin._id.toString(), role: "co_admin" },
+    });
+
+    await request(app)
+      .patch(`/api/v1/internal-assets/${asset!._id.toString()}/recycle`)
+      .set(...authHeader(superToken))
+      .send({});
+    const purge = await request(app)
+      .post(`/api/v1/internal-assets/${asset!._id.toString()}/purge`)
+      .set(...authHeader(superToken))
+      .send({ confirm: true });
+
+    expect(purge.status).toBe(200);
+    expect(await InternalAssetModel.findById(asset!._id)).toBeNull();
+    expect((await ExpenseModel.findById(expense._id))?.cashMemo).toBeUndefined();
+
+    const coAdminList = await request(app)
+      .get("/api/v1/expenses?month=2026-08")
+      .set(...authHeader(coAdminToken));
+    expect(coAdminList.status).toBe(200);
+    expect(coAdminList.body.data.expenses).toHaveLength(1);
+    expect(coAdminList.body.data.expenses[0].cashMemo).toBeUndefined();
+  });
+
   // -- 4. Restore --
 
   it("restores a recycled file, reusing the original Cloudinary object", async () => {
@@ -327,13 +428,11 @@ describe("Internal upload management & recycle bin", () => {
     await InternalAssetModel.updateOne({ _id: id }, { $set: { purgeAfter: new Date(Date.now() - 1000) } });
     await runAssetPurgeTick();
 
-    const stored = await InternalAssetModel.findById(id);
-    expect(stored?.status).toBe("purged");
-    expect(stored?.purgedAt).toBeTruthy();
+    expect(await InternalAssetModel.findById(id)).toBeNull();
     expect(deleteCloudinaryImage).toHaveBeenCalledWith("expired");
   });
 
-  it("cannot restore a purged file", async () => {
+  it("cannot restore a file after it has been permanently deleted", async () => {
     const { asset } = await seedAsset({ role: "employee" });
     const { token: superToken } = await createAuthedUser({ role: "super_admin" });
     const id = asset._id.toString();
@@ -346,8 +445,8 @@ describe("Internal upload management & recycle bin", () => {
     const res = await request(app)
       .patch(`/api/v1/internal-assets/${id}/restore`)
       .set(...authHeader(superToken));
-    expect(res.status).toBe(400);
-    expect((await InternalAssetModel.findById(id))?.status).toBe("purged");
+    expect(res.status).toBe(404);
+    expect(await InternalAssetModel.findById(id)).toBeNull();
   });
 
   // -- Failure handling --
@@ -376,13 +475,12 @@ describe("Internal upload management & recycle bin", () => {
     expect(bad?.purgeAttempts).toBe(1);
     expect(bad?.purgeError).toMatch(/cloudinary down/i);
 
-    const good = await InternalAssetModel.findOne({ publicId: "good" });
-    expect(good?.status).toBe("purged");
+    expect(await InternalAssetModel.findOne({ publicId: "good" })).toBeNull();
 
     // Next sweep retries the failed one once storage recovers.
     deleteCloudinaryImage.mockResolvedValue(undefined);
     await runAssetPurgeTick();
-    expect((await InternalAssetModel.findOne({ publicId: "bad" }))?.status).toBe("purged");
+    expect(await InternalAssetModel.findOne({ publicId: "bad" })).toBeNull();
   });
 
   // -- 6. Immediate permanent deletion --
@@ -410,7 +508,7 @@ describe("Internal upload management & recycle bin", () => {
       .send({ confirm: true });
 
     expect(res.status).toBe(200);
-    expect((await InternalAssetModel.findById(id))?.status).toBe("purged");
+    expect(await InternalAssetModel.findById(id)).toBeNull();
     expect(deleteCloudinaryImage).toHaveBeenCalledWith("now");
     expect(await AuditLogModel.countDocuments({ action: "internalAsset.purge" })).toBe(1);
   });

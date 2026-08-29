@@ -173,10 +173,10 @@ staff impersonation); most write routes require a specific permission. See
 
 ### Local DNS workaround (Windows dev only)
 
-If `mongodb+srv://` lookups fail locally with `querySrv ECONNREFUSED`, use
-`npm run dev:dns-fix` instead of `npm run dev` — see `server/scripts/`
-and `CLAUDE.md` for details. This does not affect `typecheck`/`lint`/`test`
-or any deployed environment.
+This Windows workspace needs the included DNS preload for `mongodb+srv://`
+lookups. `npm run dev` now enables it automatically; `npm run dev:plain` is
+available only on machines whose Node DNS resolver already works. This does
+not affect `typecheck`/`lint`/`test` or any deployed environment.
 
 ## Known limitations
 

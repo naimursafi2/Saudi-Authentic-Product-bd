@@ -66,6 +66,12 @@ const DIRECT_ACTION_LABELS: Record<string, string> = {
   "user.status.update": "User Status Updated",
   "user.impersonate.start": "Support Login Started",
   "user.unlock": "Account Unlocked",
+  "internalAsset.delete.request": "File Deletion Requested",
+  "internalAsset.delete.approve": "File Deletion Approved",
+  "internalAsset.delete.reject": "File Deletion Rejected",
+  "internalAsset.recycle.direct": "File Moved to Recycle Bin",
+  "internalAsset.restore": "File Restored",
+  "internalAsset.purge": "File Permanently Deleted",
 };
 
 /**

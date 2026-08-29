@@ -29,6 +29,16 @@ export async function getInternalAsset(id: string) {
   return api.get<{ asset: ApiInternalAsset }>(`/internal-assets/${id}`);
 }
 
+/** Always server-scoped to the authenticated staff member's own uploads. */
+export async function listMyInternalAssets(params: ListInternalAssetsParams = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "" && value !== null) search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return api.get<{ assets: ApiInternalAsset[] }>(`/internal-assets/mine${qs ? `?${qs}` : ""}`);
+}
+
 /** Staff ask for one of their own uploads to be removed; nothing is deleted here. */
 export async function requestAssetDeletion(id: string, reason?: string) {
   return api.post<{ asset: ApiInternalAsset }>(`/internal-assets/${id}/request-delete`, { reason });
@@ -42,6 +52,11 @@ export async function rejectAssetDeletion(id: string, reviewNote?: string) {
   return api.patch<{ asset: ApiInternalAsset }>(`/internal-assets/${id}/reject`, { reviewNote });
 }
 
+/** Super Admin only. This bypasses the request queue and sends an active file to the bin. */
+export async function recycleAssetDirectly(id: string, reason?: string) {
+  return api.patch<{ asset: ApiInternalAsset }>(`/internal-assets/${id}/recycle`, { reason });
+}
+
 export async function restoreAsset(id: string) {
   return api.patch<{ asset: ApiInternalAsset }>(`/internal-assets/${id}/restore`, {});
 }
@@ -51,7 +66,7 @@ export async function restoreAsset(id: string) {
  * a stray click — the UI asks for a typed confirmation first.
  */
 export async function purgeAssetNow(id: string, reason?: string) {
-  return api.post<{ asset: ApiInternalAsset }>(`/internal-assets/${id}/purge`, {
+  return api.post<void>(`/internal-assets/${id}/purge`, {
     confirm: true,
     reason,
   });

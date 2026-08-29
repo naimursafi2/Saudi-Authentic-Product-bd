@@ -23,6 +23,13 @@ export const getAsset = catchAsync(async (req: Request, res: Response) => {
   sendSuccess(res, 200, "Upload fetched", { asset });
 });
 
+/** A staff member can see their own tracked uploads, never a colleague's. */
+export const listMyAssets = catchAsync(async (req: Request, res: Response) => {
+  const filter = req.query as unknown as ListInternalAssetsQuery;
+  const { assets, pagination } = await assetService.listMyInternalAssets(req.user!.id, filter);
+  sendSuccess(res, 200, "Your uploads fetched", { assets }, { pagination });
+});
+
 /**
  * A staff member asks for one of their uploads to be removed. Scoped to their
  * own files: holding `assets.request_delete` lets someone manage what they
@@ -63,6 +70,16 @@ export const rejectDeletion = catchAsync(async (req: Request, res: Response) => 
   sendSuccess(res, 200, "Deletion rejected — the file remains active", { asset });
 });
 
+/** Super Admin only: bypasses the request queue and moves an active file to the bin. */
+export const recycleDirectly = catchAsync(async (req: Request, res: Response) => {
+  const asset = await assetService.recycleAssetDirectly(
+    paramStr(req.params.id),
+    actorOf(req),
+    req.body?.reason
+  );
+  sendSuccess(res, 200, "File moved to the Recycle Bin", { asset });
+});
+
 export const restoreAsset = catchAsync(async (req: Request, res: Response) => {
   const asset = await assetService.restoreAsset(paramStr(req.params.id), actorOf(req));
   sendSuccess(res, 200, "File restored", { asset });
@@ -70,6 +87,6 @@ export const restoreAsset = catchAsync(async (req: Request, res: Response) => {
 
 /** Irreversible. The validator requires an explicit `confirm: true`. */
 export const purgeAssetNow = catchAsync(async (req: Request, res: Response) => {
-  const asset = await assetService.purgeAssetNow(paramStr(req.params.id), actorOf(req));
-  sendSuccess(res, 200, "File permanently deleted", { asset });
+  await assetService.purgeAssetNow(paramStr(req.params.id), actorOf(req));
+  sendSuccess(res, 200, "File permanently deleted");
 });

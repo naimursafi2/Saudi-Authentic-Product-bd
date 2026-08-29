@@ -64,11 +64,16 @@ export function uploadBufferToCloudinary(
 }
 
 export async function deleteCloudinaryImage(publicId: string): Promise<void> {
-  if (!isCloudinaryConfigured) return;
-  await cloudinary.uploader.destroy(publicId).catch(() => {
-    // Non-fatal — the DB record removal should not be blocked by a
-    // best-effort remote cleanup failing.
-  });
+  if (!isCloudinaryConfigured) {
+    throw new ApiError(503, "Cloudinary deletion is unavailable because storage is not configured");
+  }
+  const result = await cloudinary.uploader.destroy(publicId);
+  // "not found" is already the desired end state. Any other result means we
+  // cannot truthfully claim the object was deleted, so let the asset service
+  // retain the recycled row for retry instead of deleting its database record.
+  if (result.result !== "ok" && result.result !== "not found") {
+    throw new ApiError(502, `Cloudinary deletion failed: ${result.result}`);
+  }
 }
 
 export { cloudinary };

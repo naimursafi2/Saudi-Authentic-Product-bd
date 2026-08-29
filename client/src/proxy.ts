@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 /**
  * Pass-through only.
@@ -24,7 +24,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * Nothing is lost by not checking here. Do not reintroduce a cookie check in
  * this file unless the API is moved behind the same origin as the frontend.
  */
-export function proxy(_request: NextRequest) {
+export function proxy() {
   return NextResponse.next();
 }
 

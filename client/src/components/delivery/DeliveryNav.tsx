@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PackageSearch, UserCircle } from "lucide-react";
+import { FileStack, LayoutDashboard, PackageSearch, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/delivery", label: "Dashboard", icon: LayoutDashboard },
   { href: "/delivery/orders", label: "Assigned Orders", icon: PackageSearch },
+  { href: "/delivery/uploads", label: "My Uploads", icon: FileStack },
   { href: "/delivery/profile", label: "Profile", icon: UserCircle },
 ];
 

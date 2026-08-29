@@ -97,6 +97,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/finance", label: "Finance", icon: Landmark, permissions: ["finance.view"] },
   { href: "/admin/investments", label: "Investments", icon: PiggyBank, permissions: ["investments.view"] },
   { href: "/admin/expenses", label: "Expenses", icon: Receipt, permissions: ["expenses.view"] },
+  { href: "/admin/my-uploads", label: "My Uploads", icon: FileStack, permissions: ["assets.request_delete"] },
   { href: "/admin/approvals", label: "Approvals", icon: ShieldCheck, permissions: ["approvals.manage"] },
   {
     href: "/admin/uploads",

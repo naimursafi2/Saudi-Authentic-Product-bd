@@ -21,7 +21,6 @@ const PALETTE: Record<string, string> = {
   unpaid: "bg-cream-300 text-brown-600",
   delete_requested: "bg-gold-soft text-gold-700",
   recycled: "bg-danger-soft text-danger",
-  purged: "bg-cream-300 text-brown-600",
   sending: "bg-gold-soft text-gold-700",
   paused: "bg-cream-300 text-brown-600",
   // positive / complete

@@ -34,8 +34,6 @@ export const INTERNAL_ASSET_STATUSES = [
   "delete_requested",
   /** Deletion approved — recoverable until `purgeAfter`. */
   "recycled",
-  /** Gone from Cloudinary and unrecoverable. The row is kept as an audit record. */
-  "purged",
 ] as const;
 export type InternalAssetStatus = (typeof INTERNAL_ASSET_STATUSES)[number];
 
@@ -49,7 +47,7 @@ export type InternalAssetKind = (typeof INTERNAL_ASSET_KINDS)[number];
 
 /** One entry in an asset's lifecycle history. Append-only. */
 export interface IInternalAssetEvent {
-  action: "uploaded" | "delete_requested" | "delete_rejected" | "recycled" | "restored" | "purged" | "purge_failed";
+  action: "uploaded" | "delete_requested" | "delete_rejected" | "recycled" | "restored" | "purge_failed";
   at: Date;
   by?: Types.ObjectId;
   byRole?: Role;
@@ -94,7 +92,6 @@ export interface IInternalAsset extends Document {
   recycledAt?: Date;
   /** When the scheduler may permanently delete it. Null outside the Recycle Bin. */
   purgeAfter?: Date;
-  purgedAt?: Date;
   /** Incremented when a permanent deletion attempt fails, so a stuck file is visible rather than lost. */
   purgeAttempts: number;
   purgeError?: string;
@@ -144,7 +141,6 @@ const internalAssetSchema = new Schema<IInternalAsset>(
     reviewNote: { type: String, trim: true, maxlength: 500 },
     recycledAt: { type: Date },
     purgeAfter: { type: Date, index: true },
-    purgedAt: { type: Date },
     purgeAttempts: { type: Number, default: 0, min: 0 },
     purgeError: { type: String, trim: true, maxlength: 500 },
 

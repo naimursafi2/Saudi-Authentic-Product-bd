@@ -7,6 +7,7 @@ import {
   listInternalAssets,
   purgeAssetNow,
   rejectAssetDeletion,
+  recycleAssetDirectly,
   restoreAsset,
 } from "@/lib/api/internalAssets";
 import { ApiClientError } from "@/lib/api/client";
@@ -36,7 +37,6 @@ const TABS: { id: "all" | InternalAssetStatus; label: string; status?: InternalA
   { id: "all", label: "All Uploads" },
   { id: "delete_requested", label: "Delete Requests", status: "delete_requested" },
   { id: "recycled", label: "Recycle Bin", status: "recycled" },
-  { id: "purged", label: "Permanently Deleted", status: "purged" },
 ];
 
 const ROLE_OPTIONS: Role[] = ["employee", "delivery_agent", "order_manager", "co_admin", "admin", "super_admin"];
@@ -118,6 +118,17 @@ export default function AdminUploadsPage() {
     });
     if (!ok) return;
     await run(asset._id, () => purgeAssetNow(asset._id), "Could not permanently delete this file.");
+  }
+
+  async function handleRecycle(asset: ApiInternalAsset) {
+    const ok = await confirm({
+      title: "Move this file to the Recycle Bin?",
+      message: `"${asset.fileName ?? asset.publicId}" will stop being active immediately. You can restore it from the Recycle Bin for a limited time.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await run(asset._id, () => recycleAssetDirectly(asset._id), "Could not move this file to the Recycle Bin.");
   }
 
   return (
@@ -257,6 +268,15 @@ export default function AdminUploadsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <ActionButtonGroup>
+                        {asset.status === "active" && (
+                          <ActionButton
+                            tone="danger"
+                            disabled={actingId === asset._id}
+                            onClick={() => handleRecycle(asset)}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </ActionButton>
+                        )}
                         {asset.status === "delete_requested" && (
                           <>
                             <ActionButton

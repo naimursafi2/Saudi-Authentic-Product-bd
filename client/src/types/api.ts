@@ -457,7 +457,7 @@ export interface ApiCreatedPayment {
 
 // -- Internal upload lifecycle (staff/admin uploads; customer uploads excluded) --
 
-export type InternalAssetStatus = "active" | "delete_requested" | "recycled" | "purged";
+export type InternalAssetStatus = "active" | "delete_requested" | "recycled";
 export type InternalAssetKind = "image" | "document" | "other";
 
 export interface ApiInternalAssetEvent {
@@ -467,7 +467,6 @@ export interface ApiInternalAssetEvent {
     | "delete_rejected"
     | "recycled"
     | "restored"
-    | "purged"
     | "purge_failed";
   at: string;
   by?: string | { _id: string; name: string; email: string };
@@ -501,7 +500,6 @@ export interface ApiInternalAsset {
   recycledAt?: string;
   /** When the scheduler may permanently delete it. Present only in the Recycle Bin. */
   purgeAfter?: string;
-  purgedAt?: string;
   purgeAttempts: number;
   purgeError?: string;
   history: ApiInternalAssetEvent[];

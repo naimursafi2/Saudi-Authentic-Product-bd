@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as assetController from "../controllers/internalAsset.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { authorize, requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import {
   assetReasonSchema,
@@ -25,6 +25,13 @@ router.post(
   assetController.requestDeletion
 );
 
+router.get(
+  "/mine",
+  requirePermission("assets.request_delete", "assets.manage"),
+  validate({ query: listInternalAssetsQuerySchema }),
+  assetController.listMyAssets
+);
+
 // -- Super Admin: the centralized dashboard, review queue and Recycle Bin.
 // `assets.manage` is in no other role's defaults, so this whole surface is
 // Super Admin's alone unless one is explicitly granted the permission. --
@@ -43,18 +50,28 @@ router.get(
 router.patch(
   "/:id/approve",
   requirePermission("assets.manage"),
+  authorize("super_admin"),
   validate({ params: mongoIdParamSchema, body: assetReviewSchema }),
   assetController.approveDeletion
 );
 router.patch(
   "/:id/reject",
   requirePermission("assets.manage"),
+  authorize("super_admin"),
   validate({ params: mongoIdParamSchema, body: assetReviewSchema }),
   assetController.rejectDeletion
 );
 router.patch(
+  "/:id/recycle",
+  requirePermission("assets.manage"),
+  authorize("super_admin"),
+  validate({ params: mongoIdParamSchema, body: assetReasonSchema }),
+  assetController.recycleDirectly
+);
+router.patch(
   "/:id/restore",
   requirePermission("assets.manage"),
+  authorize("super_admin"),
   validate({ params: mongoIdParamSchema }),
   assetController.restoreAsset
 );
@@ -63,6 +80,7 @@ router.patch(
 router.post(
   "/:id/purge",
   requirePermission("assets.manage"),
+  authorize("super_admin"),
   validate({ params: mongoIdParamSchema, body: purgeNowSchema }),
   assetController.purgeAssetNow
 );

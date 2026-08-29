@@ -14,7 +14,6 @@ const EVENT_LABELS: Record<ApiInternalAssetEvent["action"], string> = {
   delete_rejected: "Deletion rejected",
   recycled: "Moved to Recycle Bin",
   restored: "Restored",
-  purged: "Permanently deleted",
   purge_failed: "Permanent deletion failed",
 };
 
@@ -63,7 +62,7 @@ export function AssetDetailModal({ assetId, onClose }: { assetId: string; onClos
         <ErrorState message={error ?? "File not found."} />
       ) : (
         <div className="flex flex-col gap-6">
-          {asset.kind === "image" && asset.status !== "purged" && (
+          {asset.kind === "image" && (
             <div className="relative h-48 w-full overflow-hidden rounded-lg border border-brown-600/10">
               <Image src={asset.url} alt={asset.fileName ?? "Upload"} fill className="object-contain" />
             </div>

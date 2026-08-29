@@ -1,11 +1,19 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useState,
+} from "react";
 
 export type Theme = "light" | "dark";
 
-/** Shared with the pre-hydration script in app/layout.tsx — keep in sync. */
+/** Shared with the theme initializer — keep in sync. */
 export const THEME_STORAGE_KEY = "sap:theme";
+
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('sap:theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t;}}catch(e){}})();`;
 
 interface ThemeContextValue {
   theme: Theme;
@@ -16,8 +24,7 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * Reads the theme the pre-hydration script in `app/layout.tsx` already
- * applied to <html>. On the server there is no document, so this reports
+ * Reads the theme already applied to <html>. On the server there is no document, so this reports
  * "light" — which is exactly what the server renders. Nothing in the tree
  * renders differently based on this value (ThemeToggle swaps its icons in
  * CSS, not in JS), so the two never disagree in the markup.
@@ -38,6 +45,13 @@ function readTheme(): Theme {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(readTheme);
 
+  useLayoutEffect(() => {
+    const script = document.createElement("script");
+    script.textContent = THEME_INIT_SCRIPT;
+    document.head.appendChild(script);
+    script.remove();
+  }, []);
+
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
     document.documentElement.dataset.theme = next;
@@ -56,7 +70,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [setTheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
   );
 }
 

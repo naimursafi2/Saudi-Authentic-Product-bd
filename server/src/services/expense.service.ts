@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { ExpenseModel, type IExpense } from "../models/Expense.model";
 import { ApiError } from "../utils/ApiError";
-import { uploadInternalFile } from "./internalAsset.service";
+import { linkInternalAssetToResource, uploadInternalFile } from "./internalAsset.service";
 import { getApprovalSettings } from "./approvalSettings.service";
 import { createPendingAction, registerPendingActionHandler } from "./pendingAction.service";
 import { recordAuditLog } from "./auditLog.service";
@@ -30,14 +30,17 @@ export async function createExpense(
   // upload limit) takes precedence over a file — the client only ever sends
   // one or the other, never both, but a file is the more deliberate action
   // if somehow both arrived.
-  const cashMemo = cashMemoFile
+  const uploadedCashMemo = cashMemoFile
     ? await uploadInternalFile(cashMemoFile, {
         folder: "saudi-authentic-product/expense-cash-memos",
         resource: "Expense",
         fieldPath: "cashMemo",
         module: "Expenses",
         actor,
-      }).then((img) => ({ url: img.url, publicId: img.publicId }))
+      })
+    : undefined;
+  const cashMemo = uploadedCashMemo
+    ? { url: uploadedCashMemo.url, publicId: uploadedCashMemo.publicId }
     : input.cashMemoUrl
       ? { url: input.cashMemoUrl }
       : undefined;
@@ -52,6 +55,7 @@ export async function createExpense(
       confirmedBy: actor.id,
       confirmedAt: new Date(),
     });
+    await linkInternalAssetToResource(uploadedCashMemo?.publicId ?? "", expense._id.toString());
     await recordAuditLog({
       actor: actor.id,
       actorRole: actor.role,
@@ -72,6 +76,7 @@ export async function createExpense(
     recordedByRole: actor.role,
     status: "pending",
   });
+  await linkInternalAssetToResource(uploadedCashMemo?.publicId ?? "", expense._id.toString());
   await recordAuditLog({
     actor: actor.id,
     actorRole: actor.role,
