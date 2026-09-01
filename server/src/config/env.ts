@@ -50,6 +50,13 @@ const envSchema = z.object({
   BKASH_APP_KEY: z.string().optional().default(""),
   BKASH_APP_SECRET: z.string().optional().default(""),
 
+  // Shared secret with the Next.js frontend's `/api/revalidate` route — see
+  // utils/revalidateFrontend.ts. Left blank means "not configured yet",
+  // same graceful-degrade pattern as Cloudinary/SMTP/SMS/bKash above: the
+  // admin portal keeps working exactly as before, it just falls back to the
+  // frontend's own long safety-net cache window instead of an instant push.
+  REVALIDATE_SECRET: z.string().optional().default(""),
+
   SEED_SUPER_ADMIN_NAME: z.string().default("Super Admin"),
   SEED_SUPER_ADMIN_EMAIL: z
     .string()
@@ -96,6 +103,8 @@ export const isSmtpConfigured = Boolean(
 export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);
 
 export const isSmsConfigured = Boolean(env.SMS_API_URL && env.SMS_API_KEY && env.SMS_SENDER_ID);
+
+export const isRevalidateConfigured = Boolean(env.REVALIDATE_SECRET);
 
 /** Every variable bKash needs. All five must be set for the gateway to work. */
 export const BKASH_ENV_KEYS = [

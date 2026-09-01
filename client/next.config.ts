@@ -10,12 +10,20 @@ const nextConfig: NextConfig = {
     // this at 0 (off) by default, which is why every single navigation was
     // triggering a fresh request even though the *data* behind it was
     // already being cached server-side (see homepageSections.ts/(site)
-    // layout.tsx for that separate fix). `dynamic` covers normal <Link>
-    // navigation (matches the 60s server Data Cache window above, so both
-    // layers expire together); `static` (prefetched links, e.g. hovered/
-    // in-viewport <Link>s) must be >= 30s per Next.js's own constraint.
+    // layout.tsx for that separate fix).
+    //
+    // 24h here is effectively "for the whole visit" — nobody keeps a tab
+    // open that long — while still self-healing on its own if it ever
+    // needed to. It's not what makes an admin's save show up though: that's
+    // the "categories"/"nav-links"/"site-settings"/"homepage-sections" tags
+    // (see lib/api/client.ts) — an admin save busts the SERVER's Data Cache
+    // instantly via `/api/revalidate`, so a visitor's next fresh page load
+    // (or a currently-open tab once this Router Cache entry does expire)
+    // always gets the new data regardless of this number. `static`
+    // (prefetched links, e.g. hovered/in-viewport <Link>s) must stay
+    // >= 30s per Next.js's own constraint — 180s is already generous there.
     staleTimes: {
-      dynamic: 60,
+      dynamic: 60 * 60 * 24,
       static: 180,
     },
   },

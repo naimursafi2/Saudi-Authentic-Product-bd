@@ -1,9 +1,11 @@
 import { api } from "./client";
 import type { ApiNavLink } from "@/types/api";
 
+/** Tagged "nav-links" so the admin portal's nav link create/update/delete
+ * can bust this instantly via `/api/revalidate` — see categories.ts. */
 export async function listNavLinks(includeHidden = false, revalidate?: number) {
   const qs = includeHidden ? "?includeHidden=true" : "";
-  return api.get<{ navLinks: ApiNavLink[] }>(`/nav-links${qs}`, { revalidate });
+  return api.get<{ navLinks: ApiNavLink[] }>(`/nav-links${qs}`, { revalidate, tags: ["nav-links"] });
 }
 
 export interface NavLinkInput {

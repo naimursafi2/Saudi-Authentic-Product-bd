@@ -28,19 +28,27 @@ import { toCategory } from "@/lib/mappers";
  * giving up caching: it explicitly forces this whole route group to render
  * per-request (same "skip build-time prerendering" effect `force-dynamic`
  * had), but — unlike `force-dynamic` — it does NOT also force every fetch to
- * `no-store`. So builds stay safe, and the 60s `revalidate` window below
- * still works: the nav/categories/settings calls hit the backend at most
- * once every 60 seconds (shared across every visitor), instead of on every
+ * `no-store`. So builds stay safe, and the cache below still works: the
+ * nav/categories/settings calls only hit the backend when a visitor's
+ * request isn't already served from cache — no more re-fetching on every
  * single page load, which is what made Home <-> Shop navigation feel like a
  * full reload every time — see (site)/page.tsx.
+ *
+ * `SITE_CHROME_REVALIDATE_SECONDS` is a long safety-net ceiling, not the
+ * normal refresh path — the admin portal calls `/api/revalidate` right after
+ * a nav link/category/site-settings save, which busts the cache instantly
+ * (see `lib/api/client.ts`'s `tags` option). This number only matters if
+ * that call is ever missed, so it stays generous rather than tight.
  */
+const SITE_CHROME_REVALIDATE_SECONDS = 60 * 60 * 6; // 6 hours
+
 async function getSiteChrome() {
   await connection();
   const [categoriesResult, navLinksResult, settingsResult] =
     await Promise.allSettled([
-      listCategories(false, 60),
-      listNavLinks(false, 60),
-      getSiteSettings(60),
+      listCategories(false, SITE_CHROME_REVALIDATE_SECONDS),
+      listNavLinks(false, SITE_CHROME_REVALIDATE_SECONDS),
+      getSiteSettings(SITE_CHROME_REVALIDATE_SECONDS),
     ]);
 
   return {

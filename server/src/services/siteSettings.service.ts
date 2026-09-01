@@ -1,6 +1,7 @@
 import { SiteSettingsModel, SITE_SETTINGS_DEFAULTS } from "../models/SiteSettings.model";
 import { retireInternalAsset, uploadInternalFile, type AssetActor } from "./internalAsset.service";
 import { recordAuditLog } from "./auditLog.service";
+import { revalidateFrontendTag } from "../utils/revalidateFrontend";
 import type { UpdateSiteSettingsInput } from "../validators/siteSettings.validator";
 import type { Role } from "../constants/roles";
 
@@ -30,6 +31,7 @@ export async function updateSettings(
   }
 
   await settings.save();
+  revalidateFrontendTag("site-settings");
   return settings;
 }
 
@@ -63,5 +65,6 @@ export async function updateLogo(
     note: "Company logo updated",
   });
 
+  revalidateFrontendTag("site-settings");
   return settings;
 }

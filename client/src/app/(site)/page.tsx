@@ -18,10 +18,13 @@ import { listHomepageSections } from "@/lib/api/homepageSections";
 export default async function HomePage() {
   // Section order, visibility, and content are managed from the admin
   // portal (Admin > Homepage) — this renders whatever's currently visible,
-  // in the order the admin set, with no code changes required. 60s cache:
-  // an admin change shows up within a minute instead of needing every
-  // visitor to hit the backend fresh.
-  const { data } = await listHomepageSections(false, 60);
+  // in the order the admin set, with no code changes required. The 6-hour
+  // number below is a safety-net ceiling, not the normal refresh path: the
+  // admin portal calls `/api/revalidate` right after a section is
+  // saved/reordered, which busts this cache instantly (see
+  // `lib/api/homepageSections.ts`'s "homepage-sections" tag) — a visitor
+  // sees the change on their very next page load.
+  const { data } = await listHomepageSections(false, 60 * 60 * 6);
 
   return (
     <>

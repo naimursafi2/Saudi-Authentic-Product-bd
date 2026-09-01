@@ -5,6 +5,7 @@ import {
 } from "../models/HomepageSection.model";
 import { ApiError } from "../utils/ApiError";
 import { retireInternalAsset, uploadInternalFile, type AssetActor } from "./internalAsset.service";
+import { revalidateFrontendTag } from "../utils/revalidateFrontend";
 import type {
   CreateHomepageSectionInput,
   UpdateHomepageSectionInput,
@@ -51,6 +52,7 @@ export async function createSection(
   }
 
   await section.save();
+  revalidateFrontendTag("homepage-sections");
   return section;
 }
 
@@ -72,6 +74,7 @@ export async function updateSection(
   }
 
   await section.save();
+  revalidateFrontendTag("homepage-sections");
   return section;
 }
 
@@ -85,4 +88,5 @@ export async function deleteSection(id: string, actor: AssetActor) {
   }
   await retireInternalAsset(section.image?.publicId, actor, "Homepage section deleted");
   await section.deleteOne();
+  revalidateFrontendTag("homepage-sections");
 }

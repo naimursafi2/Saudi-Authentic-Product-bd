@@ -2,6 +2,7 @@ import { CategoryModel } from "../models/Category.model";
 import { ApiError } from "../utils/ApiError";
 import { retireInternalAsset, uploadInternalFile } from "./internalAsset.service";
 import { slugify } from "../utils/slugify";
+import { revalidateFrontendTag } from "../utils/revalidateFrontend";
 import type { AssetActor } from "./internalAsset.service";
 import type { CreateCategoryInput, UpdateCategoryInput } from "../validators/category.validator";
 
@@ -42,6 +43,7 @@ export async function createCategory(
   }
 
   await category.save();
+  revalidateFrontendTag("categories");
   return category;
 }
 
@@ -77,6 +79,7 @@ export async function updateCategory(
   }
 
   await category.save();
+  revalidateFrontendTag("categories");
   return category;
 }
 
@@ -85,4 +88,5 @@ export async function deleteCategory(id: string, actor: AssetActor) {
   if (!category) throw ApiError.notFound("Category not found");
   await retireInternalAsset(category.image?.publicId, actor, "Category deleted");
   await category.deleteOne();
+  revalidateFrontendTag("categories");
 }

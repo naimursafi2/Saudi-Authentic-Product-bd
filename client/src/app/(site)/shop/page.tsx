@@ -23,14 +23,15 @@ export const metadata: Metadata = {
  * still served from the browser's Router Cache with no request at all).
  *
  * Products stay uncached on the server (no `revalidate`, same as before) —
- * price/stock must always be current. Categories reuse the layout's 60s
- * window since they're the same slow-changing list already shown in the
- * header dropdown.
+ * price/stock must always be current. Categories reuse the layout's 6-hour
+ * safety-net window (see (site)/layout.tsx) since they're the same
+ * slow-changing list already shown in the header dropdown, and get busted
+ * instantly on an admin save via the "categories" tag anyway.
  */
 export default async function ShopPage() {
   const [productsResult, categoriesResult] = await Promise.allSettled([
     listProducts({ limit: 100 }),
-    listCategories(false, 60),
+    listCategories(false, 60 * 60 * 6),
   ]);
 
   const initialProducts =
