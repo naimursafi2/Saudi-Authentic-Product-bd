@@ -1,6 +1,24 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Client Router Cache: how long (seconds) a page you've already visited
+    // stays in the BROWSER's own memory this session, so going back to it
+    // (Home -> Shop -> About -> Home ...) serves instantly with zero network
+    // request — no RSC fetch to the server at all, not even a cache hit on
+    // the server, nothing shows up in the Network tab. Next.js 15+ ships
+    // this at 0 (off) by default, which is why every single navigation was
+    // triggering a fresh request even though the *data* behind it was
+    // already being cached server-side (see homepageSections.ts/(site)
+    // layout.tsx for that separate fix). `dynamic` covers normal <Link>
+    // navigation (matches the 60s server Data Cache window above, so both
+    // layers expire together); `static` (prefetched links, e.g. hovered/
+    // in-viewport <Link>s) must be >= 30s per Next.js's own constraint.
+    staleTimes: {
+      dynamic: 60,
+      static: 180,
+    },
+  },
   images: {
     remotePatterns: [
       {
