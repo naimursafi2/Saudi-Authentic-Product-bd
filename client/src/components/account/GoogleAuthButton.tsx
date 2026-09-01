@@ -11,7 +11,12 @@ interface GoogleCredentialResponse {
 }
 
 interface GoogleAccountsId {
-  initialize: (config: { client_id: string; callback: (response: GoogleCredentialResponse) => void }) => void;
+  initialize: (config: {
+    client_id: string;
+    callback: (response: GoogleCredentialResponse) => void;
+    use_fedcm_for_prompt?: boolean;
+    use_fedcm_for_button?: boolean;
+  }) => void;
   renderButton: (parent: HTMLElement, options: Record<string, string | number>) => void;
 }
 
@@ -116,7 +121,20 @@ export function GoogleAuthButton({
   useEffect(() => {
     if (!CLIENT_ID || !scriptLoaded || !buttonRef.current || !window.google || !width) return;
 
-    window.google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredential });
+    // Without FedCM, Chrome falls back to a classic OAuth popup
+    // (accounts.google.com/o/oauth2/v2/auth?...&display=popup) whenever
+    // third-party cookies are blocked for this site. That popup frequently
+    // gets silently blocked by the browser — GIS logs a
+    // "Failed to open popup window... Maybe blocked by the browser?" console
+    // error and the click does nothing visible, which reads as "the button
+    // doesn't work" with zero on-page feedback. FedCM is the browser-native
+    // replacement that doesn't rely on third-party cookies or a popup at all.
+    window.google.accounts.id.initialize({
+      client_id: CLIENT_ID,
+      callback: handleCredential,
+      use_fedcm_for_prompt: true,
+      use_fedcm_for_button: true,
+    });
     window.google.accounts.id.renderButton(buttonRef.current, {
       theme: "outline",
       size: "large",
