@@ -43,17 +43,40 @@ export const updateStatus = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const updateStaffMeta = catchAsync(async (req: Request, res: Response) => {
-  const user = await userService.updateStaffMeta(paramStr(req.params.id), req.body);
-  sendSuccess(res, 200, "Staff details updated", { user });
+  const { user, pendingActionId } = await userService.updateStaffMeta(paramStr(req.params.id), req.body, {
+    id: req.user!.id,
+    role: req.user!.role,
+  });
+  sendSuccess(res, 200, "Staff details updated", { user, pendingActionId });
 });
 
 export const uploadStaffNidImage = catchAsync(async (req: Request, res: Response) => {
   if (!req.file) throw ApiError.badRequest("An NID card image is required");
-  const user = await userService.updateStaffNidImage(paramStr(req.params.id), req.file, {
+  const { user, pendingActionId } = await userService.updateStaffNidImage(paramStr(req.params.id), req.file, {
     id: req.user!.id,
     role: req.user!.role,
   });
-  sendSuccess(res, 200, "NID card image updated", { user });
+  sendSuccess(res, 200, "NID card image updated", { user, pendingActionId });
+});
+
+/** A staff member's own request to correct their identity document — see
+ * `user.service.ts#requestOwnNidEdit`: this path only ever creates a
+ * proposal, it never writes the record directly. */
+export const requestMyNidEdit = catchAsync(async (req: Request, res: Response) => {
+  const action = await userService.requestOwnNidEdit(
+    { id: req.user!.id, role: req.user!.role },
+    { nidNumber: req.body.nidNumber, file: req.file },
+    req.body.reason
+  );
+  sendSuccess(res, 201, "Your request has been submitted for review", {
+    pendingActionId: action._id.toString(),
+  });
+});
+
+/** Live counts for the Customer Management page / Campaign audience stats. */
+export const getCustomerStats = catchAsync(async (_req: Request, res: Response) => {
+  const stats = await userService.getCustomerStats();
+  sendSuccess(res, 200, "Customer stats fetched", stats);
 });
 
 export const unlockAccount = catchAsync(async (req: Request, res: Response) => {
