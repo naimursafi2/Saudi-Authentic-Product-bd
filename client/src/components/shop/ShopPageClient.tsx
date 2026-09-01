@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
-import { useProducts } from "@/lib/hooks/useProducts";
-import { useCategories } from "@/lib/hooks/useCategories";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { FilterSidebar } from "./FilterSidebar";
@@ -12,15 +10,29 @@ import { SortBar } from "./SortBar";
 import { Pagination } from "./Pagination";
 import { DEFAULT_FILTERS, type ShopFilters } from "./types";
 import { SHOP_GRID_CLASS } from "@/lib/utils";
+import type { Category, Product } from "@/types/product";
 
 /** 20 divides evenly by every column count the product grid uses (2/3/4/5),
  * so a full page never ends in an orphaned part-row. */
 const PAGE_SIZE = 20;
 
-export function ShopPageClient() {
+interface ShopPageClientProps {
+  /** Already fetched server-side in `shop/page.tsx` — see that file's doc
+   * comment for why (no client-side fetch-after-mount, no loading flash). */
+  initialProducts: Product[];
+  initialProductsError: string | null;
+  initialCategories: Category[];
+}
+
+export function ShopPageClient({
+  initialProducts,
+  initialProductsError,
+  initialCategories,
+}: ShopPageClientProps) {
   const searchParams = useSearchParams();
-  const { products, isLoading, error } = useProducts({ limit: 100 });
-  const { categories } = useCategories();
+  const products = initialProducts;
+  const error = initialProductsError;
+  const categories = initialCategories;
   const [filters, setFilters] = useState<ShopFilters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -179,13 +191,7 @@ export function ShopPageClient() {
             onOpenMobileFilters={() => setMobileFiltersOpen(true)}
           />
 
-          {isLoading ? (
-            <div className={SHOP_GRID_CLASS}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="aspect-[4/3] w-full animate-pulse rounded-lg bg-cream-300" />
-              ))}
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="flex flex-col items-center gap-3 rounded border border-dashed border-brown-500/30 py-24 text-center">
               <p className="text-base font-semibold text-green-950">{error}</p>
             </div>
