@@ -180,6 +180,13 @@ export async function googleAuth(idToken: string) {
     if (!user.isActive) {
       throw ApiError.forbidden("This account has been deactivated. Contact an administrator.");
     }
+    // Backfill only — an account that signed up (or was created) before this
+    // account already has a real photo (uploaded or set some other way)
+    // keeps it untouched; Google's picture never overrides an existing one.
+    if (!user.avatar?.url && profile.picture) {
+      user.avatar = { url: profile.picture, publicId: "" };
+      await user.save();
+    }
   } else {
     user = await UserModel.create({
       name: profile.name,
