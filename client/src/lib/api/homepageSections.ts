@@ -1,9 +1,14 @@
 import { api } from "./client";
 import type { ApiHomepageSection } from "@/types/api";
 
-export async function listHomepageSections(includeHidden = false) {
+/**
+ * `revalidate` (seconds) opts this GET into a short Next.js data-cache
+ * window instead of the default no-store — see `categories.ts`'s
+ * `listCategories` for why: same trade-off, same site-chrome-style content.
+ */
+export async function listHomepageSections(includeHidden = false, revalidate?: number) {
   const qs = includeHidden ? "?includeHidden=true" : "";
-  return api.get<{ sections: ApiHomepageSection[] }>(`/homepage-sections${qs}`);
+  return api.get<{ sections: ApiHomepageSection[] }>(`/homepage-sections${qs}`, { revalidate });
 }
 
 export async function createHomepageSection(formData: FormData) {

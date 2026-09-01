@@ -8,13 +8,20 @@ import { PromoBanner } from "@/components/home/PromoBanner";
 import { ProductShowcase } from "@/components/home/ProductShowcase";
 import { listHomepageSections } from "@/lib/api/homepageSections";
 
-export const dynamic = "force-dynamic";
-
+// No `force-dynamic` here — the shared (site) layout's `connection()` call
+// already forces this whole route group to render per-request (see
+// `(site)/layout.tsx` for why: prerendering at build time against a
+// cold-sleeping Render backend fails the Vercel build). `force-dynamic`
+// would additionally force every fetch below to `no-store`, which is what
+// made Home re-fetch and re-render from scratch on every single visit —
+// the `revalidate` window below is the whole point of removing it.
 export default async function HomePage() {
   // Section order, visibility, and content are managed from the admin
   // portal (Admin > Homepage) — this renders whatever's currently visible,
-  // in the order the admin set, with no code changes required.
-  const { data } = await listHomepageSections();
+  // in the order the admin set, with no code changes required. 60s cache:
+  // an admin change shows up within a minute instead of needing every
+  // visitor to hit the backend fresh.
+  const { data } = await listHomepageSections(false, 60);
 
   return (
     <>

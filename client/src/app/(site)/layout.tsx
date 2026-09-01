@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -15,23 +16,31 @@ import { toCategory } from "@/lib/mappers";
  * wake up. Any one of these failing just falls back to empty/default
  * chrome, matching the previous silent-failure behavior.
  *
- * Deliberately NOT using the `revalidate` caching option here (even though
- * these are read-heavy, rarely-changing endpoints): doing so was tried and
- * reverted — it makes every fetch in this shared layout statically
- * cacheable, which flips every route under (site) from per-request dynamic
- * rendering to build-time static generation. That broke the production
- * build (Next tries to prerender pages like /account against the backend
- * at BUILD time, which fails if the backend isn't reachable then — a real
- * risk on Render's free tier, which cold-sleeps). Kept at no-store so
- * rendering mode is unchanged; the win here is purely "one parallel
- * server-side fetch instead of a client-side waterfall," not caching.
+ * Previously kept at no-store (no `revalidate`) because passing one here
+ * makes every fetch in this shared layout statically cacheable, and with
+ * nothing else in the tree forcing dynamic rendering, Next treats every
+ * route under (site) as a build-time-static candidate — Vercel's build then
+ * tries to prerender pages like /account against the backend AT BUILD TIME,
+ * which fails outright if Render (free tier, cold-sleeps) isn't awake right
+ * then. That's a real production build failure this project hit before.
+ *
+ * The `await connection()` call below is what actually fixes that without
+ * giving up caching: it explicitly forces this whole route group to render
+ * per-request (same "skip build-time prerendering" effect `force-dynamic`
+ * had), but — unlike `force-dynamic` — it does NOT also force every fetch to
+ * `no-store`. So builds stay safe, and the 60s `revalidate` window below
+ * still works: the nav/categories/settings calls hit the backend at most
+ * once every 60 seconds (shared across every visitor), instead of on every
+ * single page load, which is what made Home <-> Shop navigation feel like a
+ * full reload every time — see (site)/page.tsx.
  */
 async function getSiteChrome() {
+  await connection();
   const [categoriesResult, navLinksResult, settingsResult] =
     await Promise.allSettled([
-      listCategories(),
-      listNavLinks(),
-      getSiteSettings(),
+      listCategories(false, 60),
+      listNavLinks(false, 60),
+      getSiteSettings(60),
     ]);
 
   return {
