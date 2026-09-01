@@ -39,6 +39,17 @@ export interface IUser extends Document {
   avatar?: { url: string; publicId: string };
   isActive: boolean;
   isEmailVerified: boolean;
+  /**
+   * Registration email-verification OTP — plaintext, `select: false`, same
+   * pattern as Order.model's delivery OTP: short-lived (10 min) with a
+   * capped attempt count, so plaintext storage is an acceptable trade-off
+   * for not needing a hash-compare step. Cleared once verified or expired.
+   */
+  emailVerificationOtp?: string;
+  emailVerificationOtpExpires?: Date;
+  /** Incorrect `verify-registration-otp` attempts against the *current* code — reset
+   * to 0 whenever a fresh code is generated (register or resend). */
+  emailVerificationOtpAttempts: number;
   tokenVersion: number;
   addresses: IAddress[];
   staffMeta?: IStaffMeta;
@@ -99,6 +110,9 @@ const userSchema = new Schema<IUser>(
     },
     isActive: { type: Boolean, default: true },
     isEmailVerified: { type: Boolean, default: false },
+    emailVerificationOtp: { type: String, select: false },
+    emailVerificationOtpExpires: { type: Date },
+    emailVerificationOtpAttempts: { type: Number, default: 0, min: 0 },
     tokenVersion: { type: Number, default: 0 },
     addresses: { type: [addressSchema], default: [] },
     staffMeta: { type: staffMetaSchema },
@@ -124,6 +138,7 @@ userSchema.set("toJSON", {
   transform: (_doc, ret) => {
     const obj = ret as unknown as Record<string, unknown>;
     delete obj.password;
+    delete obj.emailVerificationOtp;
     delete obj.__v;
     return obj;
   },

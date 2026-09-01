@@ -1,6 +1,6 @@
 import { env } from "../config/env";
 import { sendMail } from "../config/mailer";
-import { DELIVERY_OTP_TTL_MINUTES } from "../constants/security";
+import { DELIVERY_OTP_TTL_MINUTES, REGISTRATION_OTP_TTL_MINUTES } from "../constants/security";
 
 const BRAND = {
   cream: "#fbf9f5",
@@ -79,6 +79,26 @@ export async function sendVerificationEmail(to: string, name: string, token: str
      <p style="margin-top:24px;font-size:13px;color:#705a4c;">If you didn't create this account, you can safely ignore this email.</p>`
   );
   await safeSend(to, "Verify your email — Saudi Authentic Product", html);
+}
+
+/**
+ * Registration's primary verification path (see auth.service's
+ * registerCustomer/verifyRegistrationOtp) — a code the customer types back
+ * in on the same page, rather than a link they have to leave the site to
+ * click. Also blocks bot signups: an automated registration can submit the
+ * form, but without access to the real inbox it can never get past this
+ * step to a working account.
+ */
+export async function sendVerificationOtpEmail(to: string, name: string, code: string): Promise<void> {
+  const html = layout(
+    "Verify your email address",
+    `<p>Hi ${name},</p>
+     <p>Welcome to Saudi Authentic Product! Enter this code on the site to verify your email and finish creating
+     your account:</p>
+     <p style="font-size:28px;font-weight:bold;letter-spacing:0.15em;color:${BRAND.green};margin:20px 0;">${code}</p>
+     <p style="font-size:13px;color:#705a4c;">This code expires in ${REGISTRATION_OTP_TTL_MINUTES} minutes. If you didn't create this account, you can safely ignore this email.</p>`
+  );
+  await safeSend(to, "Your verification code — Saudi Authentic Product", html);
 }
 
 export async function sendStaffWelcomeEmail(

@@ -17,13 +17,29 @@ export interface RegisterPayload {
   address?: RegisterAddressPayload;
 }
 
-// register/login/googleAuth all return `permissions` alongside `user` now
-// (computed once, server-side, in the same request) so the caller can set
-// full auth state immediately — see AuthContext — instead of following up
-// with a second `GET /auth/me` round-trip just to learn what the user is
+// login/googleAuth/verifyRegistrationOtp all return `permissions` alongside
+// `user` (computed once, server-side, in the same request) so the caller can
+// set full auth state immediately — see AuthContext — instead of following
+// up with a second `GET /auth/me` round-trip just to learn what the user is
 // allowed to do.
+//
+// `register` itself does NOT sign the account in — it only creates the
+// (unverified) account and emails a 6-digit code; the account isn't usable
+// until `verifyRegistrationOtp` confirms that code. This is the anti-bot
+// gate: see auth.service.ts's registerCustomer for why.
 export async function register(payload: RegisterPayload) {
-  return api.post<{ user: ApiUser; accessToken: string; permissions: Permission[] }>("/auth/register", payload);
+  return api.post<{ requiresOtpVerification: true; email: string }>("/auth/register", payload);
+}
+
+export async function verifyRegistrationOtp(email: string, code: string) {
+  return api.post<{ user: ApiUser; accessToken: string; permissions: Permission[] }>(
+    "/auth/verify-registration-otp",
+    { email, code }
+  );
+}
+
+export async function resendRegistrationOtp(email: string) {
+  return api.post<null>("/auth/resend-registration-otp", { email });
 }
 
 export async function login(email: string, password: string) {

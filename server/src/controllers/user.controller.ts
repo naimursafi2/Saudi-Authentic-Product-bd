@@ -3,7 +3,6 @@ import { catchAsync } from "../utils/catchAsync";
 import { sendSuccess } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 import { paramStr } from "../utils/params";
-import { actorOf } from "../utils/actor";
 import * as userService from "../services/user.service";
 
 export const createStaff = catchAsync(async (req: Request, res: Response) => {
@@ -12,28 +11,14 @@ export const createStaff = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const listUsers = catchAsync(async (req: Request, res: Response) => {
-  const { role, search, isActive, isEmailVerified, page, limit } = req.query as unknown as {
+  const { role, search, page, limit } = req.query as unknown as {
     role?: import("../constants/roles").Role;
     search?: string;
-    isActive?: boolean;
-    isEmailVerified?: boolean;
     page: number;
     limit: number;
   };
-  const { users, pagination } = await userService.listUsers({
-    role,
-    search,
-    isActive,
-    isEmailVerified,
-    page,
-    limit,
-  });
+  const { users, pagination } = await userService.listUsers({ role, search, page, limit });
   sendSuccess(res, 200, "Users fetched", { users }, { pagination });
-});
-
-export const getCustomerStats = catchAsync(async (_req: Request, res: Response) => {
-  const stats = await userService.getCustomerStats();
-  sendSuccess(res, 200, "Customer stats fetched", stats);
 });
 
 export const getUser = catchAsync(async (req: Request, res: Response) => {
@@ -58,48 +43,17 @@ export const updateStatus = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const updateStaffMeta = catchAsync(async (req: Request, res: Response) => {
-  const { user, pendingActionId } = await userService.updateStaffMeta(
-    paramStr(req.params.id),
-    req.body,
-    actorOf(req)
-  );
-  sendSuccess(
-    res,
-    200,
-    pendingActionId
-      ? "Staff details updated. The NID number change was submitted for Super Admin approval and is not live yet."
-      : "Staff details updated",
-    { user, pendingActionId }
-  );
+  const user = await userService.updateStaffMeta(paramStr(req.params.id), req.body);
+  sendSuccess(res, 200, "Staff details updated", { user });
 });
 
 export const uploadStaffNidImage = catchAsync(async (req: Request, res: Response) => {
   if (!req.file) throw ApiError.badRequest("An NID card image is required");
-  const { user, pendingActionId } = await userService.updateStaffNidImage(
-    paramStr(req.params.id),
-    req.file,
-    actorOf(req)
-  );
-  sendSuccess(
-    res,
-    200,
-    pendingActionId
-      ? "NID card scan submitted for Super Admin approval — the current scan stays in place until it is granted."
-      : "NID card image updated",
-    { user, pendingActionId }
-  );
-});
-
-/** A staff member requesting a correction to their own identity document. */
-export const requestMyNidEdit = catchAsync(async (req: Request, res: Response) => {
-  const action = await userService.requestOwnNidEdit(
-    actorOf(req),
-    { nidNumber: req.body.nidNumber, file: req.file },
-    req.body.reason
-  );
-  sendSuccess(res, 201, "Request submitted for Super Admin review", {
-    pendingActionId: action._id.toString(),
+  const user = await userService.updateStaffNidImage(paramStr(req.params.id), req.file, {
+    id: req.user!.id,
+    role: req.user!.role,
   });
+  sendSuccess(res, 200, "NID card image updated", { user });
 });
 
 export const unlockAccount = catchAsync(async (req: Request, res: Response) => {

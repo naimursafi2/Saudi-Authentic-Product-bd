@@ -10,13 +10,20 @@ import {
   signEmailVerificationToken,
   verifyEmailVerificationToken,
 } from "../utils/jwt";
-import { sendPasswordResetEmail, sendVerificationEmail, sendAccountLockedEmail } from "./email.service";
+import {
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+  sendVerificationOtpEmail,
+  sendAccountLockedEmail,
+} from "./email.service";
 import { verifyGoogleIdToken } from "../config/google";
 import {
   ACCOUNT_LOCK_DURATION_MS,
   MAX_FAILED_LOGIN_ATTEMPTS,
   INACTIVITY_ENFORCED_ROLES,
   STAFF_INACTIVITY_TIMEOUT_MS,
+  REGISTRATION_OTP_TTL_MINUTES,
+  MAX_REGISTRATION_OTP_ATTEMPTS,
 } from "../constants/security";
 import type { LoginInput, RegisterInput } from "../validators/auth.validator";
 
@@ -28,6 +35,19 @@ function issueTokens(user: IUser) {
   };
 }
 
+/** Random 6-digit numeric code, e.g. "042817" (leading zeros kept). */
+function generateRegistrationOtp(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
+}
+
+/**
+ * Creates the account but does NOT issue session tokens/cookies yet — the
+ * account only becomes usable once `verifyRegistrationOtp` confirms the code
+ * just emailed to them. This is the anti-bot gate: a script can POST to this
+ * endpoint all day and get a User document back, but without access to that
+ * inbox it can never produce the matching code, so it never reaches a
+ * working, signed-in account. A real person completes it in one extra step.
+ */
 export async function registerCustomer(input: RegisterInput) {
   const existingEmail = await UserModel.findOne({ email: input.email });
   if (existingEmail) {
@@ -41,6 +61,7 @@ export async function registerCustomer(input: RegisterInput) {
     }
   }
 
+  const otp = generateRegistrationOtp();
   const user = await UserModel.create({
     name: input.name,
     email: input.email,
@@ -48,6 +69,9 @@ export async function registerCustomer(input: RegisterInput) {
     phone: input.phone,
     role: "customer",
     isEmailVerified: false,
+    emailVerificationOtp: otp,
+    emailVerificationOtpExpires: new Date(Date.now() + REGISTRATION_OTP_TTL_MINUTES * 60 * 1000),
+    emailVerificationOtpAttempts: 0,
     addresses: input.address
       ? [
           {
@@ -62,10 +86,82 @@ export async function registerCustomer(input: RegisterInput) {
       : [],
   });
 
-  const verificationToken = signEmailVerificationToken(user._id.toString());
-  void sendVerificationEmail(user.email, user.name, verificationToken);
+  void sendVerificationOtpEmail(user.email, user.name, otp);
+
+  return { user };
+}
+
+export interface RegistrationOtpResult {
+  user: IUser;
+  tokens: ReturnType<typeof issueTokens>;
+}
+
+/**
+ * Confirms the code emailed by `registerCustomer` and, only on success,
+ * issues the same session tokens `login`/`googleAuth` do — this is the
+ * moment a freshly-registered account actually becomes signed-in.
+ */
+export async function verifyRegistrationOtp(email: string, code: string): Promise<RegistrationOtpResult> {
+  const user = await UserModel.findOne({ email }).select("+emailVerificationOtp");
+  if (!user) {
+    throw ApiError.badRequest("Incorrect or expired code");
+  }
+
+  // Already verified (e.g. a duplicate submit, or double-clicking Verify) —
+  // just sign them in as usual instead of erroring.
+  if (user.isEmailVerified) {
+    return { user, tokens: issueTokens(user) };
+  }
+
+  if (
+    !user.emailVerificationOtp ||
+    !user.emailVerificationOtpExpires ||
+    user.emailVerificationOtpExpires.getTime() < Date.now()
+  ) {
+    throw ApiError.badRequest("This code has expired — request a new one.");
+  }
+
+  if (code.trim() !== user.emailVerificationOtp) {
+    user.emailVerificationOtpAttempts += 1;
+    if (user.emailVerificationOtpAttempts >= MAX_REGISTRATION_OTP_ATTEMPTS) {
+      user.emailVerificationOtp = undefined;
+      user.emailVerificationOtpExpires = undefined;
+      user.emailVerificationOtpAttempts = 0;
+      await user.save();
+      throw ApiError.badRequest("Too many incorrect attempts — request a new code.");
+    }
+    await user.save();
+    throw ApiError.badRequest(
+      `Incorrect code (${MAX_REGISTRATION_OTP_ATTEMPTS - user.emailVerificationOtpAttempts} attempt(s) remaining)`
+    );
+  }
+
+  user.isEmailVerified = true;
+  user.emailVerificationOtp = undefined;
+  user.emailVerificationOtpExpires = undefined;
+  user.emailVerificationOtpAttempts = 0;
+  user.lastSeenAt = new Date();
+  await user.save();
 
   return { user, tokens: issueTokens(user) };
+}
+
+/**
+ * Re-sends a fresh registration OTP, replacing any still-outstanding one.
+ * Silently no-ops for an unknown email or an already-verified account,
+ * mirroring `forgotPassword`'s existence-hiding behaviour.
+ */
+export async function resendRegistrationOtp(email: string): Promise<void> {
+  const user = await UserModel.findOne({ email });
+  if (!user || user.isEmailVerified) return;
+
+  const otp = generateRegistrationOtp();
+  user.emailVerificationOtp = otp;
+  user.emailVerificationOtpExpires = new Date(Date.now() + REGISTRATION_OTP_TTL_MINUTES * 60 * 1000);
+  user.emailVerificationOtpAttempts = 0;
+  await user.save();
+
+  void sendVerificationOtpEmail(user.email, user.name, otp);
 }
 
 /**
@@ -92,6 +188,14 @@ export async function googleAuth(idToken: string) {
       role: "customer",
       // Google has already verified ownership of this email address.
       isEmailVerified: true,
+      // Pre-fill the account photo from their Google profile picture so a
+      // Google sign-up isn't left with the blank/initial avatar. This is a
+      // hotlinked Google URL, not a Cloudinary upload, so `publicId` stays
+      // "" — `retireInternalAsset` already no-ops on a falsy publicId (see
+      // internalAsset.service.ts), so this never touches Cloudinary and is
+      // safely overwritten if the customer later uploads or removes a real
+      // photo via their profile page.
+      avatar: profile.picture ? { url: profile.picture, publicId: "" } : undefined,
     });
   }
 

@@ -32,6 +32,101 @@ const HEADER: Record<Tab, { icon: typeof LogIn; title: string; subtitle: string 
   forgot: { icon: KeyRound, title: "Reset Password", subtitle: "We'll email you a link to reset your password." },
 };
 
+/**
+ * Shown right after registering, in place of the register form — the
+ * account exists but isn't signed in yet until this code (emailed by
+ * registerCustomer) is confirmed. See AuthContext's register/
+ * verifyRegistrationOtp comments for why registration is split into these
+ * two steps (it's the anti-bot gate).
+ */
+function OtpVerificationStep({
+  email,
+  onVerified,
+  onBack,
+}: {
+  email: string;
+  onVerified: () => void;
+  onBack: () => void;
+}) {
+  const { verifyRegistrationOtp, resendRegistrationOtp } = useAuth();
+  const [code, setCode] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await verifyRegistrationOtp(email, code.trim());
+      onVerified();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Could not verify that code. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResend() {
+    setError(null);
+    setResendState("sending");
+    try {
+      await resendRegistrationOtp(email);
+      setResendState("sent");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Could not resend the code. Please try again.");
+      setResendState("idle");
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-3.5 rounded-lg border border-brown-600/10 bg-surface p-5 shadow-[0_1px_2px_rgba(61,43,31,0.04)]"
+    >
+      <p className="text-sm text-brown-600">
+        We sent a 6-digit code to <span className="font-semibold text-green-950">{email}</span>. Enter it below to
+        finish creating your account.
+      </p>
+      <div>
+        <label className={labelClasses}>Verification Code</label>
+        <input
+          required
+          autoFocus
+          inputMode="numeric"
+          maxLength={6}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          placeholder="123456"
+          className={cn(fieldClasses, "text-center text-lg tracking-[0.3em]")}
+        />
+      </div>
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <Button type="submit" variant="primary" className="w-full" disabled={isSubmitting || code.length !== 6}>
+        {isSubmitting ? "Verifying..." : "Verify Email"}
+      </Button>
+      <div className="flex items-center justify-between text-xs">
+        <button
+          type="button"
+          onClick={onBack}
+          className="cursor-pointer font-bold uppercase tracking-[0.06em] text-brown-500 hover:text-green-950"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={resendState === "sending"}
+          className="cursor-pointer font-bold uppercase tracking-[0.06em] text-green-900 underline disabled:opacity-60"
+        >
+          {resendState === "sending" ? "Sending..." : resendState === "sent" ? "Code sent!" : "Resend code"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function AuthForms() {
   const searchParams = useSearchParams();
   // Lets the navbar's "Sign Up" link (/account?tab=register) open straight
@@ -49,8 +144,12 @@ export function AuthForms() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forgotSent, setForgotSent] = useState(false);
+  // Set once registration succeeds — swaps the whole card over to
+  // OtpVerificationStep until that code is confirmed (see its comment).
+  const [pendingOtpEmail, setPendingOtpEmail] = useState<string | null>(null);
 
   const passwordsMismatch = tab === "register" && confirmPassword.length > 0 && password !== confirmPassword;
 
@@ -74,7 +173,8 @@ export function AuthForms() {
       if (tab === "login") {
         await login(email, password);
       } else if (tab === "register") {
-        await register({ name, email, password, confirmPassword });
+        const { email: registeredEmail } = await register({ name, email, password, confirmPassword });
+        setPendingOtpEmail(registeredEmail);
       } else {
         await forgotPassword(email);
         setForgotSent(true);
@@ -98,7 +198,7 @@ export function AuthForms() {
         <p className="mt-1.5 text-sm text-brown-500">{Header.subtitle}</p>
       </div>
 
-      {tab !== "forgot" && (
+      {tab !== "forgot" && !pendingOtpEmail && (
         <div className="flex rounded border border-green-900/15 p-1">
           {(["login", "register"] as const).map((t) => (
             <button
@@ -118,7 +218,13 @@ export function AuthForms() {
         </div>
       )}
 
-      {tab === "forgot" && forgotSent ? (
+      {pendingOtpEmail ? (
+        <OtpVerificationStep
+          email={pendingOtpEmail}
+          onVerified={() => setPendingOtpEmail(null)}
+          onBack={() => setPendingOtpEmail(null)}
+        />
+      ) : tab === "forgot" && forgotSent ? (
         <div className="flex flex-col gap-3.5 rounded-lg border border-brown-600/10 bg-surface p-5 text-center shadow-[0_1px_2px_rgba(61,43,31,0.04)]">
           <p className="text-sm text-brown-600">
             If an account exists for <span className="font-semibold text-green-950">{email}</span>, a
@@ -243,7 +349,26 @@ export function AuthForms() {
                 </span>
                 <span className="h-px flex-1 bg-brown-600/10" />
               </div>
-              <GoogleAuthButton onError={setError} onStart={() => setError(null)} />
+              {/* Google's own button gives zero visual feedback while the
+                  credential exchange is in flight (see GoogleAuthButton's
+                  onFinish comment) — this overlay + caption is what tells
+                  the user something is actually happening instead of it
+                  looking broken on a slow response. */}
+              <div className="relative">
+                <GoogleAuthButton
+                  onError={setError}
+                  onStart={() => {
+                    setError(null);
+                    setIsGoogleSubmitting(true);
+                  }}
+                  onFinish={() => setIsGoogleSubmitting(false)}
+                />
+                {isGoogleSubmitting && (
+                  <div className="absolute inset-0 flex cursor-wait items-center justify-center rounded-full bg-surface/80">
+                    <span className="text-xs font-semibold text-brown-600">Signing in with Google...</span>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </form>
@@ -253,7 +378,7 @@ export function AuthForms() {
           button, so this is the primary route into registration (the tab bar
           above is the other). Mirrored for the reverse direction so someone
           who lands on Register can get back to signing in. */}
-      {tab !== "forgot" && (
+      {tab !== "forgot" && !pendingOtpEmail && (
         <p className="text-center text-sm text-brown-500">
           {tab === "login" ? "Don't have an account? " : "Already have an account? "}
           <button

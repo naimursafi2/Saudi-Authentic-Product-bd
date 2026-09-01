@@ -37,7 +37,7 @@ describe("Email verification integration", () => {
     await disconnectTestDb();
   });
 
-  it("registers a customer as unverified", async () => {
+  it("registers a customer as unverified, without signing them in", async () => {
     const res = await request(app).post("/api/v1/auth/register").send({
       name: "Jane Customer",
       email: "jane@example.com",
@@ -45,7 +45,87 @@ describe("Email verification integration", () => {
       confirmPassword: "Password123",
     });
     expect(res.status).toBe(201);
-    expect(res.body.data.user.isEmailVerified).toBe(false);
+    expect(res.body.data.requiresOtpVerification).toBe(true);
+    expect(res.body.data.email).toBe("jane@example.com");
+
+    // No session yet — register only creates the account and emails a code;
+    // it doesn't set auth cookies or return a usable user/token.
+    const cookies = (res.headers["set-cookie"] as unknown as string[]) ?? [];
+    expect(cookies.some((c) => c.startsWith("accessToken="))).toBe(false);
+
+    const stored = await UserModel.findOne({ email: "jane@example.com" });
+    expect(stored?.isEmailVerified).toBe(false);
+  });
+
+  it("verifies registration with the emailed OTP and signs the account in, then blocks reuse of a stale code", async () => {
+    const register = await request(app).post("/api/v1/auth/register").send({
+      name: "Jane Otp",
+      email: "jane.otp@example.com",
+      password: "Password123",
+      confirmPassword: "Password123",
+    });
+    expect(register.status).toBe(201);
+
+    const dbUser = await UserModel.findOne({ email: "jane.otp@example.com" }).select("+emailVerificationOtp");
+    const otp = dbUser!.emailVerificationOtp!;
+    expect(otp).toMatch(/^\d{6}$/);
+
+    const wrongCode = await request(app)
+      .post("/api/v1/auth/verify-registration-otp")
+      .send({ email: "jane.otp@example.com", code: otp === "000000" ? "111111" : "000000" });
+    expect(wrongCode.status).toBe(400);
+
+    const verified = await request(app)
+      .post("/api/v1/auth/verify-registration-otp")
+      .send({ email: "jane.otp@example.com", code: otp });
+    expect(verified.status).toBe(200);
+    expect(verified.body.data.user.isEmailVerified).toBe(true);
+    const cookies = verified.headers["set-cookie"] as unknown as string[];
+    expect(cookies.some((c) => c.startsWith("accessToken="))).toBe(true);
+
+    // The code is single-use — the same (now-cleared) code can't be replayed.
+    const replay = await request(app)
+      .post("/api/v1/auth/verify-registration-otp")
+      .send({ email: "jane.otp@example.com", code: otp });
+    expect(replay.status).toBe(200);
+    expect(replay.body.data.user.isEmailVerified).toBe(true); // already-verified short-circuit, not a re-check
+  });
+
+  it("invalidates the registration OTP after too many wrong attempts, and resend issues a fresh one", async () => {
+    await request(app).post("/api/v1/auth/register").send({
+      name: "Jane Attempts",
+      email: "jane.attempts@example.com",
+      password: "Password123",
+      confirmPassword: "Password123",
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      const attempt = await request(app)
+        .post("/api/v1/auth/verify-registration-otp")
+        .send({ email: "jane.attempts@example.com", code: "999999" });
+      expect(attempt.status).toBe(400);
+    }
+
+    const afterLockout = await UserModel.findOne({ email: "jane.attempts@example.com" }).select(
+      "+emailVerificationOtp"
+    );
+    expect(afterLockout?.emailVerificationOtp).toBeUndefined();
+
+    const resend = await request(app)
+      .post("/api/v1/auth/resend-registration-otp")
+      .send({ email: "jane.attempts@example.com" });
+    expect(resend.status).toBe(200);
+
+    const afterResend = await UserModel.findOne({ email: "jane.attempts@example.com" }).select(
+      "+emailVerificationOtp"
+    );
+    const freshOtp = afterResend!.emailVerificationOtp!;
+    expect(freshOtp).toMatch(/^\d{6}$/);
+
+    const verified = await request(app)
+      .post("/api/v1/auth/verify-registration-otp")
+      .send({ email: "jane.attempts@example.com", code: freshOtp });
+    expect(verified.status).toBe(200);
   });
 
   it("verifies with a valid token, then reports 'already-verified' on a second use", async () => {

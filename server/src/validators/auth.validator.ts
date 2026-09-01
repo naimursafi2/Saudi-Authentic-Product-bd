@@ -71,6 +71,15 @@ export const resendVerificationSchema = z.object({
   email: z.string().trim().email().toLowerCase(),
 });
 
+export const verifyRegistrationOtpSchema = z.object({
+  email: z.string().trim().email().toLowerCase(),
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+
+export const resendRegistrationOtpSchema = z.object({
+  email: z.string().trim().email().toLowerCase(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type GoogleAuthInput = z.infer<typeof googleAuthSchema>;
@@ -79,3 +88,5 @@ export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
 export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+export type VerifyRegistrationOtpInput = z.infer<typeof verifyRegistrationOtpSchema>;
+export type ResendRegistrationOtpInput = z.infer<typeof resendRegistrationOtpSchema>;

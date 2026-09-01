@@ -24,7 +24,15 @@ interface AuthContextValue {
   isImpersonating: boolean;
   login: (email: string, password: string) => Promise<ApiUser>;
   loginWithGoogle: (idToken: string) => Promise<ApiUser>;
-  register: (payload: authApi.RegisterPayload) => Promise<ApiUser>;
+  /**
+   * Creates the account and emails a 6-digit verification code — does NOT
+   * sign the user in. Returns the email to verify; the caller (AuthForms)
+   * moves to an OTP-entry step and finishes with `verifyRegistrationOtp`.
+   */
+  register: (payload: authApi.RegisterPayload) => Promise<{ email: string }>;
+  /** Confirms the code from `register` and, only on success, signs the account in. */
+  verifyRegistrationOtp: (email: string, code: string) => Promise<ApiUser>;
+  resendRegistrationOtp: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   startImpersonation: (token: string) => Promise<void>;
@@ -105,12 +113,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const register = useCallback(async (payload: authApi.RegisterPayload) => {
+    // Deliberately does not touch auth state — the account isn't signed in
+    // until verifyRegistrationOtp succeeds, so status stays whatever it was
+    // (normally "unauthenticated" here).
     const { data } = await authApi.register(payload);
+    return { email: data.email };
+  }, []);
+
+  const verifyRegistrationOtp = useCallback(async (email: string, code: string): Promise<ApiUser> => {
+    const { data } = await authApi.verifyRegistrationOtp(email, code);
     setUser(data.user);
     setPermissions(data.permissions ?? []);
     setIsImpersonating(false);
     setStatus("authenticated");
     return data.user;
+  }, []);
+
+  const resendRegistrationOtp = useCallback(async (email: string) => {
+    await authApi.resendRegistrationOtp(email);
   }, []);
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
@@ -156,6 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         loginWithGoogle,
         register,
+        verifyRegistrationOtp,
+        resendRegistrationOtp,
         logout,
         refreshUser,
         startImpersonation,

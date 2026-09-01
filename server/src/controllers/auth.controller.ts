@@ -20,10 +20,25 @@ async function withPermissions(user: IUser) {
 }
 
 export const register = catchAsync(async (req: Request, res: Response) => {
-  const { user, tokens } = await authService.registerCustomer(req.body);
+  const { user } = await authService.registerCustomer(req.body);
+  // No auth cookies yet — the account isn't signed in until the OTP just
+  // emailed to them is confirmed via POST /auth/verify-registration-otp.
+  sendSuccess(res, 201, "We've sent a verification code to your email", {
+    requiresOtpVerification: true,
+    email: user.email,
+  });
+});
+
+export const verifyRegistrationOtp = catchAsync(async (req: Request, res: Response) => {
+  const { user, tokens } = await authService.verifyRegistrationOtp(req.body.email, req.body.code);
   setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
   const { permissions } = await withPermissions(user);
-  sendSuccess(res, 201, "Account created successfully", { user, accessToken: tokens.accessToken, permissions });
+  sendSuccess(res, 200, "Account created successfully", { user, accessToken: tokens.accessToken, permissions });
+});
+
+export const resendRegistrationOtp = catchAsync(async (req: Request, res: Response) => {
+  await authService.resendRegistrationOtp(req.body.email);
+  sendSuccess(res, 200, "If that email needs verifying, a new code has been sent.");
 });
 
 export const login = catchAsync(async (req: Request, res: Response) => {

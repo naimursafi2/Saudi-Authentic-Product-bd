@@ -28,7 +28,22 @@ declare global {
  * isn't set, matching this app's Cloudinary/SMTP graceful-degradation
  * pattern — see backend/.env.example for setup steps.
  */
-export function GoogleAuthButton({ onError, onStart }: { onError: (message: string) => void; onStart?: () => void }) {
+export function GoogleAuthButton({
+  onError,
+  onStart,
+  onFinish,
+}: {
+  onError: (message: string) => void;
+  onStart?: () => void;
+  /**
+   * Fires after the credential exchange settles either way (success or
+   * failure). Lets the caller clear a "Signing in..." state — without this,
+   * clicking the button gave zero visual feedback while `loginWithGoogle`
+   * was in flight, which on a slow/cold backend response reads as "the
+   * button doesn't work" even though it's just quietly waiting.
+   */
+  onFinish?: () => void;
+}) {
   const { loginWithGoogle } = useAuth();
   const buttonRef = useRef<HTMLDivElement>(null);
   const [scriptLoaded, setScriptLoaded] = useState(false);
@@ -58,10 +73,10 @@ export function GoogleAuthButton({ onError, onStart }: { onError: (message: stri
   // onStart={() => setError(null)}), which are new on every render — depending
   // on them directly re-ran google.accounts.id.initialize() on each render and
   // GIS warned that only the last instance would be used.
-  const handlersRef = useRef({ onError, onStart });
+  const handlersRef = useRef({ onError, onStart, onFinish });
   useEffect(() => {
-    handlersRef.current = { onError, onStart };
-  }, [onError, onStart]);
+    handlersRef.current = { onError, onStart, onFinish };
+  }, [onError, onStart, onFinish]);
 
   const handleCredential = useCallback(
     async (response: GoogleCredentialResponse) => {
@@ -72,6 +87,8 @@ export function GoogleAuthButton({ onError, onStart }: { onError: (message: stri
         handlersRef.current.onError(
           err instanceof ApiClientError ? err.message : "Could not sign in with Google. Please try again."
         );
+      } finally {
+        handlersRef.current.onFinish?.();
       }
     },
     [loginWithGoogle]
