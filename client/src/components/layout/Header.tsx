@@ -187,7 +187,16 @@ export function Header({
       body.style.top = previousBodyStyles.top;
       body.style.width = previousBodyStyles.width;
       body.style.overflow = previousBodyStyles.overflow;
-      window.scrollTo(0, scrollY);
+      // `behavior: "instant"` is deliberate, not the default two-arg
+      // `scrollTo(0, scrollY)` — this project sets `html { scroll-behavior:
+      // smooth }` globally (globals.css, for anchor/back-to-top navigation),
+      // and the legacy two-arg form inherits that CSS behavior. That made
+      // every menu close (X button, overlay tap, or picking a link from the
+      // drawer) visibly animate the homepage scrolling back to its saved
+      // position — reported as "the homepage auto-scrolls when I use the
+      // menu" on mobile. This restore must be an instant, imperceptible jump
+      // back to where the user already was, never a smooth-scrolled one.
+      window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
     };
   }, [mobileOpen]);
 
