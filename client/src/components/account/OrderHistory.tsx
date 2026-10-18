@@ -5,8 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Camera, Package, RefreshCcw, Search, Undo2, Wallet } from "lucide-react";
 import { listMyOrders } from "@/lib/api/orders";
-import { createBkashPayment } from "@/lib/api/payments";
-import { BKASH_PENDING_ORDER_KEY } from "@/components/checkout/BkashCallbackClient";
+import { initSslcommerzPayment } from "@/lib/api/payments";
 import { createRefund, listRefunds } from "@/lib/api/finance";
 import { createReturnRequest, listReturnRequests } from "@/lib/api/returns";
 import { PrintInvoiceButton } from "@/components/order/OrderInvoice";
@@ -27,11 +26,10 @@ import type {
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cod: "Cash on Delivery",
-  bkash: "bKash",
-  nagad: "Nagad",
+  sslcommerz: "Online Payment (SSLCommerz)",
 };
 
-/** Statuses a bKash order can still be paid for — past these the order is closed or already moving. */
+/** Statuses an online-payment order can still be paid for — past these the order is closed or already moving. */
 const PAYABLE_STATUSES: OrderStatus[] = ["pending"];
 
 const REASON_CATEGORIES: RefundReasonCategory[] = [
@@ -109,21 +107,17 @@ export function OrderHistory() {
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
-  /** Resumes an abandoned or failed bKash payment on an order that is still unpaid. */
+  /** Resumes an abandoned, cancelled or failed online payment on an order that is still unpaid. */
   async function handlePayNow(order: ApiOrder) {
     setPayError(null);
     setPayingOrderId(order._id);
     try {
-      const { data } = await createBkashPayment(order._id);
-      window.sessionStorage.setItem(
-        BKASH_PENDING_ORDER_KEY,
-        JSON.stringify({ orderId: order._id, orderNumber: order.orderNumber })
-      );
-      window.location.assign(data.payment.bkashURL);
+      const { data } = await initSslcommerzPayment(order._id);
+      window.location.assign(data.payment.gatewayUrl);
     } catch (err) {
       setPayingOrderId(null);
       setPayError(
-        err instanceof ApiClientError ? err.message : "Could not start a bKash payment. Please try again."
+        err instanceof ApiClientError ? err.message : "Could not start the online payment. Please try again."
       );
     }
   }
@@ -346,7 +340,7 @@ export function OrderHistory() {
             </div>
 
             {!order.isPaid &&
-              order.paymentMethod === "bkash" &&
+              order.paymentMethod === "sslcommerz" &&
               PAYABLE_STATUSES.includes(order.status) && (
                 <div className="flex flex-col gap-2">
                   <Button
@@ -357,8 +351,8 @@ export function OrderHistory() {
                   >
                     <Wallet size={14} />
                     {payingOrderId === order._id
-                      ? "Connecting to bKash..."
-                      : `Pay ${formatBDT(order.totalBDT)} with bKash`}
+                      ? "Connecting to payment..."
+                      : `Pay ${formatBDT(order.totalBDT)} Online`}
                   </Button>
                   {payError && payingOrderId === null && (
                     <p className="text-xs text-danger">{payError}</p>

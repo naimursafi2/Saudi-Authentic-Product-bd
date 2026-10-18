@@ -34,7 +34,7 @@ origins (client on Vercel, server on Render).
 search suggestions (single-character and partial matches, desktop dropdown +
 mobile overlay), product detail pages
 with gallery + reviews, cart & wishlist (client-side), coupon codes,
-checkout with bKash online payment (server-verified) or cash on delivery,
+checkout with SSLCommerz online payment (server-verified) or cash on delivery,
 order tracking (with/without an account), customer account
 dashboard (orders, addresses, price-drop/back-in-stock alerts, refunds/
 returns), dark/light mode, Google Sign-In, email verification.
@@ -42,7 +42,7 @@ returns), dark/light mode, Google Sign-In, email verification.
 **Admin/Co-Admin/Super Admin/Order Manager portal**: product & category
 management (with a Super-Admin approval gate for new products, stock
 changes, and deletions), order lifecycle & delivery-agent assignment,
-inventory & purchase-batch/landed-cost tracking, bKash payment transactions
+inventory & purchase-batch/landed-cost tracking, SSLCommerz payment transactions
 with gateway reconciliation, configurable shipping rates (per-zone charges,
 express surcharge, free-shipping threshold, delivery estimates), coupons,
 customer
@@ -122,13 +122,15 @@ npm run dev               # http://localhost:3000
 `JWT_REFRESH_SECRET`/`JWT_REFRESH_EXPIRES_IN`, `COOKIE_DOMAIN`,
 `CLOUDINARY_CLOUD_NAME`/`CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET`,
 `SMTP_SERVICE`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM`, `GOOGLE_CLIENT_ID`,
-`BKASH_BASE_URL`/`BKASH_USERNAME`/`BKASH_PASSWORD`/`BKASH_APP_KEY`/
-`BKASH_APP_SECRET`,
+`SSLCOMMERZ_STORE_ID`/`SSLCOMMERZ_STORE_PASSWORD`/`SSLCOMMERZ_IS_LIVE`,
+`SERVER_PUBLIC_URL` (callback base URL for SSLCommerz), `REDIS_URL`
+(short-lived OTP store),
 `SEED_SUPER_ADMIN_NAME`/`SEED_SUPER_ADMIN_EMAIL`/`SEED_SUPER_ADMIN_PASSWORD`.
 Validated via Zod on startup — the app fails fast if a required var is
-missing. Cloudinary/SMTP/Google/SMS/bKash vars are optional; the affected
+missing. Cloudinary/SMTP/Google/SMS/SSLCommerz/Redis vars are optional; the affected
 feature degrades gracefully (a clear 503, or a silent no-op) rather than
-crashing. The bKash credentials are secrets — they stay server-side and are
+crashing (without `REDIS_URL` OTPs fall back to an in-process store, which is
+fine for one local dev server but not for production). The SSLCommerz credentials are secrets — they stay server-side and are
 never sent to the browser or logged.
 
 **`client/.env`**: `NEXT_PUBLIC_API_URL` (defaults to
@@ -182,11 +184,13 @@ not affect `typecheck`/`lint`/`test` or any deployed environment.
 
 ## Known limitations
 
-- bKash payment is implemented end-to-end but stays hidden at checkout until
-  real `BKASH_*` credentials are configured. `nagad` is selectable but has no
-  gateway behind it and is never actually charged.
-- Abandoned bKash payments have no automatic expiry — an unpaid order holds
-  its stock and coupon use until someone cancels it.
+- Online payment goes through SSLCommerz's hosted page and is hidden at
+  checkout until `SSLCOMMERZ_STORE_ID`/`SSLCOMMERZ_STORE_PASSWORD` are set.
+  After paying, the customer lands on `/checkout/payment/success`, `/failed`
+  or `/cancelled`, which redirect to their orders after 4 seconds.
+- An abandoned SSLCommerz payment is marked failed by the reconciliation
+  sweep, but the unpaid order itself stays open (holding its stock and coupon
+  use) so the customer can pay again, until someone cancels it.
 - No SMS gateway connected — SMS-dependent features (delivery OTP, campaign
   SMS) degrade to email/other channels.
 - Every "Print" action (invoices, Expenses, Sales Report) generates a PDF with

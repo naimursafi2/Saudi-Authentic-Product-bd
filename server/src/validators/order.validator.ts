@@ -22,7 +22,7 @@ export const createOrderSchema = z.object({
     cityArea: z.string().trim().min(1).max(120),
   }),
   deliveryMethod: z.enum(["standard", "express"]),
-  paymentMethod: z.enum(["cod", "bkash", "nagad"]),
+  paymentMethod: z.enum(["cod", "sslcommerz"]),
   couponCode: z.string().trim().min(1).max(30).optional(),
 });
 

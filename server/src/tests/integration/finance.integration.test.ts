@@ -20,6 +20,7 @@ import { createAuthedUser, authHeader } from "./helpers";
 import { CategoryModel } from "../../models/Category.model";
 import { ProductModel } from "../../models/Product.model";
 import { OrderModel } from "../../models/Order.model";
+import { getDeliveryOtp } from "../../services/deliveryOtp.store";
 import { ExpenseModel } from "../../models/Expense.model";
 
 const app = createApp();
@@ -90,11 +91,11 @@ async function createReturnedOrder() {
     .set(...authHeader(agentToken))
     .send({});
 
-  const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
+  const sentOtp = (await getDeliveryOtp(order._id.toString()))!.code;
   await request(app)
     .post(`/api/v1/orders/${order._id}/verify-otp`)
     .set(...authHeader(agentToken))
-    .send({ otp: dbOrder!.otpCode });
+    .send({ otp: sentOtp });
 
   await request(app)
     .patch(`/api/v1/orders/${order._id}/status`)

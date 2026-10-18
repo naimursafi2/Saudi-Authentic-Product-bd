@@ -12,7 +12,7 @@ import { purgeExpiredAssets } from "./internalAsset.service";
  * Two jobs share the one tick:
  *  - Customer Messaging campaigns — a weekly/monthly/custom campaign fires on
  *    schedule, per that spec's explicit requirement.
- *  - bKash payment reconciliation — resolves payments whose customer never
+ *  - SSLCommerz payment reconciliation — resolves payments whose customer never
  *    made it back to the callback. This is what keeps payment verification
  *    fully automatic, with no manual staff step anywhere in the system.
  */

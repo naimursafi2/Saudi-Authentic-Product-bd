@@ -348,7 +348,7 @@ export type OrderStatus =
   | "returned"
   | "refunded";
 export type DeliveryMethod = "standard" | "express";
-export type PaymentMethod = "cod" | "bkash" | "nagad";
+export type PaymentMethod = "cod" | "sslcommerz";
 
 export interface ApiOrderItem {
   product: string;
@@ -412,10 +412,10 @@ export interface ApiOrder {
   updatedAt: string;
 }
 
-// -- Payments (bKash gateway transactions) --
+// -- Payments (SSLCommerz gateway transactions) --
 
 /** Only gateway-settled payments get a record — a `cod` order is fully described by the Order itself. */
-export type PaymentProvider = "bkash";
+export type PaymentProvider = "sslcommerz";
 
 export type PaymentStatus =
   | "unpaid"
@@ -436,7 +436,7 @@ export interface ApiPayment {
   currency: string;
   status: PaymentStatus;
   gatewayPaymentId: string;
-  /** bKash's own transaction id, present only once the payment is verified. */
+  /** The bank/wallet transaction id (SSLCommerz `bank_tran_id`), present only once the payment is verified. */
   transactionId?: string;
   merchantInvoiceNumber: string;
   paidAt?: string;
@@ -445,11 +445,12 @@ export interface ApiPayment {
   updatedAt: string;
 }
 
-/** The safe subset returned when a payment is created — enough to send the customer to bKash, nothing more. */
+/** The safe subset returned when a payment is created — enough to send the customer to SSLCommerz, nothing more. */
 export interface ApiCreatedPayment {
   id: string;
   gatewayPaymentId: string;
-  bkashURL: string;
+  /** SSLCommerz hosted checkout page. */
+  gatewayUrl: string;
   amountBDT: number;
   currency: string;
   status: PaymentStatus;

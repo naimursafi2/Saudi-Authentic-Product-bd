@@ -9,7 +9,7 @@ let connecting: Promise<RedisClient> | null = null;
 /**
  * Lazily-connected shared Redis client. Returns `null` when `REDIS_URL`
  * isn't set (tests / a dev machine without Redis) so callers can fall back
- * to an in-process store — same graceful-degrade pattern as SMTP/SMS/bKash.
+ * to an in-process store — same graceful-degrade pattern as SMTP/SMS/SSLCommerz.
  */
 export async function getRedis(): Promise<RedisClient | null> {
   if (!isRedisConfigured) return null;

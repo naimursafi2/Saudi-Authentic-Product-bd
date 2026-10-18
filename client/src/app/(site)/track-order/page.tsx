@@ -14,8 +14,7 @@ import type { ApiOrder } from "@/types/api";
 
 const PAYMENT_LABELS: Record<ApiOrder["paymentMethod"], string> = {
   cod: "Cash on Delivery",
-  bkash: "bKash",
-  nagad: "Nagad",
+  sslcommerz: "Online Payment (SSLCommerz)",
 };
 
 function formatDateTime(value: string) {

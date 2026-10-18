@@ -80,26 +80,26 @@ describe("PrintInvoiceButton", () => {
     });
   });
 
-  it("shows the bKash transaction reference on a paid gateway order", async () => {
+  it("shows the gateway transaction reference on a paid online order", async () => {
     getPaymentForOrder.mockResolvedValue({
       data: {
         payment: {
           _id: "pay1",
-          transactionId: "BKH7X2QK91",
+          transactionId: "SSL7X2QK91",
           paidAt: "2026-01-02T10:00:00.000Z",
           status: "paid",
         } as ApiPayment,
       },
     });
     const user = userEvent.setup();
-    render(<PrintInvoiceButton order={{ ...order, paymentMethod: "bkash", isPaid: true }} />);
+    render(<PrintInvoiceButton order={{ ...order, paymentMethod: "sslcommerz", isPaid: true }} />);
 
     await user.click(screen.getByRole("button", { name: /print invoice/i }));
 
-    expect(screen.getByText("bKash")).toBeInTheDocument();
+    expect(screen.getByText("Online Payment (SSLCommerz)")).toBeInTheDocument();
     expect(screen.getByText("Paid")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("BKH7X2QK91")).toBeInTheDocument();
+      expect(screen.getByText("SSL7X2QK91")).toBeInTheDocument();
     });
   });
 

@@ -1,17 +1,16 @@
 import { Schema, model, type Document, type Model, type Types } from "mongoose";
 
 /**
- * Gateway providers a payment record can belong to. Only `bkash` exists today
- * — `cod` deliberately has no record here, because a cash-on-delivery order
- * has no gateway transaction to reconcile and is fully described by
+ * Gateway providers a payment record can belong to. Only `sslcommerz` exists
+ * today — `cod` deliberately has no record here, because a cash-on-delivery
+ * order has no gateway transaction to reconcile and is fully described by
  * `Order.paymentMethod`/`Order.isPaid` already.
  *
  * Adding a future gateway is: a value here, a provider client alongside
- * `config/bkash.ts`, and a branch in `payment.service.ts`. Nothing in the
- * order pipeline is hardcoded around bKash, so no order/inventory code
- * changes.
+ * `config/sslcommerz.ts`, and a branch in `payment.service.ts`. Nothing in
+ * the order pipeline is hardcoded around one gateway.
  */
-export const PAYMENT_PROVIDERS = ["bkash"] as const;
+export const PAYMENT_PROVIDERS = ["sslcommerz"] as const;
 export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number];
 
 /**
@@ -56,9 +55,9 @@ export interface IPayment extends Document {
   amountBDT: number;
   currency: string;
   status: PaymentStatus;
-  /** The gateway's own payment identifier (bKash `paymentID`). */
+  /** Our own unique SSLCommerz `tran_id` for this attempt. */
   gatewayPaymentId: string;
-  /** The gateway's settled transaction id (bKash `trxID`), only once verified. */
+  /** The bank/wallet transaction id (SSLCommerz `bank_tran_id`), only once verified. */
   transactionId?: string;
   /** The order number sent to the gateway as its merchant reference — re-checked on verification. */
   merchantInvoiceNumber: string;
@@ -67,7 +66,7 @@ export interface IPayment extends Document {
   /**
    * Non-sensitive gateway response fields kept for support/reconciliation
    * (status codes, messages, the echoed amount). Never a token, credential,
-   * or anything from the gateway's auth exchange — see `config/bkash.ts`.
+   * or anything from the gateway's auth exchange — see `config/sslcommerz.ts`.
    */
   gatewayMetadata?: Record<string, unknown>;
   initiatedBy: Types.ObjectId;

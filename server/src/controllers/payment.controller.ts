@@ -5,47 +5,45 @@ import { ApiError } from "../utils/ApiError";
 import { paramStr } from "../utils/params";
 import * as paymentService from "../services/payment.service";
 import { OrderModel } from "../models/Order.model";
-import { isBkashConfigured } from "../config/bkash";
-import { missingBkashEnvKeys } from "../config/env";
+import { isSslcommerzConfigured } from "../config/sslcommerz";
+import { env, missingSslcommerzEnvKeys } from "../config/env";
 import type { ListPaymentsQuery } from "../validators/payment.validator";
 
 /** Booleans only — the storefront needs to know which providers are live, never how they are configured. */
 export const getPaymentConfig = catchAsync(async (_req: Request, res: Response) => {
   sendSuccess(res, 200, "Payment configuration fetched", {
-    providers: { bkash: isBkashConfigured },
+    providers: { sslcommerz: isSslcommerzConfigured },
   });
 });
 
 /**
- * Staff-only diagnostics. An unconfigured gateway is invisible to customers by
- * design (a payment method that cannot take money should not be offered), so
- * this is the one place that explains *why* bKash is absent from checkout and
- * exactly what is missing. Variable names only — no values.
+ * Staff-only diagnostics: explains *why* online payment is absent from
+ * checkout and exactly what is missing. Variable names only — no values.
  */
 export const getGatewayStatus = catchAsync(async (_req: Request, res: Response) => {
-  const missingKeys = missingBkashEnvKeys();
+  const missingKeys = missingSslcommerzEnvKeys();
   sendSuccess(res, 200, "Gateway status fetched", {
-    bkash: {
+    sslcommerz: {
       configured: missingKeys.length === 0,
       missingKeys,
+      mode: env.SSLCOMMERZ_IS_LIVE ? "live" : "sandbox",
     },
   });
 });
 
-export const createBkashPayment = catchAsync(async (req: Request, res: Response) => {
-  const payment = await paymentService.createBkashPaymentForOrder(req.body.orderId, {
+export const initSslcommerzPayment = catchAsync(async (req: Request, res: Response) => {
+  const payment = await paymentService.initSslcommerzPaymentForOrder(req.body.orderId, {
     id: req.user!.id,
     role: req.user!.role,
   });
 
-  // Only what the customer's browser genuinely needs to continue. The gateway
-  // payment id and checkout URL are the whole safe surface — credentials, the
-  // grant token and the raw gateway response never leave the server.
-  sendSuccess(res, 201, "bKash payment created", {
+  // Only what the customer's browser genuinely needs to continue — the
+  // hosted checkout URL. Store credentials never leave the server.
+  sendSuccess(res, 201, "Payment session created", {
     payment: {
       id: payment._id.toString(),
       gatewayPaymentId: payment.gatewayPaymentId,
-      bkashURL: payment.gatewayMetadata?.bkashURL,
+      gatewayUrl: payment.gatewayMetadata?.gatewayUrl,
       amountBDT: payment.amountBDT,
       currency: payment.currency,
       status: payment.status,
@@ -53,22 +51,65 @@ export const createBkashPayment = catchAsync(async (req: Request, res: Response)
   });
 });
 
-export const executeBkashPayment = catchAsync(async (req: Request, res: Response) => {
-  const { payment, order } = await paymentService.executeBkashPaymentForOrder(req.body.paymentID, {
-    id: req.user!.id,
-    role: req.user!.role,
-  });
-  sendSuccess(res, 200, "Payment successful", { payment, order });
-});
+/** SSLCommerz posts form fields; some setups send them as a query string instead. */
+function callbackFields(req: Request): Record<string, unknown> {
+  const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+  return Object.keys(body).length > 0 ? body : (req.query as Record<string, unknown>);
+}
 
-export const cancelBkashPayment = catchAsync(async (req: Request, res: Response) => {
-  const payment = await paymentService.cancelBkashPaymentForOrder(
-    req.body.paymentID,
-    { id: req.user!.id, role: req.user!.role },
-    req.body.reason
+function redirectToResult(res: Response, outcome: paymentService.CallbackOutcome) {
+  res.redirect(
+    303,
+    paymentService.paymentResultUrl(outcome.page, {
+      orderId: outcome.orderId,
+      orderNumber: outcome.orderNumber,
+      reason: outcome.reason,
+    })
   );
-  sendSuccess(res, 200, "Payment cancelled", { payment });
-});
+}
+
+/**
+ * The browser-facing callbacks below never fail with a JSON error — the
+ * customer is always redirected to a storefront result page, whatever
+ * happened. Verification itself happens server-to-server in the service.
+ */
+export const sslcommerzSuccessCallback = async (req: Request, res: Response) => {
+  try {
+    redirectToResult(res, await paymentService.handleSslcommerzSuccess(callbackFields(req)));
+  } catch (err) {
+    console.error("[payments] success callback error:", (err as Error).message);
+    redirectToResult(res, { page: "failed", reason: "verification_pending" });
+  }
+};
+
+export const sslcommerzFailCallback = async (req: Request, res: Response) => {
+  try {
+    redirectToResult(res, await paymentService.handleSslcommerzFailOrCancel(callbackFields(req), "failed"));
+  } catch (err) {
+    console.error("[payments] fail callback error:", (err as Error).message);
+    redirectToResult(res, { page: "failed" });
+  }
+};
+
+export const sslcommerzCancelCallback = async (req: Request, res: Response) => {
+  try {
+    redirectToResult(res, await paymentService.handleSslcommerzFailOrCancel(callbackFields(req), "cancelled"));
+  } catch (err) {
+    console.error("[payments] cancel callback error:", (err as Error).message);
+    redirectToResult(res, { page: "cancelled" });
+  }
+};
+
+/** Server-to-server notification from SSLCommerz. Always 200 so the gateway doesn't retry forever. */
+export const sslcommerzIpn = async (req: Request, res: Response) => {
+  try {
+    const { handled } = await paymentService.handleSslcommerzIpn(callbackFields(req));
+    res.status(200).json({ success: true, message: handled ? "IPN processed" : "IPN ignored" });
+  } catch (err) {
+    console.error("[payments] IPN error:", (err as Error).message);
+    res.status(200).json({ success: false, message: "IPN could not be processed" });
+  }
+};
 
 export const listPayments = catchAsync(async (req: Request, res: Response) => {
   const filter = req.query as unknown as ListPaymentsQuery;

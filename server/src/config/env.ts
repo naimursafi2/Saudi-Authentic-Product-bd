@@ -44,19 +44,27 @@ const envSchema = z.object({
   SMS_API_KEY: z.string().optional().default(""),
   SMS_SENDER_ID: z.string().optional().default(""),
 
-  // bKash Tokenized Checkout API. Leave blank until real credentials are
-  // provisioned — bKash payment creation/verification returns a clear 503
-  // until these are set (see config/bkash.ts), same graceful-degrade
-  // pattern as Cloudinary/SMTP/SMS above. Dummy defaults only.
-  BKASH_BASE_URL: z.string().optional().default(""),
-  BKASH_USERNAME: z.string().optional().default(""),
-  BKASH_PASSWORD: z.string().optional().default(""),
-  BKASH_APP_KEY: z.string().optional().default(""),
-  BKASH_APP_SECRET: z.string().optional().default(""),
+  // SSLCommerz hosted checkout (cards, mobile banking, net banking). Leave
+  // blank until credentials are provisioned — online payment returns a clear
+  // 503 and the storefront hides the option until both are set (see
+  // config/sslcommerz.ts). SSLCOMMERZ_IS_LIVE=true switches from the sandbox
+  // to the live gateway.
+  SSLCOMMERZ_STORE_ID: z.string().optional().default(""),
+  SSLCOMMERZ_STORE_PASSWORD: z.string().optional().default(""),
+  SSLCOMMERZ_IS_LIVE: z
+    .preprocess((v) => (typeof v === "string" ? ["true", "1", "yes"].includes(v.trim().toLowerCase()) : v), z.boolean())
+    .optional()
+    .default(false),
+
+  // Public base URL of THIS API server (no trailing slash, no /api/v1) —
+  // SSLCommerz posts the customer's browser back to
+  // `${SERVER_PUBLIC_URL}${API_PREFIX}/payments/sslcommerz/...` and sends
+  // its IPN there. Defaults to http://localhost:PORT for local dev.
+  SERVER_PUBLIC_URL: z.string().optional().default(""),
 
   // Shared secret with the Next.js frontend's `/api/revalidate` route — see
   // utils/revalidateFrontend.ts. Left blank means "not configured yet",
-  // same graceful-degrade pattern as Cloudinary/SMTP/SMS/bKash above: the
+  // same graceful-degrade pattern as Cloudinary/SMTP/SMS/SSLCommerz above: the
   // admin portal keeps working exactly as before, it just falls back to the
   // frontend's own long safety-net cache window instead of an instant push.
   REVALIDATE_SECRET: z.string().optional().default(""),
@@ -112,26 +120,29 @@ export const isRedisConfigured = Boolean(env.REDIS_URL) && env.NODE_ENV !== "tes
 
 export const isRevalidateConfigured = Boolean(env.REVALIDATE_SECRET);
 
-/** Every variable bKash needs. All five must be set for the gateway to work. */
-export const BKASH_ENV_KEYS = [
-  "BKASH_BASE_URL",
-  "BKASH_USERNAME",
-  "BKASH_PASSWORD",
-  "BKASH_APP_KEY",
-  "BKASH_APP_SECRET",
-] as const;
+/** Every variable SSLCommerz needs. Both must be set for the gateway to work. */
+export const SSLCOMMERZ_ENV_KEYS = ["SSLCOMMERZ_STORE_ID", "SSLCOMMERZ_STORE_PASSWORD"] as const;
 
 /**
- * Which of the five are still unset. Reported to staff (never publicly) so a
+ * Which of them are still unset. Reported to staff (never publicly) so a
  * half-configured gateway names the missing variables instead of silently
- * behaving as if bKash simply doesn't exist — only the variable *names* are
- * ever returned, never their values.
+ * behaving as if online payment simply doesn't exist — only the variable
+ * *names* are ever returned, never their values.
  */
-export function missingBkashEnvKeys(): string[] {
-  return BKASH_ENV_KEYS.filter((key) => !env[key]);
+export function missingSslcommerzEnvKeys(): string[] {
+  return SSLCOMMERZ_ENV_KEYS.filter((key) => !env[key]);
 }
 
-export const isBkashConfigured = missingBkashEnvKeys().length === 0;
+/**
+ * Never live under jest: tests stub `config/sslcommerz` explicitly, and a
+ * developer's real sandbox credentials in `.env` must not make the test
+ * suite call out to the gateway.
+ */
+export const isSslcommerzConfigured =
+  missingSslcommerzEnvKeys().length === 0 && env.NODE_ENV !== "test";
+
+/** Where SSLCommerz sends the customer's browser and its IPN back to. */
+export const serverPublicUrl = (env.SERVER_PUBLIC_URL || `http://localhost:${env.PORT}`).replace(/\/+$/, "");
 
 /**
  * `CLIENT_ORIGIN` may be a single origin or a comma-separated list (e.g. a

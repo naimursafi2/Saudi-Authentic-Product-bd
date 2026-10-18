@@ -1,22 +1,21 @@
 /**
- * The bKash gateway client is stubbed here: the test environment has no
- * `BKASH_*` credentials, so the real `config/bkash` module would refuse every
- * call with a 503. Mocking it also lets each test dictate exactly what bKash
- * "replies", which is the only way to exercise the fraud paths (a settled
- * amount that doesn't match the order, a transaction referencing someone
- * else's invoice, a replayed callback). Mock first, import the app after, so
- * the service picks up the stub.
+ * The SSLCommerz gateway client is stubbed here: the test environment never
+ * talks to the real gateway (see `isSslcommerzConfigured` in config/env.ts),
+ * and mocking lets each test dictate exactly what SSLCommerz "replies" —
+ * the only way to exercise the fraud paths (a settled amount that doesn't
+ * match the order, a forged success/cancel post, a replayed callback). Mock
+ * first, import the app after, so the service picks up the stub.
  */
-const createBkashPayment = jest.fn();
-const executeBkashPayment = jest.fn();
-const queryBkashPayment = jest.fn();
+const initSslcommerzPayment = jest.fn();
+const validateSslcommerzPayment = jest.fn();
+const querySslcommerzTransaction = jest.fn();
 
-jest.mock("../../config/bkash", () => ({
-  isBkashConfigured: true,
-  createBkashPayment: (...args: unknown[]) => createBkashPayment(...args),
-  executeBkashPayment: (...args: unknown[]) => executeBkashPayment(...args),
-  queryBkashPayment: (...args: unknown[]) => queryBkashPayment(...args),
-  resetBkashTokenCache: jest.fn(),
+jest.mock("../../config/sslcommerz", () => ({
+  isSslcommerzConfigured: true,
+  isSuccessfulStatus: (status: string | undefined) => status === "VALID" || status === "VALIDATED",
+  initSslcommerzPayment: (...args: unknown[]) => initSslcommerzPayment(...args),
+  validateSslcommerzPayment: (...args: unknown[]) => validateSslcommerzPayment(...args),
+  querySslcommerzTransaction: (...args: unknown[]) => querySslcommerzTransaction(...args),
 }));
 
 import request from "supertest";
@@ -32,6 +31,8 @@ import { runPaymentReconciliationTick } from "../../services/scheduler.service";
 
 const app = createApp();
 
+const CALLBACK = "/api/v1/payments/sslcommerz";
+
 const shippingAddress = {
   firstName: "Jane",
   lastName: "Doe",
@@ -42,7 +43,6 @@ const shippingAddress = {
   cityArea: "Gulshan",
 };
 
-/** Safe to call more than once per test — both slugs are uniquely indexed. */
 let seedCounter = 0;
 async function seedProduct() {
   seedCounter += 1;
@@ -62,8 +62,8 @@ async function seedProduct() {
   });
 }
 
-/** Places a real bKash order through the API so every downstream figure is server-computed. */
-async function placeBkashOrder(token: string, quantity = 2) {
+/** Places a real online-payment order through the API so every figure is server-computed. 2 x ৳1000 + ৳60 = ৳2060. */
+async function placeOnlineOrder(token: string, quantity = 2, extra: Record<string, unknown> = {}) {
   const product = await seedProduct();
   const res = await request(app)
     .post("/api/v1/orders")
@@ -72,30 +72,45 @@ async function placeBkashOrder(token: string, quantity = 2) {
       items: [{ productId: product._id.toString(), variantId: product.variants[0]!._id!.toString(), quantity }],
       shippingAddress,
       deliveryMethod: "standard",
-      paymentMethod: "bkash",
+      paymentMethod: "sslcommerz",
+      ...extra,
     });
   expect(res.status).toBe(201);
   return { product, order: res.body.data.order as { _id: string; orderNumber: string; totalBDT: number } };
 }
 
-function stubCreate(paymentID = "TR0011bkash01") {
-  createBkashPayment.mockResolvedValue({
-    paymentID,
-    bkashURL: `https://sandbox.bkash.test/checkout/${paymentID}`,
-    amount: "0.00",
-    currency: "BDT",
-    transactionStatus: "Initiated",
-  });
+function stubInit() {
+  initSslcommerzPayment.mockImplementation(async (input: { tranId: string }) => ({
+    gatewayUrl: `https://sandbox.sslcommerz.test/gwprocess/v4/gw.php?Q=pay&SESSIONKEY=${input.tranId}`,
+    sessionKey: "SESSION",
+  }));
 }
 
-/**
- * Backdates a payment's `createdAt` so the reconciliation sweep treats it as
- * stale — far less brittle than faking timers around an in-memory MongoDB.
- *
- * Goes through the raw driver on purpose: Mongoose marks a `timestamps: true`
- * schema's `createdAt` as immutable, so a normal `updateOne` would drop this
- * write silently and the sweep would simply never see the payment as old.
- */
+/** Starts a payment through the API and returns its tran_id. */
+async function startPayment(token: string, orderId: string): Promise<string> {
+  stubInit();
+  const res = await request(app)
+    .post(`${CALLBACK}/init`)
+    .set(...authHeader(token))
+    .send({ orderId });
+  expect(res.status).toBe(201);
+  return res.body.data.payment.gatewayPaymentId as string;
+}
+
+function validResult(tranId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    status: "VALID",
+    tranId,
+    valId: "VAL123",
+    amount: "2060.00",
+    currency: "BDT",
+    bankTranId: "BNK7X2QK91",
+    riskLevel: "0",
+    ...overrides,
+  };
+}
+
+/** Backdates a payment's `createdAt` via the raw driver (Mongoose treats it as immutable). */
 async function agePayment(gatewayPaymentId: string, ageMs: number) {
   await PaymentModel.collection.updateOne(
     { gatewayPaymentId },
@@ -103,455 +118,318 @@ async function agePayment(gatewayPaymentId: string, ageMs: number) {
   );
 }
 
-function completedResult(overrides: Record<string, unknown> = {}) {
-  return {
-    paymentID: "TR0011bkash01",
-    trxID: "BKH7X2QK91",
-    transactionStatus: "Completed",
-    amount: "2060.00",
-    currency: "BDT",
-    merchantInvoiceNumber: undefined,
-    ...overrides,
-  };
+function redirectPath(res: request.Response): string {
+  return new URL(res.headers.location as string).pathname;
 }
 
-describe("bKash payment integration", () => {
+describe("SSLCommerz payment integration", () => {
   beforeAll(async () => {
     await connectTestDb();
   }, 60000);
 
   afterEach(async () => {
     await clearTestDb();
+    jest.resetAllMocks();
   });
 
   afterAll(async () => {
     await disconnectTestDb();
   });
 
-  it("creates a payment for the server-computed order total, never a client-supplied amount", async () => {
+  it("opens a session for the server-computed order total, never a client-supplied amount", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
+    const { order } = await placeOnlineOrder(token);
+    stubInit();
 
     const res = await request(app)
-      .post("/api/v1/payments/bkash/create")
+      .post(`${CALLBACK}/init`)
       .set(...authHeader(token))
-      // A tampered amount in the body is simply not part of the contract —
-      // there is no field for it to land in.
-      .send({ orderId: order._id, amountBDT: 10, totalBDT: 10 });
+      .send({ orderId: order._id, amount: 1, total_amount: 1 });
 
     expect(res.status).toBe(201);
-    expect(res.body.data.payment.amountBDT).toBe(order.totalBDT);
-    expect(res.body.data.payment.bkashURL).toContain("https://sandbox.bkash.test/");
-    expect(createBkashPayment).toHaveBeenCalledWith(
-      expect.objectContaining({ amountBDT: order.totalBDT, merchantInvoiceNumber: order.orderNumber })
+    expect(res.body.data.payment.amountBDT).toBe(2060);
+    expect(res.body.data.payment.gatewayUrl).toContain("sslcommerz");
+    expect(initSslcommerzPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountBDT: 2060,
+        tranId: expect.stringContaining(order.orderNumber),
+        successUrl: expect.stringContaining("/payments/sslcommerz/success"),
+        failUrl: expect.stringContaining("/payments/sslcommerz/fail"),
+        cancelUrl: expect.stringContaining("/payments/sslcommerz/cancel"),
+        ipnUrl: expect.stringContaining("/payments/sslcommerz/ipn"),
+      })
     );
-
-    // Nothing safe-listed leaks a credential or a gateway token.
-    expect(JSON.stringify(res.body)).not.toMatch(/app_?key|app_?secret|id_token|password/i);
+    // Credentials never appear in what the browser gets back.
+    expect(JSON.stringify(res.body)).not.toMatch(/store_?passw|store_?id/i);
   });
 
-  it("verifies a completed payment, marks the order paid and confirms it exactly once", async () => {
+  it("verifies a success callback with SSLCommerz, marks the order paid and redirects to the success page", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order, product } = await placeBkashOrder(token);
-    stubCreate();
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranId));
 
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    executeBkashPayment.mockResolvedValue(
-      completedResult({ amount: String(order.totalBDT), merchantInvoiceNumber: order.orderNumber })
-    );
-
+    // A cross-site form POST from the gateway's own domain — must not be
+    // blocked by the CORS allow-list.
     const res = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
+      .post(`${CALLBACK}/success`)
+      .set("Origin", "https://sandbox.sslcommerz.com")
+      .type("form")
+      .send({ tran_id: tranId, val_id: "VAL123", status: "VALID", amount: "2060.00" });
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.payment.status).toBe("paid");
-    expect(res.body.data.payment.transactionId).toBe("BKH7X2QK91");
-    expect(res.body.data.order.isPaid).toBe(true);
-    expect(res.body.data.order.status).toBe("confirmed");
+    expect(res.status).toBe(303);
+    expect(redirectPath(res)).toBe("/checkout/payment/success");
+    expect(res.headers.location).toContain(`order=${order.orderNumber}`);
+    expect(validateSslcommerzPayment).toHaveBeenCalledWith("VAL123");
 
-    // Stock was consumed once when the order was placed; payment verification
-    // has no inventory side effect at all.
-    const afterProduct = await ProductModel.findById(product._id);
-    expect(afterProduct?.variants[0]?.stock).toBe(8);
-  });
-
-  it("is idempotent — a replayed callback neither re-confirms the order nor double-deducts stock", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const { order, product } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    executeBkashPayment.mockResolvedValue(
-      completedResult({ amount: String(order.totalBDT), merchantInvoiceNumber: order.orderNumber })
-    );
-
-    const first = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
-    const second = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
-
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    expect(second.body.data.payment.status).toBe("paid");
-
-    // The replay never even reached the gateway a second time.
-    expect(executeBkashPayment).toHaveBeenCalledTimes(1);
+    const payment = await PaymentModel.findOne({ gatewayPaymentId: tranId });
+    expect(payment?.status).toBe("paid");
+    expect(payment?.transactionId).toBe("BNK7X2QK91");
 
     const stored = await OrderModel.findById(order._id);
-    expect(stored?.statusHistory.filter((entry) => entry.status === "confirmed")).toHaveLength(1);
-
-    const payments = await PaymentModel.find({ order: order._id });
-    expect(payments).toHaveLength(1);
-
-    const afterProduct = await ProductModel.findById(product._id);
-    expect(afterProduct?.variants[0]?.stock).toBe(8);
+    expect(stored?.isPaid).toBe(true);
+    expect(stored?.status).toBe("confirmed");
   });
 
-  it("rejects a gateway transaction whose settled amount does not match the order total", async () => {
+  it("is idempotent — a replayed success callback or IPN neither re-confirms the order nor double-deducts stock", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
+    const { order, product } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranId, { status: "VALIDATED" }));
 
-    executeBkashPayment.mockResolvedValue(
-      completedResult({ amount: "10.00", merchantInvoiceNumber: order.orderNumber })
-    );
-    queryBkashPayment.mockResolvedValue(
-      completedResult({ amount: "10.00", merchantInvoiceNumber: order.orderNumber })
-    );
+    const body = { tran_id: tranId, val_id: "VAL123", status: "VALID" };
+    const first = await request(app).post(`${CALLBACK}/success`).type("form").send(body);
+    const second = await request(app).post(`${CALLBACK}/success`).type("form").send(body);
+    const ipn = await request(app).post(`${CALLBACK}/ipn`).type("form").send(body);
 
-    const res = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
-
-    expect(res.status).toBe(400);
-    // The customer is never told which check failed.
-    expect(res.body.message).not.toMatch(/10\.00/);
+    expect(redirectPath(first)).toBe("/checkout/payment/success");
+    expect(redirectPath(second)).toBe("/checkout/payment/success");
+    expect(ipn.status).toBe(200);
 
     const stored = await OrderModel.findById(order._id);
-    expect(stored?.isPaid).toBe(false);
-    expect(stored?.status).toBe("pending");
-
-    const payment = await PaymentModel.findOne({ gatewayPaymentId: "TR0011bkash01" });
-    expect(payment?.status).toBe("failed");
-    expect(payment?.failureReason).toMatch(/10/);
+    expect(stored?.statusHistory.filter((h) => h.status === "confirmed")).toHaveLength(1);
+    expect((await ProductModel.findById(product._id))?.variants[0]?.stock).toBe(8);
+    expect(await PaymentModel.countDocuments({ status: "paid" })).toBe(1);
   });
 
-  it("rejects a transaction that references a different order's invoice", async () => {
+  it("rejects a validated transaction whose amount does not match the order total", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    executeBkashPayment.mockResolvedValue(
-      completedResult({ amount: String(order.totalBDT), merchantInvoiceNumber: "SAP-19700101-0001" })
-    );
-    queryBkashPayment.mockResolvedValue(
-      completedResult({ amount: String(order.totalBDT), merchantInvoiceNumber: "SAP-19700101-0001" })
-    );
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranId, { amount: "10.00" }));
 
     const res = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
+      .post(`${CALLBACK}/success`)
+      .type("form")
+      .send({ tran_id: tranId, val_id: "VAL123", amount: "2060.00" });
 
-    expect(res.status).toBe(400);
-    const stored = await OrderModel.findById(order._id);
-    expect(stored?.isPaid).toBe(false);
+    expect(redirectPath(res)).toBe("/checkout/payment/failed");
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranId }))?.status).toBe("failed");
+    expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
   });
 
-  it("404s on a fabricated transaction id and on another customer's payment", async () => {
+  it("rejects a val_id that belongs to a different transaction", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    // A real, valid val_id — but from someone else's (cheaper) payment.
+    validateSslcommerzPayment.mockResolvedValue(validResult("SAP-OTHER-ORDER-abc123"));
+
+    const res = await request(app)
+      .post(`${CALLBACK}/success`)
+      .type("form")
+      .send({ tran_id: tranId, val_id: "STOLEN" });
+
+    expect(redirectPath(res)).toBe("/checkout/payment/failed");
+    expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
+  });
+
+  it("never trusts a forged success post — SSLCommerz's validation API has the final say", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    validateSslcommerzPayment.mockResolvedValue({ status: "INVALID_TRANSACTION" });
+
+    const res = await request(app)
+      .post(`${CALLBACK}/success`)
+      .type("form")
+      .send({ tran_id: tranId, val_id: "FORGED", status: "VALID", amount: "2060.00" });
+
+    expect(redirectPath(res)).toBe("/checkout/payment/failed");
+    expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
+  });
+
+  it("redirects an unknown transaction to the failed page without touching anything", async () => {
+    const res = await request(app)
+      .post(`${CALLBACK}/success`)
+      .type("form")
+      .send({ tran_id: "NOPE-123", val_id: "X" });
+    expect(redirectPath(res)).toBe("/checkout/payment/failed");
+    expect(validateSslcommerzPayment).not.toHaveBeenCalled();
+  });
+
+  it("closes a cancelled payment only after SSLCommerz confirms it was not paid", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    querySslcommerzTransaction.mockResolvedValue([{ status: "CANCELLED", tranId }]);
+
+    const res = await request(app).post(`${CALLBACK}/cancel`).type("form").send({ tran_id: tranId });
+
+    expect(redirectPath(res)).toBe("/checkout/payment/cancelled");
+    expect(querySslcommerzTransaction).toHaveBeenCalledWith(tranId);
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranId }))?.status).toBe("cancelled");
+    expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
+  });
+
+  it("a forged cancel post cannot void a payment SSLCommerz says was actually paid", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    querySslcommerzTransaction.mockResolvedValue([validResult(tranId)]);
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranId));
+
+    const res = await request(app).post(`${CALLBACK}/cancel`).type("form").send({ tran_id: tranId });
+
+    expect(redirectPath(res)).toBe("/checkout/payment/success");
+    expect((await OrderModel.findById(order._id))?.isPaid).toBe(true);
+  });
+
+  it("marks a failed payment failed and redirects to the failed page", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    querySslcommerzTransaction.mockResolvedValue([{ status: "FAILED", tranId, error: "Declined" }]);
+
+    const res = await request(app).post(`${CALLBACK}/fail`).type("form").send({ tran_id: tranId });
+
+    expect(redirectPath(res)).toBe("/checkout/payment/failed");
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranId }))?.status).toBe("failed");
+  });
+
+  it("refuses to start a payment on someone else's order, or a second one on a paid order", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
     const { token: otherToken } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    const fabricated = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TOTALLY-MADE-UP" });
-    expect(fabricated.status).toBe(404);
+    const { order } = await placeOnlineOrder(token);
+    stubInit();
 
     const foreign = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(otherToken))
-      .send({ paymentID: "TR0011bkash01" });
-    expect(foreign.status).toBe(404);
-    expect(executeBkashPayment).not.toHaveBeenCalled();
-  });
-
-  it("refuses to start a payment on someone else's order", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const { token: otherToken } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-
-    const res = await request(app)
-      .post("/api/v1/payments/bkash/create")
+      .post(`${CALLBACK}/init`)
       .set(...authHeader(otherToken))
       .send({ orderId: order._id });
+    expect(foreign.status).toBe(403);
 
-    expect(res.status).toBe(403);
-    expect(createBkashPayment).not.toHaveBeenCalled();
-  });
-
-  it("refuses a second payment on an already-paid order", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
+    await OrderModel.updateOne({ _id: order._id }, { isPaid: true });
+    const paid = await request(app)
+      .post(`${CALLBACK}/init`)
       .set(...authHeader(token))
       .send({ orderId: order._id });
-    executeBkashPayment.mockResolvedValue(
-      completedResult({ amount: String(order.totalBDT), merchantInvoiceNumber: order.orderNumber })
-    );
-    await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
+    expect(paid.status).toBe(409);
+  });
 
+  it("refuses online payment for a cash-on-delivery order", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token, 1, { paymentMethod: "cod" });
+    stubInit();
     const res = await request(app)
-      .post("/api/v1/payments/bkash/create")
+      .post(`${CALLBACK}/init`)
       .set(...authHeader(token))
       .send({ orderId: order._id });
-
-    expect(res.status).toBe(409);
-  });
-
-  it("reuses one gateway session across repeated Pay Now clicks instead of opening a chargeable second one", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-
-    const first = await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-    const second = await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    expect(second.status).toBe(201);
-    expect(second.body.data.payment.gatewayPaymentId).toBe(first.body.data.payment.gatewayPaymentId);
-    expect(createBkashPayment).toHaveBeenCalledTimes(1);
-    expect(await PaymentModel.countDocuments({ order: order._id })).toBe(1);
-  });
-
-  it("cannot complete a payment the customer cancelled", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    const cancelled = await request(app)
-      .post("/api/v1/payments/bkash/cancel")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
-    expect(cancelled.status).toBe(200);
-    expect(cancelled.body.data.payment.status).toBe("cancelled");
-
-    const res = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
     expect(res.status).toBe(400);
-    expect(executeBkashPayment).not.toHaveBeenCalled();
+  });
 
-    const stored = await OrderModel.findById(order._id);
-    expect(stored?.isPaid).toBe(false);
+  it("reuses one gateway session across repeated Pay Now clicks", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const { order } = await placeOnlineOrder(token);
+    const first = await startPayment(token, order._id);
+    const second = await startPayment(token, order._id);
+
+    expect(second).toBe(first);
+    expect(initSslcommerzPayment).toHaveBeenCalledTimes(1);
+    expect(await PaymentModel.countDocuments({ order: order._id })).toBe(1);
   });
 
   it("gates the staff payment list on payments.view, and exposes no way to settle a payment by hand", async () => {
     const { token: customerToken } = await createAuthedUser({ role: "customer" });
-    const { token: employeeToken } = await createAuthedUser({ role: "employee" });
     const { token: managerToken } = await createAuthedUser({ role: "order_manager" });
-    const { token: adminToken } = await createAuthedUser({ role: "admin" });
+    const { token: superToken } = await createAuthedUser({ role: "super_admin" });
 
     expect((await request(app).get("/api/v1/payments").set(...authHeader(customerToken))).status).toBe(403);
-    expect((await request(app).get("/api/v1/payments").set(...authHeader(employeeToken))).status).toBe(403);
     expect((await request(app).get("/api/v1/payments").set(...authHeader(managerToken))).status).toBe(200);
-    expect((await request(app).get("/api/v1/payments").set(...authHeader(adminToken))).status).toBe(200);
 
-    // Verification is automatic — no staff endpoint settles a payment, not
-    // even for a Super Admin. The route simply does not exist.
-    const { token: superToken } = await createAuthedUser({ role: "super_admin" });
     const someId = "0123456789abcdef01234567";
     expect(
       (await request(app).post(`/api/v1/payments/${someId}/verify`).set(...authHeader(superToken))).status
     ).toBe(404);
   });
 
-  it("automatically reconciles a payment whose customer never made it back to the callback", async () => {
+  it("automatically reconciles a payment whose customer never made it back", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    // The customer paid on bKash but their browser died before the callback.
-    await agePayment("TR0011bkash01", 20 * 60 * 1000);
-    queryBkashPayment.mockResolvedValue(
-      completedResult({ amount: String(order.totalBDT), merchantInvoiceNumber: order.orderNumber })
-    );
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    await agePayment(tranId, 20 * 60 * 1000);
+    querySslcommerzTransaction.mockResolvedValue([validResult(tranId)]);
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranId));
 
     await runPaymentReconciliationTick();
 
-    const payment = await PaymentModel.findOne({ gatewayPaymentId: "TR0011bkash01" });
-    expect(payment?.status).toBe("paid");
-    expect(payment?.transactionId).toBe("BKH7X2QK91");
-
-    const stored = await OrderModel.findById(order._id);
-    expect(stored?.isPaid).toBe(true);
-    expect(stored?.status).toBe("confirmed");
-    expect(stored?.statusHistory.filter((e) => e.status === "confirmed")).toHaveLength(1);
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranId }))?.status).toBe("paid");
+    expect((await OrderModel.findById(order._id))?.isPaid).toBe(true);
   });
 
-  it("leaves a fresh unfinished payment alone, so the sweep never races the customer's own callback", async () => {
+  it("leaves a fresh unfinished payment alone, so the sweep never races the customer", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
+    const { order } = await placeOnlineOrder(token);
+    await startPayment(token, order._id);
 
-    // Only a couple of minutes old — the customer is still on the bKash page.
     await runPaymentReconciliationTick();
 
-    expect(queryBkashPayment).not.toHaveBeenCalled();
-    expect((await PaymentModel.findOne({ gatewayPaymentId: "TR0011bkash01" }))?.status).toBe("initiated");
+    expect(querySslcommerzTransaction).not.toHaveBeenCalled();
   });
 
-  it("holds off failing a slow customer, then abandons the payment once it is past the checkout window", async () => {
+  it("holds off failing a slow customer, then abandons the payment past the checkout window", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
+    const { order } = await placeOnlineOrder(token);
+    const tranId = await startPayment(token, order._id);
+    querySslcommerzTransaction.mockResolvedValue([{ status: "PENDING", tranId }]);
 
-    // bKash still calls it Initiated: the customer may yet finish.
-    queryBkashPayment.mockResolvedValue(completedResult({ transactionStatus: "Initiated", trxID: undefined }));
-
-    await agePayment("TR0011bkash01", 20 * 60 * 1000);
+    await agePayment(tranId, 20 * 60 * 1000);
     await runPaymentReconciliationTick();
-    expect((await PaymentModel.findOne({ gatewayPaymentId: "TR0011bkash01" }))?.status).toBe("initiated");
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranId }))?.status).toBe("initiated");
 
-    // Well past the bKash session window — now it is genuinely abandoned.
-    await agePayment("TR0011bkash01", 50 * 60 * 1000);
+    await agePayment(tranId, 50 * 60 * 1000);
     await runPaymentReconciliationTick();
-
-    const payment = await PaymentModel.findOne({ gatewayPaymentId: "TR0011bkash01" });
-    expect(payment?.status).toBe("failed");
-    expect(payment?.failureReason).toMatch(/abandoned/i);
-    expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
-  });
-
-  it("never settles an order from reconciliation when bKash's amount does not match", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    await agePayment("TR0011bkash01", 20 * 60 * 1000);
-    queryBkashPayment.mockResolvedValue(
-      completedResult({ amount: "1.00", merchantInvoiceNumber: order.orderNumber })
-    );
-
-    await runPaymentReconciliationTick();
-
-    expect((await PaymentModel.findOne({ gatewayPaymentId: "TR0011bkash01" }))?.status).toBe("failed");
-    expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranId }))?.status).toBe("failed");
   });
 
   it("keeps sweeping after one payment's gateway call fails", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
-    const { order: firstOrder } = await placeBkashOrder(token);
-    stubCreate("TR-FIRST");
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: firstOrder._id });
+    const { order: a } = await placeOnlineOrder(token);
+    const { order: b } = await placeOnlineOrder(token);
+    const tranA = await startPayment(token, a._id);
+    const tranB = await startPayment(token, b._id);
+    await agePayment(tranA, 20 * 60 * 1000);
+    await agePayment(tranB, 20 * 60 * 1000);
 
-    const { order: secondOrder } = await placeBkashOrder(token);
-    stubCreate("TR-SECOND");
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: secondOrder._id });
-
-    await agePayment("TR-FIRST", 20 * 60 * 1000);
-    await agePayment("TR-SECOND", 20 * 60 * 1000);
-
-    queryBkashPayment.mockImplementation((paymentID: string) => {
-      if (paymentID === "TR-FIRST") return Promise.reject(new Error("gateway unreachable"));
-      return Promise.resolve(
-        completedResult({
-          paymentID: "TR-SECOND",
-          amount: String(secondOrder.totalBDT),
-          merchantInvoiceNumber: secondOrder.orderNumber,
-        })
-      );
+    querySslcommerzTransaction.mockImplementation(async (tranId: string) => {
+      if (tranId === tranA) throw new Error("gateway down");
+      return [validResult(tranId)];
     });
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranB));
 
     await runPaymentReconciliationTick();
 
-    // The failure is contained: the first stays open for the next tick, the
-    // second is still settled.
-    expect((await PaymentModel.findOne({ gatewayPaymentId: "TR-FIRST" }))?.status).toBe("initiated");
-    expect((await PaymentModel.findOne({ gatewayPaymentId: "TR-SECOND" }))?.status).toBe("paid");
-    expect((await OrderModel.findById(secondOrder._id))?.isPaid).toBe(true);
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranA }))?.status).toBe("initiated");
+    expect((await PaymentModel.findOne({ gatewayPaymentId: tranB }))?.status).toBe("paid");
   });
 
   it("exposes an order's payment to its owner but not to an unrelated customer", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
     const { token: otherToken } = await createAuthedUser({ role: "customer" });
-    const { order } = await placeBkashOrder(token);
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
+    const { order } = await placeOnlineOrder(token);
+    await startPayment(token, order._id);
 
-    const owner = await request(app)
-      .get(`/api/v1/payments/order/${order._id}`)
-      .set(...authHeader(token));
+    const owner = await request(app).get(`/api/v1/payments/order/${order._id}`).set(...authHeader(token));
     expect(owner.status).toBe(200);
     expect(owner.body.data.payment.status).toBe("initiated");
 
@@ -561,7 +439,7 @@ describe("bKash payment integration", () => {
     expect(stranger.status).toBe(403);
   });
 
-  it("charges the discounted total when a coupon applies, not the undiscounted subtotal", async () => {
+  it("charges the discounted total when a coupon applies, and rejects a settlement for the undiscounted amount", async () => {
     const { token } = await createAuthedUser({ role: "customer" });
     await CouponModel.create({
       code: "SAVE20",
@@ -570,115 +448,25 @@ describe("bKash payment integration", () => {
       startsAt: new Date(Date.now() - 3600_000),
       expiresAt: new Date(Date.now() + 3600_000),
     });
-    const product = await seedProduct();
-    const created = await request(app)
-      .post("/api/v1/orders")
-      .set(...authHeader(token))
-      .send({
-        items: [
-          { productId: product._id.toString(), variantId: product.variants[0]!._id!.toString(), quantity: 2 },
-        ],
-        shippingAddress,
-        deliveryMethod: "standard",
-        paymentMethod: "bkash",
-        // A discount the client would like to have. It is not part of the
-        // order schema and is silently discarded.
-        discountBDT: 1900,
-        couponCode: "SAVE20",
-      });
-    const order = created.body.data.order;
-
-    // 2 x ৳1000 subtotal, 20% off, plus ৳60 standard shipping.
-    expect(order.subtotalBDT).toBe(2000);
-    expect(order.discountBDT).toBe(400);
-    expect(order.shippingFeeBDT).toBe(60);
+    const { order } = await placeOnlineOrder(token, 2, { couponCode: "SAVE20", discountBDT: 1900 });
+    // 2 x ৳1000, 20% off, + ৳60 shipping.
     expect(order.totalBDT).toBe(1660);
 
-    stubCreate();
+    const tranId = await startPayment(token, order._id);
+    expect(initSslcommerzPayment).toHaveBeenCalledWith(expect.objectContaining({ amountBDT: 1660 }));
+
+    validateSslcommerzPayment.mockResolvedValue(validResult(tranId, { amount: "2060.00" }));
     const res = await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    expect(res.body.data.payment.amountBDT).toBe(1660);
-    expect(createBkashPayment).toHaveBeenCalledWith(expect.objectContaining({ amountBDT: 1660 }));
-  });
-
-  it("rejects a settlement for the pre-discount amount on a discounted order", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    await CouponModel.create({
-      code: "SAVE20",
-      discountType: "percentage",
-      discountValue: 20,
-      startsAt: new Date(Date.now() - 3600_000),
-      expiresAt: new Date(Date.now() + 3600_000),
-    });
-    const product = await seedProduct();
-    const created = await request(app)
-      .post("/api/v1/orders")
-      .set(...authHeader(token))
-      .send({
-        items: [
-          { productId: product._id.toString(), variantId: product.variants[0]!._id!.toString(), quantity: 2 },
-        ],
-        shippingAddress,
-        deliveryMethod: "standard",
-        paymentMethod: "bkash",
-        couponCode: "SAVE20",
-      });
-    const order = created.body.data.order;
-    stubCreate();
-    await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-
-    // The gateway reports the undiscounted figure — an over-payment is as
-    // much a mismatch as an under-payment and must not settle the order.
-    const overpaid = completedResult({ amount: "2060.00", merchantInvoiceNumber: order.orderNumber });
-    executeBkashPayment.mockResolvedValue(overpaid);
-    queryBkashPayment.mockResolvedValue(overpaid);
-
-    const res = await request(app)
-      .post("/api/v1/payments/bkash/execute")
-      .set(...authHeader(token))
-      .send({ paymentID: "TR0011bkash01" });
-
-    expect(res.status).toBe(400);
+      .post(`${CALLBACK}/success`)
+      .type("form")
+      .send({ tran_id: tranId, val_id: "VAL123" });
+    expect(redirectPath(res)).toBe("/checkout/payment/failed");
     expect((await OrderModel.findById(order._id))?.isPaid).toBe(false);
-  });
-
-  it("charges the free-shipping total once the order clears the threshold", async () => {
-    const { token } = await createAuthedUser({ role: "customer" });
-    const product = await seedProduct();
-    const created = await request(app)
-      .post("/api/v1/orders")
-      .set(...authHeader(token))
-      .send({
-        items: [
-          { productId: product._id.toString(), variantId: product.variants[0]!._id!.toString(), quantity: 6 },
-        ],
-        shippingAddress,
-        deliveryMethod: "standard",
-        paymentMethod: "bkash",
-      });
-    const order = created.body.data.order;
-
-    // 6 x ৳1000 clears the ৳5,000 free-standard-shipping threshold.
-    expect(order.shippingFeeBDT).toBe(0);
-    expect(order.totalBDT).toBe(6000);
-
-    stubCreate();
-    const res = await request(app)
-      .post("/api/v1/payments/bkash/create")
-      .set(...authHeader(token))
-      .send({ orderId: order._id });
-    expect(res.body.data.payment.amountBDT).toBe(6000);
   });
 
   it("reports which providers are live without exposing any credential", async () => {
     const res = await request(app).get("/api/v1/payments/config");
     expect(res.status).toBe(200);
-    expect(res.body.data.providers).toEqual({ bkash: true });
+    expect(res.body.data.providers).toEqual({ sslcommerz: true });
   });
 });

@@ -17,8 +17,7 @@ function customerName(customer: ApiOrder["customer"]): string {
 
 const PAYMENT_METHOD_LABELS: Record<ApiOrder["paymentMethod"], string> = {
   cod: "Cash on Delivery",
-  bkash: "bKash",
-  nagad: "Nagad",
+  sslcommerz: "Online Payment (SSLCommerz)",
 };
 
 /**

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Types } from "mongoose";
 import {
   PaymentModel,
@@ -7,14 +8,15 @@ import {
 } from "../models/Payment.model";
 import { OrderModel, type IOrder } from "../models/Order.model";
 import { ApiError } from "../utils/ApiError";
-import { clientOrigins } from "../config/env";
+import { clientOrigins, env, serverPublicUrl } from "../config/env";
 import {
-  createBkashPayment,
-  executeBkashPayment,
-  queryBkashPayment,
-  isBkashConfigured,
-  type BkashPaymentStatusResult,
-} from "../config/bkash";
+  initSslcommerzPayment,
+  validateSslcommerzPayment,
+  querySslcommerzTransaction,
+  isSslcommerzConfigured,
+  isSuccessfulStatus,
+  type SslcommerzTransaction,
+} from "../config/sslcommerz";
 import { recordAuditLog } from "./auditLog.service";
 import { ORDER_TRANSITIONS } from "../constants/orderStatus";
 import type { Role } from "../constants/roles";
@@ -26,42 +28,30 @@ export interface PaymentActor {
 }
 
 /**
- * How long a still-unfinished bKash payment is offered back to the customer
- * instead of a fresh one being created. bKash's hosted checkout session is
- * good for roughly half an hour; re-offering the same session is what stops a
- * customer who double-clicks "Pay Now" or reloads the page from being charged
- * on two separate gateway payments.
+ * How long a still-unfinished SSLCommerz session is offered back to the
+ * customer instead of a fresh one being created. Re-offering the same session
+ * is what stops a customer who double-clicks "Pay Now" or reloads the page
+ * from ending up with two separate chargeable sessions.
  */
 const PAYMENT_REUSE_WINDOW_MS = 25 * 60 * 1000;
 
 /**
- * How long an unresolved payment is left alone before the scheduler asks bKash
- * about it. Comfortably longer than a customer needs to finish on the hosted
- * page and be redirected back, so the sweep never races the customer's own
- * callback for the same payment.
+ * How long an unresolved payment is left alone before the scheduler asks
+ * SSLCommerz about it. Comfortably longer than a customer needs to finish on
+ * the hosted page and be redirected back, so the sweep never races the
+ * customer's own callback for the same payment.
  */
 const PAYMENT_RECONCILE_AFTER_MS = 15 * 60 * 1000;
 
 /**
- * Past this age, a payment bKash still does not call complete is treated as
- * abandoned and failed, releasing it so the customer can start a fresh
- * attempt. Beyond the ~30-minute bKash checkout session, so a slow customer is
- * never failed while they could still legitimately complete.
+ * Past this age, a payment SSLCommerz still does not call complete is treated
+ * as abandoned and failed, releasing it so the customer can start a fresh
+ * attempt.
  */
 const PAYMENT_ABANDON_AFTER_MS = 45 * 60 * 1000;
 
 /** Caps how many payments one tick reconciles, so a backlog can't stall the scheduler. */
 const PAYMENT_RECONCILE_BATCH_SIZE = 25;
-
-/**
- * The message every rejected verification returns to the customer. Deliberately
- * uniform and vague: the specific reason (amount mismatch, wrong invoice
- * reference, unknown transaction) is recorded on the payment and in the audit
- * log for staff, but telling a would-be attacker *which* of their forged fields
- * was caught just tells them what to forge next.
- */
-const VERIFICATION_FAILED_MESSAGE =
-  "We could not verify this payment with bKash. No money has been taken for this order — please try again or contact support.";
 
 function assertTransition(current: PaymentStatus, next: PaymentStatus) {
   if (!PAYMENT_TRANSITIONS[current].includes(next)) {
@@ -81,23 +71,48 @@ function amountsMatch(gatewayAmount: string | undefined, expectedBDT: number): b
   return toPaisa(parsed) === toPaisa(expectedBDT);
 }
 
-/** Only the gateway fields that are safe to keep — never a token or credential. */
-function safeMetadata(result: BkashPaymentStatusResult): Record<string, unknown> {
+/** Only the gateway fields that are safe to keep — never a credential. */
+function safeMetadata(result: SslcommerzTransaction): Record<string, unknown> {
   return {
-    transactionStatus: result.transactionStatus,
-    statusCode: result.statusCode,
-    statusMessage: result.statusMessage,
-    errorCode: result.errorCode,
-    errorMessage: result.errorMessage,
+    status: result.status,
+    valId: result.valId,
     amount: result.amount,
     currency: result.currency,
-    merchantInvoiceNumber: result.merchantInvoiceNumber,
+    bankTranId: result.bankTranId,
+    cardType: result.cardType,
+    riskLevel: result.riskLevel,
+    riskTitle: result.riskTitle,
+    tranDate: result.tranDate,
+    error: result.error,
   };
 }
 
-function bkashCallbackUrl(): string {
-  const origin = clientOrigins[0] ?? "http://localhost:3000";
-  return `${origin.replace(/\/+$/, "")}/checkout/bkash/callback`;
+/** A unique, unguessable `tran_id` per attempt — e.g. `SAP-20261018-0001-9f3a1c2b7d4e`. */
+function generateTranId(orderNumber: string): string {
+  return `${orderNumber}-${crypto.randomBytes(6).toString("hex")}`;
+}
+
+function callbackUrl(kind: "success" | "fail" | "cancel" | "ipn"): string {
+  return `${serverPublicUrl}${env.API_PREFIX}/payments/sslcommerz/${kind}`;
+}
+
+function clientOrigin(): string {
+  return (clientOrigins[0] ?? "http://localhost:3000").replace(/\/+$/, "");
+}
+
+/** The storefront result pages SSLCommerz's browser callbacks are redirected to. */
+export type PaymentResultPage = "success" | "failed" | "cancelled";
+
+export function paymentResultUrl(
+  page: PaymentResultPage,
+  params: { orderId?: string; orderNumber?: string; reason?: string } = {}
+): string {
+  const qs = new URLSearchParams();
+  if (params.orderId) qs.set("orderId", params.orderId);
+  if (params.orderNumber) qs.set("order", params.orderNumber);
+  if (params.reason) qs.set("reason", params.reason);
+  const query = qs.toString();
+  return `${clientOrigin()}/checkout/payment/${page}${query ? `?${query}` : ""}`;
 }
 
 /**
@@ -106,9 +121,8 @@ function bkashCallbackUrl(): string {
  * The `isPaid: false` guard makes this idempotent at the database level: a
  * replayed callback that somehow got past the payment-record guard still
  * matches nothing here and changes nothing. **Stock is deliberately not
- * touched** — `order.service.ts#createOrder` already consumed it, once, when
- * the order was placed, so payment confirmation has no inventory side effect
- * at all and repeated callbacks cannot double-deduct.
+ * touched** — `order.service.ts#createOrder` already consumed it when the
+ * order was placed, so payment confirmation has no inventory side effect.
  */
 async function confirmOrderAfterPayment(orderId: Types.ObjectId, actor: PaymentActor): Promise<void> {
   const claimed = await OrderModel.findOneAndUpdate(
@@ -123,7 +137,7 @@ async function confirmOrderAfterPayment(orderId: Types.ObjectId, actor: PaymentA
       status: "confirmed",
       previousStatus: claimed.status,
       at: new Date(),
-      note: "Payment verified with bKash",
+      note: "Payment verified with SSLCommerz",
       changedBy: new Types.ObjectId(actor.id),
       changedByRole: actor.role,
     });
@@ -147,7 +161,7 @@ export async function markPaymentRefundedForOrder(orderId: string, actor: Paymen
     resource: "Payment",
     resourceId: payment._id.toString(),
     newValue: { transactionId: payment.transactionId, amountBDT: payment.amountBDT },
-    note: `bKash payment marked refunded for order ${payment.merchantInvoiceNumber}.`,
+    note: `SSLCommerz payment marked refunded for order ${payment.merchantInvoiceNumber}.`,
   });
 }
 
@@ -161,19 +175,18 @@ async function loadOwnOrder(orderId: string, actor: PaymentActor): Promise<IOrde
 }
 
 /**
- * Step 1 of the bKash flow: create a gateway payment for one of the caller's
+ * Step 1: open an SSLCommerz hosted-checkout session for one of the caller's
  * own orders.
  *
  * The payable amount comes from `order.totalBDT` — recomputed server-side at
- * checkout from live product prices, the coupon and the shipping table — and
- * the request body carries nothing but an order id, so there is no amount for
- * a client to tamper with in the first place.
+ * checkout — and the request body carries nothing but an order id, so there
+ * is no amount for a client to tamper with in the first place.
  */
-export async function createBkashPaymentForOrder(orderId: string, actor: PaymentActor) {
+export async function initSslcommerzPaymentForOrder(orderId: string, actor: PaymentActor) {
   const order = await loadOwnOrder(orderId, actor);
 
-  if (order.paymentMethod !== "bkash") {
-    throw ApiError.badRequest("This order was not placed with bKash as its payment method");
+  if (order.paymentMethod !== "sslcommerz") {
+    throw ApiError.badRequest("This order was not placed with online payment as its payment method");
   }
   if (order.isPaid) {
     throw ApiError.conflict("This order has already been paid for");
@@ -189,7 +202,7 @@ export async function createBkashPaymentForOrder(orderId: string, actor: Payment
 
   // An unfinished attempt on the same order for the same amount is handed
   // back rather than replaced, so a double-click or a page reload reuses one
-  // gateway session instead of opening a second chargeable one.
+  // gateway session instead of opening a second one.
   const existing = await PaymentModel.findOne({
     order: order._id,
     status: { $in: ["initiated", "pending"] },
@@ -197,41 +210,71 @@ export async function createBkashPaymentForOrder(orderId: string, actor: Payment
 
   if (existing) {
     const isReusable =
+      existing.status === "initiated" &&
       toPaisa(existing.amountBDT) === toPaisa(amountBDT) &&
       Date.now() - existing.createdAt.getTime() < PAYMENT_REUSE_WINDOW_MS &&
-      typeof existing.gatewayMetadata?.bkashURL === "string";
+      typeof existing.gatewayMetadata?.gatewayUrl === "string";
     if (isReusable) return existing;
 
-    existing.status = "cancelled";
-    existing.failureReason = "Superseded by a newer payment attempt";
-    await existing.save();
+    if (existing.status === "initiated") {
+      existing.status = "cancelled";
+      existing.failureReason = "Superseded by a newer payment attempt";
+      await existing.save();
+    } else {
+      // A `pending` attempt is mid-verification — never cancel it under the
+      // gateway's feet; ask the customer to wait for it to resolve instead.
+      throw ApiError.conflict(
+        "A payment for this order is still being confirmed. Please check back in a few minutes."
+      );
+    }
   }
 
-  const gateway = await createBkashPayment({
-    amountBDT,
-    merchantInvoiceNumber: order.orderNumber,
-    callbackURL: bkashCallbackUrl(),
-    payerReference: order.shippingAddress.phone,
-  });
+  const tranId = generateTranId(order.orderNumber);
+  const customerName = `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`.trim();
+  const productName =
+    order.items.map((item) => item.productName).filter(Boolean).join(", ") || `Order ${order.orderNumber}`;
 
   const payment = await PaymentModel.create({
     order: order._id,
     customer: order.customer,
-    provider: "bkash",
+    provider: "sslcommerz",
     amountBDT,
     currency: "BDT",
     status: "initiated",
-    gatewayPaymentId: gateway.paymentID,
+    gatewayPaymentId: tranId,
     merchantInvoiceNumber: order.orderNumber,
-    gatewayMetadata: {
-      bkashURL: gateway.bkashURL,
-      transactionStatus: gateway.transactionStatus,
-      amount: gateway.amount,
-      currency: gateway.currency,
-      merchantInvoiceNumber: gateway.merchantInvoiceNumber,
-    },
     initiatedBy: actor.id,
   });
+
+  let gateway;
+  try {
+    gateway = await initSslcommerzPayment({
+      tranId,
+      amountBDT,
+      successUrl: callbackUrl("success"),
+      failUrl: callbackUrl("fail"),
+      cancelUrl: callbackUrl("cancel"),
+      ipnUrl: callbackUrl("ipn"),
+      customer: {
+        name: customerName || "Customer",
+        email: order.shippingAddress.email,
+        phone: order.shippingAddress.phone,
+        address: order.shippingAddress.fullAddress,
+        city: order.shippingAddress.district,
+      },
+      productName,
+      numOfItems: order.items.reduce((sum, item) => sum + item.quantity, 0),
+      valueA: payment._id.toString(),
+    });
+  } catch (err) {
+    payment.status = "failed";
+    payment.failureReason = "SSLCommerz refused to open a checkout session";
+    await payment.save();
+    throw err;
+  }
+
+  payment.gatewayMetadata = { gatewayUrl: gateway.gatewayUrl };
+  await payment.save();
 
   await recordAuditLog({
     actor: actor.id,
@@ -239,8 +282,8 @@ export async function createBkashPaymentForOrder(orderId: string, actor: Payment
     action: "payment.initiated",
     resource: "Payment",
     resourceId: payment._id.toString(),
-    newValue: { orderNumber: order.orderNumber, amountBDT, provider: "bkash" },
-    note: `bKash payment initiated for order ${order.orderNumber} (৳${amountBDT}).`,
+    newValue: { orderNumber: order.orderNumber, amountBDT, provider: "sslcommerz" },
+    note: `SSLCommerz payment initiated for order ${order.orderNumber} (৳${amountBDT}).`,
   });
 
   return payment;
@@ -248,22 +291,23 @@ export async function createBkashPaymentForOrder(orderId: string, actor: Payment
 
 /**
  * Records a rejected verification on the payment and in the audit trail.
- * Deliberately does not throw — the customer-facing path wraps this in
- * `rejectVerification` below, while the background reconciliation sweep needs
- * to record the same outcome and carry on to the next payment.
+ * Never throws — callbacks redirect, the sweep carries on to the next payment.
  */
 async function applyRejection(
   payment: IPayment,
   order: IOrder | null,
   actor: PaymentActor,
   reason: string,
-  result: BkashPaymentStatusResult,
+  result: SslcommerzTransaction | null,
   nextStatus: Extract<PaymentStatus, "failed" | "cancelled">
 ): Promise<void> {
   if (PAYMENT_TRANSITIONS[payment.status].includes(nextStatus)) {
     payment.status = nextStatus;
     payment.failureReason = reason;
-    payment.gatewayMetadata = safeMetadata(result);
+    payment.gatewayMetadata = {
+      ...(payment.gatewayMetadata ?? {}),
+      ...(result ? safeMetadata(result) : {}),
+    };
     await payment.save();
   }
 
@@ -276,47 +320,31 @@ async function applyRejection(
     newValue: {
       orderNumber: order?.orderNumber ?? payment.merchantInvoiceNumber,
       expectedAmountBDT: payment.amountBDT,
-      gatewayAmount: result.amount,
-      gatewayStatus: result.transactionStatus,
+      gatewayAmount: result?.amount,
+      gatewayStatus: result?.status,
     },
     note: reason,
   });
 }
 
-/** As `applyRejection`, then throws the customer-facing error. */
-async function rejectVerification(
-  payment: IPayment,
-  order: IOrder | null,
-  actor: PaymentActor,
-  reason: string,
-  result: BkashPaymentStatusResult,
-  nextStatus: Extract<PaymentStatus, "failed" | "cancelled">
-): Promise<never> {
-  await applyRejection(payment, order, actor, reason, result, nextStatus);
-
-  throw nextStatus === "cancelled"
-    ? ApiError.badRequest("This bKash payment was cancelled. Your order has not been paid for.")
-    : ApiError.badRequest(VERIFICATION_FAILED_MESSAGE);
-}
-
 /**
  * Checks a gateway result against the order it claims to belong to. Every
- * value compared here comes from the database or from bKash itself — nothing
- * the customer's browser sent is trusted, including the amount.
+ * value compared here comes from the database or from SSLCommerz's own
+ * validation API — nothing the customer's browser posted is trusted.
  */
 function verificationFailureReason(
-  result: BkashPaymentStatusResult,
+  result: SslcommerzTransaction,
   payment: IPayment,
   order: IOrder
 ): string | null {
-  if (result.transactionStatus !== "Completed") {
-    return `Gateway reported the payment as "${result.transactionStatus ?? "unknown"}", not Completed.`;
+  if (!isSuccessfulStatus(result.status)) {
+    return `Gateway reported the payment as "${result.status ?? "unknown"}", not VALID.`;
   }
-  if (!result.trxID) {
-    return "Gateway reported the payment complete but returned no transaction id.";
+  if (result.tranId !== payment.gatewayPaymentId) {
+    return `Gateway transaction ${result.tranId ?? "(none)"} does not match payment ${payment.gatewayPaymentId}.`;
   }
-  if (result.merchantInvoiceNumber && result.merchantInvoiceNumber !== order.orderNumber) {
-    return `Gateway transaction references invoice ${result.merchantInvoiceNumber}, not order ${order.orderNumber}.`;
+  if (result.currency && result.currency !== "BDT") {
+    return `Gateway settled in ${result.currency}, not BDT.`;
   }
   if (!amountsMatch(result.amount, payment.amountBDT)) {
     return `Gateway settled ${result.amount ?? "an unknown amount"} against an expected ৳${payment.amountBDT}.`;
@@ -332,24 +360,23 @@ function verificationFailureReason(
 /**
  * Settles a verified payment. The `status` guard is the single point that
  * makes the whole flow idempotent: whichever concurrent or replayed request
- * wins the update performs the order confirmation, and every other one sees a
- * no-match and simply reports the already-settled payment.
+ * (browser callback, IPN, sweep) wins the update performs the order
+ * confirmation, and every other one sees a no-match.
  */
 async function settleVerifiedPayment(
   payment: IPayment,
-  result: BkashPaymentStatusResult,
+  result: SslcommerzTransaction,
   actor: PaymentActor,
-  /** Appended to the audit note when the scheduler, not the customer's own callback, resolved this. */
-  reconciliationNote?: string
+  source: string
 ): Promise<IPayment> {
   const settled = await PaymentModel.findOneAndUpdate(
     { _id: payment._id, status: { $in: ["initiated", "pending"] } },
     {
       $set: {
         status: "paid",
-        transactionId: result.trxID,
+        transactionId: result.bankTranId ?? result.valId,
         paidAt: new Date(),
-        gatewayMetadata: safeMetadata(result),
+        gatewayMetadata: { ...(payment.gatewayMetadata ?? {}), ...safeMetadata(result) },
       },
       $unset: { failureReason: "" },
     },
@@ -374,189 +401,222 @@ async function settleVerifiedPayment(
       orderNumber: settled.merchantInvoiceNumber,
       amountBDT: settled.amountBDT,
       transactionId: settled.transactionId,
+      riskLevel: result.riskLevel,
     },
-    note: `bKash payment verified for order ${settled.merchantInvoiceNumber} (৳${settled.amountBDT}).${
-      reconciliationNote ? ` ${reconciliationNote}` : ""
+    note: `SSLCommerz payment verified for order ${settled.merchantInvoiceNumber} (৳${settled.amountBDT}) via ${source}.${
+      result.riskLevel === "1" ? ` Flagged high-risk by SSLCommerz (${result.riskTitle ?? "no reason given"}) — review before shipping.` : ""
     }`,
   });
 
   return settled;
 }
 
-async function loadOwnPaymentByGatewayId(paymentID: string, actor: PaymentActor): Promise<IPayment> {
-  const payment = await PaymentModel.findOne({ gatewayPaymentId: paymentID });
-  // A fabricated or foreign paymentID reads identically to a missing one —
-  // there is nothing to learn from probing this endpoint.
-  if (!payment || payment.customer.toString() !== actor.id) {
-    throw ApiError.notFound("Payment not found");
-  }
-  return payment;
+/** The customer who started the payment — the audit actor for every gateway-driven event. */
+function payerActor(payment: IPayment): PaymentActor {
+  return { id: payment.initiatedBy.toString(), role: "customer" };
+}
+
+export interface CallbackOutcome {
+  page: PaymentResultPage;
+  orderId?: string;
+  orderNumber?: string;
+  reason?: string;
 }
 
 /**
- * Step 2 of the bKash flow, called when the customer returns from the hosted
- * checkout page. The browser only supplies bKash's `paymentID`; the backend
- * executes it against bKash, checks the result against the stored order, and
- * only then marks anything paid — a frontend that simply claims success gets
- * nowhere.
+ * Applies one validated success to a payment: validation API by `val_id`,
+ * then the same checks and idempotent settle as every other path.
  */
-export async function executeBkashPaymentForOrder(paymentID: string, actor: PaymentActor) {
-  const payment = await loadOwnPaymentByGatewayId(paymentID, actor);
-
-  // Already settled: return it unchanged. This is the refresh/replay path and
-  // must stay a success, not an error, or a customer reloading the callback
-  // page would be told their completed payment failed.
-  if (payment.status === "paid") {
-    const order = await OrderModel.findById(payment.order);
-    return { payment, order };
-  }
-  if (payment.status === "failed" || payment.status === "cancelled" || payment.status === "refunded") {
-    throw ApiError.badRequest(
-      `This payment is already ${payment.status} and cannot be completed. Please start a new payment.`
-    );
-  }
-
+async function resolveWithValId(payment: IPayment, valId: string, source: string): Promise<CallbackOutcome> {
   const order = await OrderModel.findById(payment.order);
-  if (!order) throw ApiError.notFound("Order not found");
+  const base = { orderId: payment.order.toString(), orderNumber: payment.merchantInvoiceNumber };
+  if (!order) return { page: "failed", ...base, reason: "verification_failed" };
 
-  assertTransition(payment.status, "pending");
-  payment.status = "pending";
-  await payment.save();
+  if (payment.status === "paid" || payment.status === "refunded") {
+    return { page: "success", ...base };
+  }
+  if (payment.status === "failed" || payment.status === "cancelled") {
+    return { page: "failed", ...base, reason: "closed" };
+  }
 
-  // `execute` can only be consumed once per bKash payment, so a replayed
-  // callback falls back to querying the payment's authoritative state — a
-  // genuinely completed payment is still recognised the second time around.
-  let result = await executeBkashPayment(paymentID);
-  if (result.transactionStatus !== "Completed") {
-    result = await queryBkashPayment(paymentID);
+  if (payment.status === "initiated") {
+    assertTransition(payment.status, "pending");
+    payment.status = "pending";
+    await payment.save();
+  }
+
+  // A network error here leaves the payment `pending`; the reconciliation
+  // sweep picks it up and settles it once SSLCommerz is reachable again.
+  let result: SslcommerzTransaction;
+  try {
+    result = await validateSslcommerzPayment(valId);
+  } catch (err) {
+    console.error(`[payments] SSLCommerz validation unreachable for ${payment.gatewayPaymentId}:`, (err as Error).message);
+    return { page: "failed", ...base, reason: "verification_pending" };
   }
 
   const failure = verificationFailureReason(result, payment, order);
   if (failure) {
-    const isCustomerCancellation =
-      result.transactionStatus === "Cancelled" || result.statusCode === "2062";
-    await rejectVerification(
-      payment,
-      order,
-      actor,
-      failure,
-      result,
-      isCustomerCancellation ? "cancelled" : "failed"
-    );
+    await applyRejection(payment, order, payerActor(payment), failure, result, "failed");
+    return { page: "failed", ...base, reason: "verification_failed" };
   }
 
-  const settled = await settleVerifiedPayment(payment, result, actor);
-  const updatedOrder = await OrderModel.findById(settled.order);
-  return { payment: settled, order: updatedOrder };
+  await settleVerifiedPayment(payment, result, payerActor(payment), source);
+  return { page: "success", ...base };
+}
+
+async function findPaymentByTranId(tranId: string | undefined): Promise<IPayment | null> {
+  if (!tranId || typeof tranId !== "string" || tranId.length > 120) return null;
+  return PaymentModel.findOne({ gatewayPaymentId: tranId, provider: "sslcommerz" });
 }
 
 /**
- * The customer abandoned the bKash page. Nothing is verified here — this only
- * closes out a payment record that never completed, so the order can be paid
- * for again with a fresh attempt.
+ * SSLCommerz posted the customer's browser to our success URL. The posted
+ * fields are only used to *find* the payment and the `val_id` to validate —
+ * whether anything is paid is decided solely by SSLCommerz's validation API.
  */
-export async function cancelBkashPaymentForOrder(paymentID: string, actor: PaymentActor, reason?: string) {
-  const payment = await loadOwnPaymentByGatewayId(paymentID, actor);
+export async function handleSslcommerzSuccess(body: Record<string, unknown>): Promise<CallbackOutcome> {
+  const payment = await findPaymentByTranId(body.tran_id as string | undefined);
+  if (!payment) return { page: "failed", reason: "unknown_payment" };
 
-  if (payment.status === "cancelled") return payment;
-  if (payment.status === "paid") {
-    throw ApiError.badRequest("This payment has already completed and cannot be cancelled");
+  const valId = typeof body.val_id === "string" ? body.val_id.trim() : "";
+  if (!valId) {
+    return {
+      page: "failed",
+      orderId: payment.order.toString(),
+      orderNumber: payment.merchantInvoiceNumber,
+      reason: "verification_failed",
+    };
   }
-  assertTransition(payment.status, "cancelled");
-
-  payment.status = "cancelled";
-  payment.failureReason = reason ?? "Cancelled by the customer on the bKash page";
-  await payment.save();
-
-  await recordAuditLog({
-    actor: actor.id,
-    actorRole: actor.role,
-    action: "payment.cancelled",
-    resource: "Payment",
-    resourceId: payment._id.toString(),
-    newValue: { orderNumber: payment.merchantInvoiceNumber, amountBDT: payment.amountBDT },
-    note: payment.failureReason,
-  });
-
-  return payment;
+  return resolveWithValId(payment, valId, "the customer's return from SSLCommerz");
 }
 
 /**
- * Reconciles one payment left unresolved because the customer's browser never
- * made it back to the callback — a closed tab, a dead connection, a crash
- * mid-redirect. bKash may well have taken the money, and nothing else in the
- * system would ever notice.
+ * SSLCommerz posted the customer's browser to our fail or cancel URL.
  *
- * This runs from the scheduler, never from a human action: it asks bKash for
- * the authoritative state and applies exactly the same verification and
- * settling path as the customer flow, so it can only confirm what bKash
- * already agrees is complete. There is deliberately no way for a staff member
- * to mark a payment paid by hand.
- *
- * The audit entry is attributed to the customer who initiated the payment —
- * `AuditLog.actor` is a real user reference and this is their transaction; the
- * note records that the scheduler, not a person, resolved it.
+ * The callback alone is never trusted to close a payment (anyone can POST a
+ * form): the gateway is asked for the transaction's real state first. If it
+ * turns out SSLCommerz actually has a successful attempt, that wins and the
+ * payment settles; if the lookup itself fails, the payment is left for the
+ * reconciliation sweep.
+ */
+export async function handleSslcommerzFailOrCancel(
+  body: Record<string, unknown>,
+  kind: "failed" | "cancelled"
+): Promise<CallbackOutcome> {
+  const payment = await findPaymentByTranId(body.tran_id as string | undefined);
+  if (!payment) return { page: kind, reason: "unknown_payment" };
+
+  const base = { orderId: payment.order.toString(), orderNumber: payment.merchantInvoiceNumber };
+  if (payment.status === "paid" || payment.status === "refunded") return { page: "success", ...base };
+  if (payment.status === "failed" || payment.status === "cancelled") return { page: kind, ...base };
+
+  let attempts: SslcommerzTransaction[];
+  try {
+    attempts = await querySslcommerzTransaction(payment.gatewayPaymentId);
+  } catch (err) {
+    console.error(`[payments] SSLCommerz query unreachable for ${payment.gatewayPaymentId}:`, (err as Error).message);
+    return { page: kind, ...base };
+  }
+
+  const succeeded = attempts.find((a) => isSuccessfulStatus(a.status) && a.valId);
+  if (succeeded?.valId) {
+    return resolveWithValId(payment, succeeded.valId, "a fail/cancel callback that SSLCommerz reports as paid");
+  }
+
+  const order = await OrderModel.findById(payment.order);
+  await applyRejection(
+    payment,
+    order,
+    payerActor(payment),
+    kind === "cancelled"
+      ? "Customer cancelled the payment on SSLCommerz."
+      : `SSLCommerz reported the payment as failed${attempts[0]?.error ? ` (${attempts[0].error})` : ""}.`,
+    attempts[0] ?? null,
+    kind
+  );
+  return { page: kind, ...base };
+}
+
+/**
+ * Server-to-server IPN. Same rule as the browser callback: only SSLCommerz's
+ * validation API decides; the posted status is a hint about which path to run.
+ */
+export async function handleSslcommerzIpn(body: Record<string, unknown>): Promise<{ handled: boolean }> {
+  const payment = await findPaymentByTranId(body.tran_id as string | undefined);
+  if (!payment) return { handled: false };
+
+  const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
+  const valId = typeof body.val_id === "string" ? body.val_id.trim() : "";
+
+  if (isSuccessfulStatus(status) && valId) {
+    await resolveWithValId(payment, valId, "SSLCommerz IPN");
+    return { handled: true };
+  }
+  if (status === "FAILED" || status === "CANCELLED" || status === "UNATTEMPTED" || status === "EXPIRED") {
+    await handleSslcommerzFailOrCancel(body, status === "CANCELLED" ? "cancelled" : "failed");
+    return { handled: true };
+  }
+  return { handled: false };
+}
+
+/**
+ * Reconciles one payment left unresolved because neither the customer's
+ * browser nor the IPN made it back — a closed tab, a dead connection, a
+ * localhost IPN URL. Asks SSLCommerz for the authoritative state and applies
+ * exactly the same verification and settling path as the customer flow.
  */
 async function reconcileOnePayment(payment: IPayment): Promise<void> {
-  const actor: PaymentActor = { id: payment.initiatedBy.toString(), role: "customer" };
+  const actor = payerActor(payment);
   const order = await OrderModel.findById(payment.order);
   if (!order) return;
 
-  const result = await queryBkashPayment(payment.gatewayPaymentId);
+  const attempts = await querySslcommerzTransaction(payment.gatewayPaymentId);
   const ageMs = Date.now() - payment.createdAt.getTime();
 
-  if (result.transactionStatus === "Completed") {
-    const failure = verificationFailureReason(result, payment, order);
-    if (failure) {
-      await applyRejection(payment, order, actor, failure, result, "failed");
-      return;
-    }
-    await settleVerifiedPayment(payment, result, actor, "Reconciled automatically after an incomplete callback.");
+  const succeeded = attempts.find((a) => isSuccessfulStatus(a.status) && a.valId);
+  if (succeeded?.valId) {
+    await resolveWithValId(payment, succeeded.valId, "automatic reconciliation");
     return;
   }
 
-  if (result.transactionStatus === "Cancelled") {
+  const cancelled = attempts.find((a) => a.status === "CANCELLED");
+  if (cancelled) {
     await applyRejection(
       payment,
       order,
       actor,
-      "Customer cancelled the payment on bKash; detected by automatic reconciliation.",
-      result,
+      "Customer cancelled the payment on SSLCommerz; detected by automatic reconciliation.",
+      cancelled,
       "cancelled"
     );
     return;
   }
 
-  // Still unfinished at the gateway. Left alone until it is past any chance of
-  // completing, so a customer who is merely slow on the bKash page is never
-  // failed out from under themselves.
+  // Still unfinished at the gateway. Left alone until it is past any chance
+  // of completing, so a slow customer is never failed out from under themselves.
   if (ageMs >= PAYMENT_ABANDON_AFTER_MS) {
     await applyRejection(
       payment,
       order,
       actor,
-      `Payment abandoned — bKash still reported it as "${result.transactionStatus ?? "unknown"}" well past the checkout window.`,
-      result,
+      `Payment abandoned — SSLCommerz reported ${attempts.length ? `"${attempts[0]!.status ?? "unknown"}"` : "no completed attempt"} well past the checkout window.`,
+      attempts[0] ?? null,
       "failed"
     );
   }
 }
 
 /**
- * The scheduler's payment tick. Sweeps every payment still sitting in
- * `initiated`/`pending` past the grace window and resolves it against bKash.
- * Verification is entirely automatic — this is what makes a manual
- * staff "re-verify" action unnecessary.
- *
- * Never throws: one unreachable gateway call must not stop the sweep, nor
- * take the scheduler down with it. Returns how many payments were resolved,
- * for the caller's logging and for tests.
+ * The scheduler's payment tick. Never throws: one unreachable gateway call
+ * must not stop the sweep, nor take the scheduler down with it. Returns how
+ * many payments were processed, for logging and tests.
  */
 export async function reconcileStalePayments(): Promise<number> {
-  if (!isBkashConfigured) return 0;
+  if (!isSslcommerzConfigured) return 0;
 
   const stale = await PaymentModel.find({
-    provider: "bkash",
+    provider: "sslcommerz",
     status: { $in: ["initiated", "pending"] },
     createdAt: { $lte: new Date(Date.now() - PAYMENT_RECONCILE_AFTER_MS) },
   }).limit(PAYMENT_RECONCILE_BATCH_SIZE);
@@ -605,11 +665,7 @@ export async function listPayments(filter: ListPaymentsQuery) {
 
 /**
  * The payment attached to one order, for the customer's own order page and
- * for staff. Ownership is checked by the caller (see the controller) — a
- * customer only ever reaches their own orders.
- *
- * A settled payment always wins over a superseded attempt: retries leave
- * cancelled records behind that are newer than the one that actually paid.
+ * for staff. A settled payment always wins over a superseded attempt.
  */
 export async function getPaymentForOrder(orderId: string) {
   const settled = await PaymentModel.findOne({

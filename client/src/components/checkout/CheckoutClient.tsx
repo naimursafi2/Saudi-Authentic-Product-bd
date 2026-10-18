@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, Loader2, Lock, ShieldCheck, Tag, Truck, X } from "lucide-react";
+import { CircleAlert, CreditCard, Loader2, Lock, ShieldCheck, Tag, Truck, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { createOrder } from "@/lib/api/orders";
 import { validateCoupon } from "@/lib/api/coupons";
-import { createBkashPayment, getPaymentConfig } from "@/lib/api/payments";
+import { getPaymentConfig, initSslcommerzPayment } from "@/lib/api/payments";
 import { getShippingSettings } from "@/lib/api/shippingSettings";
 import { computeShippingFee, estimatedDeliveryDays } from "@/lib/shipping";
 import { ApiClientError } from "@/lib/api/client";
@@ -16,13 +16,11 @@ import { bdDistricts } from "@/data/bd-districts";
 import { ProductMedia } from "@/components/ui/ProductMedia";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { EmailVerificationBanner } from "@/components/account/EmailVerificationBanner";
-import { BkashMark, NagadMark } from "./PaymentBrandMark";
-import { BKASH_PENDING_ORDER_KEY } from "./BkashCallbackClient";
 import { FormSection, FieldLabel, inputClasses } from "./FormSection";
 import type { ApiShippingSettings } from "@/types/api";
 
 type DeliveryOption = "standard" | "express";
-type PaymentOption = "cod" | "bkash" | "nagad";
+type PaymentOption = "cod" | "sslcommerz";
 
 
 export function CheckoutClient() {
@@ -31,16 +29,16 @@ export function CheckoutClient() {
   const [delivery, setDelivery] = useState<DeliveryOption>("standard");
   const [payment, setPayment] = useState<PaymentOption>("cod");
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  /** Set the moment the order is created, so a later bKash failure still knows what was placed. */
+  /** Set the moment the order is created, so a later gateway failure still knows what was placed. */
   const [placedOrder, setPlacedOrder] = useState<{ id: string; orderNumber: string } | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Set once the order exists and the browser is being handed to bKash. The
-  // whole form is replaced by a "don't close this page" state, so there is
-  // nothing left to click twice while the redirect is in flight.
-  const [isRedirectingToBkash, setIsRedirectingToBkash] = useState(false);
+  // Set once the order exists and the browser is being handed to SSLCommerz.
+  // The whole form is replaced by a "don't close this page" state, so there
+  // is nothing left to click twice while the redirect is in flight.
+  const [isRedirectingToGateway, setIsRedirectingToGateway] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [isBkashAvailable, setIsBkashAvailable] = useState(false);
+  const [isOnlinePaymentAvailable, setIsOnlinePaymentAvailable] = useState(false);
   const [shippingSettings, setShippingSettings] = useState<ApiShippingSettings | null>(null);
   // The shipping zone depends on the chosen district, so this one address
   // field has to be controlled rather than left to the uncontrolled form.
@@ -63,14 +61,17 @@ export function CheckoutClient() {
 
   useEffect(() => {
     getPaymentConfig()
-      .then(({ data }) => setIsBkashAvailable(data.providers.bkash))
-      .catch(() => setIsBkashAvailable(false));
+      .then(({ data }) => setIsOnlinePaymentAvailable(data.providers.sslcommerz))
+      .catch(() => setIsOnlinePaymentAvailable(false));
     getShippingSettings()
       .then(({ data }) => setShippingSettings(data.settings))
       .catch(() => setShippingSettings(null));
   }, []);
 
-  const selectedPayment: PaymentOption = payment;
+  // Online payment can only be chosen while the gateway is configured — if it
+  // goes away after the page loaded, fall back to cash on delivery.
+  const selectedPayment: PaymentOption =
+    payment === "sslcommerz" && !isOnlinePaymentAvailable ? "cod" : payment;
 
   async function handleApplyCoupon() {
     const code = couponInput.trim();
@@ -123,12 +124,8 @@ export function CheckoutClient() {
       const placed = { id: data.order._id, orderNumber: data.order.orderNumber };
       setPlacedOrder(placed);
 
-      // Only redirect to bKash when the gateway is actually configured.
-      // Otherwise bKash behaves like Nagad: the order is placed unpaid and
-      // settled manually, rather than sending the customer to a gateway that
-      // would refuse the request.
-      if (selectedPayment === "bkash" && isBkashAvailable) {
-        await handOffToBkash(placed.id, placed.orderNumber);
+      if (selectedPayment === "sslcommerz") {
+        await handOffToGateway(placed.id);
         return;
       }
 
@@ -146,35 +143,31 @@ export function CheckoutClient() {
    * below that keeps the order number in front of the customer and offers a
    * retry, instead of leaving them on a form whose cart has just been emptied.
    */
-  async function handOffToBkash(orderId: string, placedOrderNumber: string) {
+  async function handOffToGateway(orderId: string) {
     setHandoffError(null);
-    setIsRedirectingToBkash(true);
+    setIsRedirectingToGateway(true);
     try {
-      const { data } = await createBkashPayment(orderId);
-      // Lets the callback page offer "Retry Payment" after a failure — bKash
-      // owns the return URL's query string, so it can't carry the order.
-      window.sessionStorage.setItem(
-        BKASH_PENDING_ORDER_KEY,
-        JSON.stringify({ orderId, orderNumber: placedOrderNumber })
-      );
-      window.location.assign(data.payment.bkashURL);
+      const { data } = await initSslcommerzPayment(orderId);
+      // SSLCommerz posts the result back to the server, which verifies it and
+      // redirects the customer to /checkout/payment/{success,failed,cancelled}.
+      window.location.assign(data.payment.gatewayUrl);
     } catch (err) {
-      setIsRedirectingToBkash(false);
+      setIsRedirectingToGateway(false);
       setHandoffError(
         err instanceof ApiClientError
           ? err.message
-          : "We could not reach bKash just now. Please check your connection and try again."
+          : "We could not reach the payment gateway just now. Please check your connection and try again."
       );
     }
   }
 
-  if (isRedirectingToBkash) {
+  if (isRedirectingToGateway) {
     return (
       <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-6 py-24 text-center">
         <Loader2 size={40} className="animate-spin text-green-900" />
-        <h1 className="font-serif text-3xl text-green-950">Connecting to bKash...</h1>
+        <h1 className="font-serif text-3xl text-green-950">Connecting to secure payment...</h1>
         <p className="text-sm text-brown-500">
-          You are being taken to bKash to complete your payment of{" "}
+          You are being taken to SSLCommerz to complete your payment of{" "}
           <span className="font-semibold text-green-950">{formatBDT(total)}</span>.
         </p>
         <p className="text-sm font-semibold text-brown-600">Please don&apos;t close this page.</p>
@@ -199,7 +192,7 @@ export function CheckoutClient() {
     );
   }
 
-  // The order exists but bKash could not be reached. This must come before the
+  // The order exists but the payment gateway could not be reached. This must come before the
   // empty-cart branch below: the cart was cleared the moment the order was
   // placed, so without this the customer would be shown "Your cart is empty"
   // and lose both the error and their order number.
@@ -210,7 +203,7 @@ export function CheckoutClient() {
         <h1 className="font-serif text-3xl text-green-950">Order Placed — Payment Pending</h1>
         <p className="text-sm text-brown-500">
           Your order <span className="font-semibold text-green-950">{placedOrder.orderNumber}</span> has
-          been placed and is being held for you, but we could not start the bKash payment. Nothing has
+          been placed and is being held for you, but we could not start the online payment. Nothing has
           been charged.
         </p>
         <p className="text-sm text-danger">{handoffError}</p>
@@ -218,7 +211,7 @@ export function CheckoutClient() {
           <Button
             variant="gold"
             size="md"
-            onClick={() => handOffToBkash(placedOrder.id, placedOrder.orderNumber)}
+            onClick={() => handOffToGateway(placedOrder.id)}
           >
             Retry Payment
           </Button>
@@ -272,35 +265,25 @@ export function CheckoutClient() {
       : null,
   }));
 
-  // bKash and Nagad are both always offered, each with its brand mark. What
-  // differs is only what happens after the order is placed: with gateway
-  // credentials configured, bKash hands off to its hosted checkout; without
-  // them it behaves exactly like Nagad — the order is placed unpaid and
-  // settled manually. Staff see the gateway's configuration state on
-  // /admin/payments, so an unconfigured gateway is never silently invisible.
+  // Online payment (cards, mobile banking and net banking through
+  // SSLCommerz's hosted page) is only selectable while the gateway is
+  // configured on the server; staff see why on /admin/payments.
   const paymentOptions = [
     {
       id: "cod" as const,
       label: "Cash on Delivery",
       desc: "Pay the delivery agent when your order arrives",
       icon: Truck,
-      mark: null,
+      disabled: false,
     },
     {
-      id: "bkash" as const,
-      label: "bKash",
-      desc: isBkashAvailable
-        ? "Pay securely now through bKash mobile banking"
-        : "Pay via bKash — our team will confirm your payment",
-      icon: null,
-      mark: <BkashMark />,
-    },
-    {
-      id: "nagad" as const,
-      label: "Nagad",
-      desc: "Pay via Nagad — our team will confirm your payment",
-      icon: null,
-      mark: <NagadMark />,
+      id: "sslcommerz" as const,
+      label: "Pay Online",
+      desc: isOnlinePaymentAvailable
+        ? "Card, mobile banking or net banking — secured by SSLCommerz"
+        : "Online payment is temporarily unavailable",
+      icon: CreditCard,
+      disabled: !isOnlinePaymentAvailable,
     },
   ];
 
@@ -457,7 +440,8 @@ export function CheckoutClient() {
                 <label
                   key={option.id}
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded border p-4 transition-colors",
+                    "flex items-start gap-3 rounded border p-4 transition-colors",
+                    option.disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                     selectedPayment === option.id
                       ? "border-green-900 bg-green-950/5"
                       : "border-green-900/15 hover:border-green-900/30"
@@ -467,12 +451,11 @@ export function CheckoutClient() {
                     type="radio"
                     name="payment"
                     checked={selectedPayment === option.id}
+                    disabled={option.disabled}
                     onChange={() => setPayment(option.id)}
                     className="mt-0.5 size-4 accent-green-900"
                   />
-                  {option.mark ?? (option.icon ? (
-                    <option.icon size={18} className="mt-0.5 text-brown-600" />
-                  ) : null)}
+                  <option.icon size={18} className="mt-0.5 text-brown-600" />
                   <span>
                     <span className="block text-sm font-semibold text-green-950">{option.label}</span>
                     <span className="block text-xs text-brown-500">{option.desc}</span>
@@ -481,13 +464,13 @@ export function CheckoutClient() {
               ))}
             </div>
 
-            {selectedPayment === "bkash" && isBkashAvailable && (
+            {selectedPayment === "sslcommerz" && (
               <div className="flex items-start gap-2 rounded border border-green-900/15 bg-cream-50 p-3 text-xs text-brown-600">
                 <ShieldCheck size={15} className="mt-px shrink-0 text-green-900" />
                 <span>
-                  You will be taken to bKash to authorise{" "}
+                  You will be taken to SSLCommerz&apos;s secure page to pay{" "}
                   <span className="font-semibold text-green-950">{formatBDT(total)}</span>. Your order is
-                  only confirmed once we have verified the transaction with bKash directly.
+                  only confirmed once we have verified the transaction with SSLCommerz directly.
                 </span>
               </div>
             )}
@@ -497,11 +480,11 @@ export function CheckoutClient() {
             {formError && <p className="text-sm text-danger">{formError}</p>}
             <Button type="submit" variant="gold" size="lg" className="w-full" disabled={isSubmitting}>
               {isSubmitting
-                ? selectedPayment === "bkash" && isBkashAvailable
-                  ? "Connecting to bKash..."
+                ? selectedPayment === "sslcommerz"
+                  ? "Connecting to payment..."
                   : "Placing Order..."
-                : selectedPayment === "bkash" && isBkashAvailable
-                  ? `Pay ${formatBDT(total)} with bKash`
+                : selectedPayment === "sslcommerz"
+                  ? `Pay ${formatBDT(total)} Online`
                   : "Complete Order"}
             </Button>
             <p className="flex items-center gap-1.5 text-xs text-brown-500">

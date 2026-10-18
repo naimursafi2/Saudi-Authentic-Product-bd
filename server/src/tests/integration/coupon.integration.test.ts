@@ -348,7 +348,7 @@ describe("Coupon integration", () => {
       items: [{ productId: product._id.toString(), variantId, quantity: 1 }],
       shippingAddress,
       deliveryMethod: "standard" as const,
-      paymentMethod: "bkash" as const,
+      paymentMethod: "sslcommerz" as const,
       couponCode: "LASTONE",
     };
 
@@ -365,7 +365,7 @@ describe("Coupon integration", () => {
     expect(second.status).toBe(400);
 
     // Exactly one order exists. The rejected attempt must not have left a
-    // discounted, stock-less ghost order behind — which, being a bKash order,
+    // discounted, stock-less ghost order behind — which, being an online-payment order,
     // would otherwise have been payable.
     const orders = await OrderModel.find();
     expect(orders).toHaveLength(1);

@@ -11,6 +11,7 @@ import { apiLimiter } from "./middlewares/rateLimit.middleware";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware";
 import { sanitizeRequest } from "./middlewares/sanitize.middleware";
 import routes from "./routes";
+import sslcommerzCallbackRoutes from "./routes/sslcommerzCallback.routes";
 
 export function createApp(): Express {
   const app = express();
@@ -20,6 +21,11 @@ export function createApp(): Express {
   app.set("trust proxy", 1);
 
   app.use(helmet());
+
+  // SSLCommerz posts the customer's browser back from its own domain, so these
+  // few gateway callbacks must sit before the CORS allow-list below. They are
+  // unauthenticated and verify everything with SSLCommerz server-to-server.
+  app.use(`${env.API_PREFIX}/payments/sslcommerz`, sslcommerzCallbackRoutes);
   app.use(
     cors({
       // `clientOrigins` is an allow-list (one origin, or several

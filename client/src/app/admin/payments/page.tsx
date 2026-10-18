@@ -34,11 +34,15 @@ export default function AdminPaymentsPage() {
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | "">("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [gateway, setGateway] = useState<{ configured: boolean; missingKeys: string[] } | null>(null);
+  const [gateway, setGateway] = useState<{
+    configured: boolean;
+    missingKeys: string[];
+    mode: "sandbox" | "live";
+  } | null>(null);
 
   useEffect(() => {
     getGatewayStatus()
-      .then(({ data }) => setGateway(data.bkash))
+      .then(({ data }) => setGateway(data.sslcommerz))
       .catch(() => setGateway(null));
   }, []);
 
@@ -61,21 +65,33 @@ export default function AdminPaymentsPage() {
     <div>
       <PageHeader
         title="Payments"
-        description="bKash gateway transactions, read-only. Every status here comes from bKash itself — verification is automatic, so there is nothing to confirm by hand."
+        description="SSLCommerz online payments, read-only. Every status here is verified with SSLCommerz itself — verification is automatic, so there is nothing to confirm by hand."
       />
+
+      {gateway?.configured && gateway.mode === "sandbox" && (
+        <div className="mb-4 flex gap-3 rounded-lg border border-info/30 bg-info-soft p-4">
+          <TriangleAlert size={18} className="mt-0.5 shrink-0 text-info" />
+          <p className="text-sm text-info">
+            SSLCommerz is running in <span className="font-semibold">sandbox (test) mode</span> — no real
+            money is collected. Set <span className="font-mono text-xs">SSLCOMMERZ_IS_LIVE=true</span> in
+            the server&apos;s <span className="font-mono text-xs">.env</span> once your store is approved for
+            live payments.
+          </p>
+        </div>
+      )}
 
       {gateway && !gateway.configured && (
         <div className="mb-4 flex gap-3 rounded-lg border border-gold-500/40 bg-gold-soft p-4">
           <TriangleAlert size={18} className="mt-0.5 shrink-0 text-gold-700" />
           <div className="text-sm text-gold-700">
-            <p className="font-semibold">bKash is not configured, so it is hidden at checkout.</p>
+            <p className="font-semibold">SSLCommerz is not configured, so online payment is unavailable at checkout.</p>
             <p className="mt-1">
-              Customers currently see only Cash on Delivery. To switch bKash on, set{" "}
+              Customers can currently only use Cash on Delivery. To switch online payment on, set{" "}
               {gateway.missingKeys.length === 0
-                ? "the bKash credentials"
+                ? "the SSLCommerz credentials"
                 : gateway.missingKeys.join(", ")}{" "}
               in the server&apos;s <span className="font-mono text-xs">.env</span> file and restart the
-              API. The values come from your bKash merchant account.
+              API. The values come from your SSLCommerz merchant panel.
             </p>
           </div>
         </div>
@@ -107,7 +123,7 @@ export default function AdminPaymentsPage() {
         <EmptyState
           icon={CreditCard}
           title="No payments yet"
-          description="bKash transactions will show up here as customers pay for their orders."
+          description="Online payments will show up here as customers pay for their orders."
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-brown-600/10 bg-surface">
@@ -128,7 +144,7 @@ export default function AdminPaymentsPage() {
                 <tr key={payment._id} className="border-b border-brown-600/10 last:border-none">
                   <td className="px-4 py-3 font-medium text-green-950">{orderNumber(payment)}</td>
                   <td className="px-4 py-3 text-brown-600">{customerName(payment.customer)}</td>
-                  <td className="px-4 py-3 text-brown-600">bKash</td>
+                  <td className="px-4 py-3 text-brown-600">SSLCommerz</td>
                   <td className="px-4 py-3 text-brown-600">{formatBDT(payment.amountBDT)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={payment.status} />

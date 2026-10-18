@@ -7,7 +7,7 @@ import type { Role } from "../constants/roles";
 export type { OrderStatus };
 
 export type DeliveryMethod = "standard" | "express";
-export type PaymentMethod = "cod" | "bkash" | "nagad";
+export type PaymentMethod = "cod" | "sslcommerz";
 
 /**
  * One order item's draw against a specific Purchase batch's cost basis —
@@ -160,7 +160,7 @@ const orderSchema = new Schema<IOrder>(
     shippingAddress: { type: shippingAddressSchema, required: true },
     deliveryMethod: { type: String, enum: ["standard", "express"], required: true },
     shippingFeeBDT: { type: Number, required: true, min: 0 },
-    paymentMethod: { type: String, enum: ["cod", "bkash", "nagad"], required: true },
+    paymentMethod: { type: String, enum: ["cod", "sslcommerz"], required: true },
     isPaid: { type: Boolean, default: false },
     subtotalBDT: { type: Number, required: true, min: 0 },
     couponCode: { type: String, trim: true, uppercase: true },

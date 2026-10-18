@@ -106,7 +106,7 @@ describe("Order integration (create/list/track against a real DB)", () => {
         items: [{ productId: product._id.toString(), variantId, quantity: 1 }],
         shippingAddress,
         deliveryMethod: "express",
-        paymentMethod: "bkash",
+        paymentMethod: "sslcommerz",
       });
     const orderNumber = createRes.body.data.order.orderNumber as string;
 

@@ -157,7 +157,7 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
   // `applyCouponUsage` throws when a concurrent order took the final use, and
   // doing that first means such a loss leaves nothing behind — claiming it
   // afterwards used to persist an order carrying a discount it was never
-  // entitled to, with its stock never drawn, and (for a bKash order) leave
+  // entitled to, with its stock never drawn, and (for an online-payment order) leave
   // that ghost order payable.
   if (appliedCoupon) {
     await applyCouponUsage(appliedCoupon._id.toString(), appliedCoupon.usageLimit);

@@ -10,7 +10,7 @@ import { env, isRevalidateConfigured, clientOrigins } from "../config/env";
  * Fire-and-forget by design: never throws, never blocks or fails the admin
  * action that triggered it. If `REVALIDATE_SECRET` isn't configured yet, or
  * the frontend can't be reached, this silently no-ops — same
- * graceful-degrade pattern as Cloudinary/SMTP/SMS/bKash (see config/env.ts).
+ * graceful-degrade pattern as Cloudinary/SMTP/SMS/SSLCommerz (see config/env.ts).
  * Worst case the change just waits out that safety-net window instead of
  * showing up instantly, nothing breaks.
  *

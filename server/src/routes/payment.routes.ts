@@ -3,12 +3,7 @@ import * as paymentController from "../controllers/payment.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { validate } from "../middlewares/validate.middleware";
-import {
-  cancelBkashPaymentSchema,
-  createBkashPaymentSchema,
-  executeBkashPaymentSchema,
-  listPaymentsQuerySchema,
-} from "../validators/payment.validator";
+import { initSslcommerzPaymentSchema, listPaymentsQuerySchema } from "../validators/payment.validator";
 import { orderIdParamSchema } from "../validators/common.validator";
 
 const router = Router();
@@ -22,20 +17,13 @@ router.use(authenticate);
 // -- Customer (self-scoped: every handler re-checks that the order/payment
 // belongs to the caller, so no permission gate is needed or wanted — same
 // convention as POST /orders and GET /orders/mine). --
+// SSLCommerz's browser callbacks and IPN (success/fail/cancel/ipn) are NOT
+// here — they are cross-site posts from the gateway, so they're mounted ahead
+// of CORS in app.ts (see routes/sslcommerzCallback.routes.ts).
 router.post(
-  "/bkash/create",
-  validate({ body: createBkashPaymentSchema }),
-  paymentController.createBkashPayment
-);
-router.post(
-  "/bkash/execute",
-  validate({ body: executeBkashPaymentSchema }),
-  paymentController.executeBkashPayment
-);
-router.post(
-  "/bkash/cancel",
-  validate({ body: cancelBkashPaymentSchema }),
-  paymentController.cancelBkashPayment
+  "/sslcommerz/init",
+  validate({ body: initSslcommerzPaymentSchema }),
+  paymentController.initSslcommerzPayment
 );
 
 // -- Staff (read-only) --
@@ -50,7 +38,7 @@ router.get(
   validate({ query: listPaymentsQuerySchema }),
   paymentController.listPayments
 );
-// Explains an absent bKash option at checkout. Staff-gated because it names
+// Explains an absent online-payment option at checkout. Staff-gated because it names
 // server environment variables, even though it never exposes their values.
 router.get(
   "/gateway-status",

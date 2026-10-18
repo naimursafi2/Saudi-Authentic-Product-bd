@@ -7,6 +7,7 @@ import { ProductModel } from "../../models/Product.model";
 import { PurchaseModel } from "../../models/Purchase.model";
 import mongoose from "mongoose";
 import { OrderModel } from "../../models/Order.model";
+import { getDeliveryOtp } from "../../services/deliveryOtp.store";
 
 /**
  * The Purchase/Landed-Cost system feeding the finance module's profit-and-loss
@@ -340,11 +341,11 @@ describe("Finance profit & loss, sourced from real purchase costs", () => {
         .set(...authHeader(agentToken))
         .send({})
         .expect(200);
-      const withOtp = await OrderModel.findById(order._id).select("+otpCode");
+      const sentOtp = (await getDeliveryOtp(order._id.toString()))!.code;
       await request(app)
         .post(`/api/v1/orders/${order._id}/verify-otp`)
         .set(...authHeader(agentToken))
-        .send({ otp: withOtp!.otpCode })
+        .send({ otp: sentOtp })
         .expect(200);
 
       return { order, superAdminToken };

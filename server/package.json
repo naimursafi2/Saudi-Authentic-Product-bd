@@ -17,7 +17,8 @@
     "lint": "eslint src",
     "test": "jest --runInBand",
     "seed": "tsx src/seed/seed.ts",
-    "migrate:drop-user-otp-fields": "tsx src/scripts/dropUserOtpFields.ts"
+    "migrate:drop-otp-fields": "tsx src/scripts/dropOtpFields.ts",
+    "migrate:legacy-payment-methods": "tsx src/scripts/migrateLegacyPaymentMethods.ts"
   },
   "keywords": [],
   "author": "",

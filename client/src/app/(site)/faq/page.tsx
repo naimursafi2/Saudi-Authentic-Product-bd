@@ -30,7 +30,7 @@ const FAQS: { question: string; answer: string }[] = [
   {
     question: "What payment methods are accepted?",
     answer:
-      "Cash on Delivery, bKash and Nagad are available at checkout. Card/online payment gateways are not yet supported.",
+      "Cash on Delivery and secure online payment through SSLCommerz (cards, mobile banking and net banking) are available at checkout.",
   },
   {
     question: "How can I track my order?",

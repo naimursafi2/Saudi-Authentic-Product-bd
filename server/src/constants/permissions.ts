@@ -110,7 +110,7 @@ export const PERMISSIONS = [
   "returns.view",
   "returns.request",
   "returns.review",
-  // Read-only. A customer creating/executing their own bKash payment needs no
+  // Read-only. A customer starting their own SSLCommerz payment needs no
   // permission — those routes are self-scoped by order ownership, the same
   // convention as `POST /orders` and `GET /orders/mine`. There is no
   // "verify"/"settle" permission on purpose: payment verification is entirely

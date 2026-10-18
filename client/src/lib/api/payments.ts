@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ApiCreatedPayment, ApiOrder, ApiPayment, PaymentStatus } from "@/types/api";
+import type { ApiCreatedPayment, ApiPayment, PaymentStatus } from "@/types/api";
 
 /**
  * Note that no function here sends an amount. The payable figure is computed
@@ -9,32 +9,28 @@ import type { ApiCreatedPayment, ApiOrder, ApiPayment, PaymentStatus } from "@/t
 
 /** Which gateways this deployment can actually take money through. Public, booleans only. */
 export async function getPaymentConfig() {
-  return api.get<{ providers: { bkash: boolean } }>("/payments/config");
+  return api.get<{ providers: { sslcommerz: boolean } }>("/payments/config");
 }
 
 /**
- * Staff-only. Explains why bKash may be missing from checkout, naming the
- * unset server environment variables (never their values). Requires
- * `payments.view`.
+ * Staff-only. Explains why online payment may be missing from checkout,
+ * naming the unset server environment variables (never their values).
+ * Requires `payments.view`.
  */
 export async function getGatewayStatus() {
-  return api.get<{ bkash: { configured: boolean; missingKeys: string[] } }>(
-    "/payments/gateway-status"
-  );
+  return api.get<{
+    sslcommerz: { configured: boolean; missingKeys: string[]; mode: "sandbox" | "live" };
+  }>("/payments/gateway-status");
 }
 
-/** Starts a bKash payment for one of the signed-in customer's own orders. */
-export async function createBkashPayment(orderId: string) {
-  return api.post<{ payment: ApiCreatedPayment }>("/payments/bkash/create", { orderId });
-}
-
-/** Called when the customer returns from bKash — the backend verifies with the gateway before anything is marked paid. */
-export async function executeBkashPayment(paymentID: string) {
-  return api.post<{ payment: ApiPayment; order: ApiOrder }>("/payments/bkash/execute", { paymentID });
-}
-
-export async function cancelBkashPayment(paymentID: string, reason?: string) {
-  return api.post<{ payment: ApiPayment }>("/payments/bkash/cancel", { paymentID, reason });
+/**
+ * Starts an SSLCommerz payment for one of the signed-in customer's own
+ * orders. The browser is then sent to `payment.gatewayUrl`; SSLCommerz posts
+ * the result back to the server, which verifies it and redirects the customer
+ * to `/checkout/payment/success | failed | cancelled`.
+ */
+export async function initSslcommerzPayment(orderId: string) {
+  return api.post<{ payment: ApiCreatedPayment }>("/payments/sslcommerz/init", { orderId });
 }
 
 export async function getPaymentForOrder(orderId: string) {
@@ -43,7 +39,7 @@ export async function getPaymentForOrder(orderId: string) {
 
 // -- Staff (read-only) --
 // There is no "verify"/"settle" call here on purpose: verification is entirely
-// automatic, on the customer's callback and on the server's reconciliation
+// automatic, on the gateway callback and on the server's reconciliation
 // sweep. Staff can see payments, never settle one by hand.
 
 export async function listPayments(
