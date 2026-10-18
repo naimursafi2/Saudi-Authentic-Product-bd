@@ -23,7 +23,9 @@ async function enforceInactivityWindow(user: Pick<IUser, "_id" | "role" | "lastS
     throw ApiError.unauthorized("Signed out due to inactivity — please log in again");
   }
   if (lastSeen === undefined || now - lastSeen > ACTIVITY_WRITE_GRANULARITY_MS) {
-    await UserModel.updateOne({ _id: user._id }, { lastSeenAt: new Date(now) });
+    // Fire-and-forget: the request shouldn't wait a database round trip just
+    // to record activity.
+    void UserModel.updateOne({ _id: user._id }, { lastSeenAt: new Date(now) }).catch(() => undefined);
   }
 }
 

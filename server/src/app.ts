@@ -10,6 +10,7 @@ import { clientOrigins, env, isProduction } from "./config/env";
 import { apiLimiter } from "./middlewares/rateLimit.middleware";
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware";
 import { sanitizeRequest } from "./middlewares/sanitize.middleware";
+import { bustProductCacheOnWrite } from "./middlewares/productCache.middleware";
 import routes from "./routes";
 import sslcommerzCallbackRoutes from "./routes/sslcommerzCallback.routes";
 
@@ -58,7 +59,7 @@ export function createApp(): Express {
     res.status(200).json({ success: true, message: "OK", data: { uptime: process.uptime() } });
   });
 
-  app.use(env.API_PREFIX, apiLimiter, routes);
+  app.use(env.API_PREFIX, apiLimiter, bustProductCacheOnWrite, routes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

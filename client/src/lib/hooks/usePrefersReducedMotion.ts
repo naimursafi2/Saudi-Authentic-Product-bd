@@ -15,7 +15,7 @@ function subscribe(onChange: () => void) {
  * (this project's lint config rejects that pattern). The server snapshot is
  * `false` so SSR and the first client render agree, and React re-renders on
  * its own if the OS setting changes mid-session. Shared by every carousel
- * (`HeroCarousel`, `BannerCarousel`) rather than each keeping its own copy.
+ * (`HeroCarousel`) rather than each keeping its own copy.
  */
 export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(

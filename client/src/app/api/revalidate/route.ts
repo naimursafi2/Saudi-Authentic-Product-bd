@@ -50,7 +50,11 @@ export async function POST(request: NextRequest) {
   // still be served stale content while a background refresh runs, which
   // isn't "the admin's change shows up immediately." `expire: 0` makes the
   // very next request for this tag block on a fresh fetch instead.
-  for (const tag of tags) revalidateTag(tag, { expire: 0 });
+  // Exception: "products" (busted on every order and stock move, not just
+  // admin saves) is refreshed stale-while-revalidate, so the next shopper is
+  // never kept waiting on the API — checkout re-checks price and stock on the
+  // server anyway.
+  for (const tag of tags) revalidateTag(tag, tag === "products" ? "max" : { expire: 0 });
 
   return NextResponse.json({ revalidated: true, tags, now: Date.now() });
 }

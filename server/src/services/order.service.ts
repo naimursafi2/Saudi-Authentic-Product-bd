@@ -93,9 +93,20 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
   const items: IOrder["items"] = [];
   let subtotalBDT = 0;
 
-  for (const line of input.items) {
+  // Every independent read runs at once: one query for all products (not one
+  // per line), plus shipping rates and a unique order number. Each Atlas
+  // round trip is a noticeable wait, so doing these sequentially used to add
+  // up to several seconds on a multi-item checkout.
+  const productIds = [...new Set(input.items.map((line) => line.productId))];
+  const [products, shippingRates, orderNumber] = await Promise.all([
+    ProductModel.find({ _id: { $in: productIds } }),
+    getShippingSettings(),
+    generateOrderNumber(),
+  ]);
+  const productsById = new Map(products.map((p) => [p._id.toString(), p]));
 
-    const product = await ProductModel.findById(line.productId);
+  for (const line of input.items) {
+    const product = productsById.get(line.productId);
     if (!product || !product.isActive) {
       throw ApiError.badRequest(`Product ${line.productId} is no longer available`);
     }
@@ -129,7 +140,6 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
   // Rates come from the live `ShippingSettings` document, and the zone from
   // the shipping address the customer actually submitted — never from any
   // figure the client sent. `createOrderSchema` has no shipping field at all.
-  const shippingRates = await getShippingSettings();
   const shippingFeeBDT = computeShippingFee(
     {
       deliveryMethod: input.deliveryMethod,
@@ -151,7 +161,6 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
   }
 
   const totalBDT = Math.max(0, subtotalBDT + shippingFeeBDT - discountBDT);
-  const orderNumber = await generateOrderNumber();
 
   // The coupon's last remaining use is claimed BEFORE the order exists.
   // `applyCouponUsage` throws when a concurrent order took the final use, and

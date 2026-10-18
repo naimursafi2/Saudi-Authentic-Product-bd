@@ -10,7 +10,9 @@ export interface CreateOrderPayload {
 }
 
 export async function createOrder(payload: CreateOrderPayload) {
-  return api.post<{ order: ApiOrder }>("/orders", payload);
+  // For an online-payment order the server also opens the SSLCommerz session
+  // in the same request and returns its hosted page as `payment.gatewayUrl`.
+  return api.post<{ order: ApiOrder; payment?: { gatewayUrl?: string } }>("/orders", payload);
 }
 
 export async function listMyOrders(page = 1, limit = 20) {

@@ -76,6 +76,10 @@ async function placeOnlineOrder(token: string, quantity = 2, extra: Record<strin
       ...extra,
     });
   expect(res.status).toBe(201);
+  // Checkout now opens a gateway session in the same request. These tests
+  // exercise the explicit "Pay Now" path, so start each one from a clean slate.
+  await PaymentModel.deleteMany({ order: res.body.data.order._id });
+  initSslcommerzPayment.mockReset();
   return { product, order: res.body.data.order as { _id: string; orderNumber: string; totalBDT: number } };
 }
 
@@ -336,6 +340,43 @@ describe("SSLCommerz payment integration", () => {
       .set(...authHeader(token))
       .send({ orderId: order._id });
     expect(res.status).toBe(400);
+  });
+
+  it("opens the gateway session in the same checkout request and returns its URL", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const product = await seedProduct();
+    stubInit();
+    const res = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(token))
+      .send({
+        items: [{ productId: product._id.toString(), variantId: product.variants[0]!._id!.toString(), quantity: 1 }],
+        shippingAddress,
+        deliveryMethod: "standard",
+        paymentMethod: "sslcommerz",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.payment.gatewayUrl).toContain("sandbox.sslcommerz.test");
+    expect(initSslcommerzPayment).toHaveBeenCalledTimes(1);
+    expect(await PaymentModel.countDocuments({ order: res.body.data.order._id, status: "initiated" })).toBe(1);
+  });
+
+  it("still places the order when the gateway can't be reached at checkout", async () => {
+    const { token } = await createAuthedUser({ role: "customer" });
+    const product = await seedProduct();
+    initSslcommerzPayment.mockRejectedValue(new Error("gateway down"));
+    const res = await request(app)
+      .post("/api/v1/orders")
+      .set(...authHeader(token))
+      .send({
+        items: [{ productId: product._id.toString(), variantId: product.variants[0]!._id!.toString(), quantity: 1 }],
+        shippingAddress,
+        deliveryMethod: "standard",
+        paymentMethod: "sslcommerz",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.order.orderNumber).toBeTruthy();
+    expect(res.body.data.payment).toBeUndefined();
   });
 
   it("reuses one gateway session across repeated Pay Now clicks", async () => {

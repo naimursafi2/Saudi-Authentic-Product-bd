@@ -15,6 +15,19 @@ export interface ListProductsParams {
   limit?: number;
 }
 
+/**
+ * Storefront pages (shop, home, product, offers, categories) read the catalog
+ * on the Next.js server. Those reads are cached for up to a minute under the
+ * "products" tag, and the backend busts that tag the moment a product, its
+ * stock, an order or a review changes (see server
+ * middlewares/productCache.middleware.ts) — so pages render from cache
+ * instead of waiting on the API on every visit. Browser-side calls (admin
+ * screens, cart, search) stay uncached and always live. Checkout re-prices
+ * and re-checks stock on the server regardless.
+ */
+const CATALOG_CACHE =
+  typeof window === "undefined" ? { revalidate: 60, tags: ["products"] } : undefined;
+
 function toQueryString(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -38,11 +51,11 @@ export async function listProducts(params: ListProductsParams = {}) {
     page: params.page,
     limit: params.limit,
   });
-  return api.get<{ products: ApiProduct[] }>(`/products${qs}`);
+  return api.get<{ products: ApiProduct[] }>(`/products${qs}`, CATALOG_CACHE);
 }
 
 export async function getProductBySlug(slug: string) {
-  return api.get<{ product: ApiProduct; related: ApiProduct[] }>(`/products/${slug}`);
+  return api.get<{ product: ApiProduct; related: ApiProduct[] }>(`/products/${slug}`, CATALOG_CACHE);
 }
 
 export async function getProductByIdForAdmin(id: string) {

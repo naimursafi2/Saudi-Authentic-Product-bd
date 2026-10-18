@@ -100,6 +100,9 @@ export function CheckoutClient() {
     setFormError(null);
     const form = new FormData(e.currentTarget);
     setIsSubmitting(true);
+    // Show the "taking you to payment" screen the instant Pay Online is
+    // pressed, not only after the order comes back.
+    if (selectedPayment === "sslcommerz") setIsRedirectingToGateway(true);
     try {
       const { data } = await createOrder({
         items: items.map((item) => ({
@@ -125,12 +128,19 @@ export function CheckoutClient() {
       setPlacedOrder(placed);
 
       if (selectedPayment === "sslcommerz") {
+        // Usually the gateway session was opened in the same request —
+        // go straight there. Otherwise fall back to a separate init call.
+        if (data.payment?.gatewayUrl) {
+          window.location.assign(data.payment.gatewayUrl);
+          return;
+        }
         await handOffToGateway(placed.id);
         return;
       }
 
       setOrderNumber(placed.orderNumber);
     } catch (err) {
+      setIsRedirectingToGateway(false);
       setFormError(err instanceof ApiClientError ? err.message : "Could not place your order.");
     } finally {
       setIsSubmitting(false);

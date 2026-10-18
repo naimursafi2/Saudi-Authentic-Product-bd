@@ -4,6 +4,8 @@ import { sendSuccess } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 import { paramStr } from "../utils/params";
 import * as orderService from "../services/order.service";
+import * as paymentService from "../services/payment.service";
+import { isSslcommerzConfigured } from "../config/sslcommerz";
 import { ADMIN_PORTAL_ROLES } from "../constants/roles";
 import type { OrderStatus } from "../models/Order.model";
 
@@ -31,7 +33,26 @@ async function withDeliveryOtp(order: OrderDoc, isOwner: boolean) {
 
 export const createOrder = catchAsync(async (req: Request, res: Response) => {
   const order = await orderService.createOrder(req.user!.id, req.body);
-  sendSuccess(res, 201, "Order placed successfully", { order });
+
+  // For online payment, open the SSLCommerz session in this same request so
+  // the browser can jump straight to the gateway — one round trip instead of
+  // "create order" then "start payment". If the gateway call fails the order
+  // still exists; the client falls back to POST /payments/sslcommerz/init.
+  let payment: { gatewayUrl?: string } | undefined;
+  if (order.paymentMethod === "sslcommerz" && isSslcommerzConfigured) {
+    try {
+      const created = await paymentService.initSslcommerzPaymentForOrder(order._id.toString(), {
+        id: req.user!.id,
+        role: req.user!.role,
+      });
+      const gatewayUrl = created.gatewayMetadata?.gatewayUrl;
+      if (typeof gatewayUrl === "string") payment = { gatewayUrl };
+    } catch (err) {
+      console.error("[orders] SSLCommerz session could not be opened at checkout:", (err as Error).message);
+    }
+  }
+
+  sendSuccess(res, 201, "Order placed successfully", { order, payment });
 });
 
 export const listMyOrders = catchAsync(async (req: Request, res: Response) => {
