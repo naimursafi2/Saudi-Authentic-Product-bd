@@ -81,16 +81,10 @@ export interface IOrder extends Document {
   }[];
   /** Set when an order reaches `assigned_to_agent` — the `delivery_agent` handling it. */
   assignedAgent?: Types.ObjectId;
-  /** Plaintext, `select: false` — see `order.service.ts`'s OTP flow for why. Never
-   * exposed in a JSON response by default; the `toJSON` transform below strips it
-   * as defense-in-depth even if some future query accidentally re-selects it. */
-  otpCode?: string;
-  otpGeneratedAt?: Date;
-  otpExpiresAt?: Date;
+  /** The live delivery OTP (code, attempts, expiry) lives in Redis with a 5-min
+   * TTL — see `services/deliveryOtp.store.ts`. Only this permanent audit
+   * timestamp is kept on the order. */
   otpVerifiedAt?: Date;
-  /** Incorrect `verify-otp` attempts against the *current* code — reset to 0 whenever
-   * a fresh code is generated/resent, and once more on a successful verify. */
-  otpAttempts: number;
   /** True only once a `delivered` transition has gone through real OTP verification
    * (never set any other way) — a durable, directly-queryable record alongside the
    * `otp_verified`/`delivered` pair already in `statusHistory`. */
@@ -192,11 +186,7 @@ const orderSchema = new Schema<IOrder>(
       default: [],
     },
     assignedAgent: { type: Schema.Types.ObjectId, ref: "User", index: true },
-    otpCode: { type: String, select: false },
-    otpGeneratedAt: { type: Date },
-    otpExpiresAt: { type: Date },
     otpVerifiedAt: { type: Date },
-    otpAttempts: { type: Number, default: 0, min: 0 },
     deliveryVerified: { type: Boolean, default: false },
     deliveredAt: { type: Date },
     deliveredBy: { type: Schema.Types.ObjectId, ref: "User" },
@@ -209,13 +199,7 @@ const orderSchema = new Schema<IOrder>(
   },
   {
     timestamps: true,
-    toJSON: {
-      virtuals: true,
-      transform: (_doc, ret) => {
-        delete ret.otpCode;
-        return ret;
-      },
-    },
+    toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );

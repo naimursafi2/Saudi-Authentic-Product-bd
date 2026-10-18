@@ -5,6 +5,7 @@ import { createAuthedUser, authHeader } from "./helpers";
 import { CategoryModel } from "../../models/Category.model";
 import { ProductModel } from "../../models/Product.model";
 import { OrderModel } from "../../models/Order.model";
+import { getDeliveryOtp } from "../../services/deliveryOtp.store";
 
 const app = createApp();
 
@@ -96,8 +97,7 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
 
     // Reaching out_for_delivery no longer sends an OTP by itself — the agent
     // sends it explicitly once they've reached the customer.
-    const beforeSend = await OrderModel.findById(order._id).select("+otpCode");
-    expect(beforeSend?.otpCode).toBeUndefined();
+    expect(await getDeliveryOtp(order._id.toString())).toBeNull();
 
     const sendOtpRes = await request(app)
       .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
@@ -105,8 +105,9 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
       .send({});
     expect(sendOtpRes.status).toBe(200);
 
-    const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
-    expect(dbOrder?.otpCode).toMatch(/^\d{4}$/);
+    expect(sendOtpRes.body.data.order.otpExpiresAt).toBeTruthy();
+    const sentOtp = (await getDeliveryOtp(order._id.toString()))!.code;
+    expect(sentOtp).toMatch(/^\d{4}$/);
 
     const wrongOtp = await request(app)
       .post(`/api/v1/orders/${order._id}/verify-otp`)
@@ -117,7 +118,7 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
     const verifyRes = await request(app)
       .post(`/api/v1/orders/${order._id}/verify-otp`)
       .set(...authHeader(agentToken))
-      .send({ otp: dbOrder!.otpCode });
+      .send({ otp: sentOtp });
     expect(verifyRes.status).toBe(200);
     expect(verifyRes.body.data.order.status).toBe("delivered");
     expect(verifyRes.body.data.order.isPaid).toBe(true);
@@ -126,8 +127,8 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
     expect(verifyRes.body.data.order.deliveredBy).toBe(agent._id.toString());
 
     const finalOrder = await OrderModel.findById(order._id);
-    expect(finalOrder?.otpCode).toBeUndefined();
-    expect(finalOrder?.otpAttempts).toBe(0);
+    expect(await getDeliveryOtp(order._id.toString())).toBeNull();
+    expect(finalOrder?.otpVerifiedAt).toBeTruthy();
     const history = finalOrder!.statusHistory;
     const deliveredEntry = history[history.length - 1];
     expect(deliveredEntry.status).toBe("delivered");
@@ -338,8 +339,7 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
       .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
       .set(...authHeader(agentToken))
       .send({});
-    const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
-    const realOtp = dbOrder!.otpCode!;
+    const realOtp = (await getDeliveryOtp(order._id.toString()))!.code;
     const wrongOtp = realOtp === "0000" ? "1111" : "0000";
 
     for (let i = 0; i < 4; i += 1) {
@@ -370,11 +370,12 @@ describe("Order status pipeline, RBAC, and OTP flow", () => {
       .post(`/api/v1/orders/${order._id}/send-delivery-otp`)
       .set(...authHeader(agentToken))
       .send({});
-    const freshOrder = await OrderModel.findById(order._id).select("+otpCode");
+    const freshOtp = await getDeliveryOtp(order._id.toString());
+    expect(freshOtp?.attempts).toBe(0);
     const verifyRes = await request(app)
       .post(`/api/v1/orders/${order._id}/verify-otp`)
       .set(...authHeader(agentToken))
-      .send({ otp: freshOrder!.otpCode });
+      .send({ otp: freshOtp!.code });
     expect(verifyRes.status).toBe(200);
     expect(verifyRes.body.data.order.status).toBe("delivered");
     expect(verifyRes.body.data.order.deliveryVerified).toBe(true);

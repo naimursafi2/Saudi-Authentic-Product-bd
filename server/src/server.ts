@@ -1,6 +1,7 @@
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { connectDatabase } from "./config/db";
+import { getRedis, disconnectRedis } from "./config/redis";
 import { ensureSystemRoles } from "./services/role.service";
 import { startCampaignScheduler } from "./services/scheduler.service";
 
@@ -43,11 +44,15 @@ async function main() {
   // while the frontend receives ordinary API responses instead of ECONNREFUSED.
   void initializeDatabase();
 
+  // Warm up the Redis connection (registration OTP store). Non-blocking: a
+  // Redis outage only affects OTP endpoints, never the whole API.
+  getRedis().catch((err) => console.error("Redis is unavailable:", (err as Error).message));
+
   const shutdown = (signal: string) => {
     console.log(`\n${signal} received. Shutting down gracefully...`);
     server.close(() => {
       console.log("HTTP server closed.");
-      process.exit(0);
+      void disconnectRedis().finally(() => process.exit(0));
     });
   };
 

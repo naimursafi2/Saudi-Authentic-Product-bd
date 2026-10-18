@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "jest --runInBand",
-    "seed": "tsx src/seed/seed.ts"
+    "seed": "tsx src/seed/seed.ts",
+    "migrate:drop-user-otp-fields": "tsx src/scripts/dropUserOtpFields.ts"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +41,7 @@
     "multer": "^2.2.0",
     "node-cron": "^4.6.0",
     "nodemailer": "^9.0.5",
+    "redis": "^5.12.1",
     "streamifier": "^0.1.1",
     "zod": "^4.4.3"
   },

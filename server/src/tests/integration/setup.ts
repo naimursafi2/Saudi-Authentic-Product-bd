@@ -1,5 +1,6 @@
 import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
+import { __clearMemoryOtps } from "../../services/otp.store";
 
 let mongod: MongoMemoryServer | undefined;
 
@@ -13,6 +14,8 @@ export async function connectTestDb(): Promise<void> {
 export async function clearTestDb(): Promise<void> {
   const collections = mongoose.connection.collections;
   await Promise.all(Object.values(collections).map((collection) => collection.deleteMany({})));
+  // OTPs live in the (in-memory, under jest) OTP store, not MongoDB.
+  __clearMemoryOtps();
 }
 
 /** Disconnects Mongoose and stops the in-memory server. */

@@ -14,6 +14,12 @@ import { notifyNewOrder, notifyDeliveryFailed } from "./notification.service";
 import { applyCouponUsage, releaseCouponUsage, validateCouponForOrder } from "./coupon.service";
 import { DELIVERY_ONLY_STATUSES, GENERIC_STATUS_ACTOR_ROLES, ORDER_STATUSES, ORDER_TRANSITIONS, type OrderStatus } from "../constants/orderStatus";
 import { DELIVERY_OTP_TTL_MINUTES, MAX_DELIVERY_OTP_ATTEMPTS } from "../constants/security";
+import {
+  saveDeliveryOtp,
+  getDeliveryOtp,
+  incrementDeliveryOtpAttempts,
+  deleteDeliveryOtp,
+} from "./deliveryOtp.store";
 import type { Role } from "../constants/roles";
 import type { CreateOrderInput } from "../validators/order.validator";
 
@@ -217,7 +223,7 @@ export async function createOrder(customerId: string, input: CreateOrderInput) {
 }
 
 export async function getOrderById(id: string) {
-  const order = await OrderModel.findById(id).select("+otpCode").populate("customer", "name email");
+  const order = await OrderModel.findById(id).populate("customer", "name email");
   if (!order) throw ApiError.notFound("Order not found");
   return order;
 }
@@ -231,7 +237,7 @@ export async function trackOrder(orderNumber: string, email: string) {
   const order = await OrderModel.findOne({
     orderNumber: orderNumber.trim().toUpperCase(),
     "shippingAddress.email": email.trim().toLowerCase(),
-  }).select("+otpCode");
+  });
   if (!order) {
     throw ApiError.notFound("No order found for that Order ID and email. Please check and try again.");
   }
@@ -363,7 +369,7 @@ export async function assignDeliveryAgent(orderId: string, agentId: string, acto
 }
 
 async function loadOrderAssignedTo(orderId: string, agentId: string) {
-  const order = await OrderModel.findById(orderId).select("+otpCode");
+  const order = await OrderModel.findById(orderId);
   if (!order) throw ApiError.notFound("Order not found");
   if (!order.assignedAgent || order.assignedAgent.toString() !== agentId) {
     throw ApiError.forbidden("This order is not assigned to you");
@@ -418,11 +424,7 @@ export async function sendDeliveryOtp(orderId: string, agentId: string) {
   }
 
   const otp = generateOtp();
-  order.otpCode = otp;
-  order.otpGeneratedAt = new Date();
-  order.otpExpiresAt = new Date(Date.now() + DELIVERY_OTP_TTL_MINUTES * 60 * 1000);
-  order.otpAttempts = 0;
-  await order.save();
+  await saveDeliveryOtp(order._id.toString(), otp);
 
   const customerName = `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`;
   void sendDeliveryOtpEmail(order.shippingAddress.email, customerName, {
@@ -452,25 +454,23 @@ export async function verifyDeliveryOtp(
   if (order.status !== "out_for_delivery") {
     throw ApiError.badRequest(`Cannot verify OTP from "${order.status}"`);
   }
-  if (!order.otpCode || !order.otpExpiresAt || order.otpExpiresAt.getTime() < Date.now()) {
+  // Redis drops the key once its 5-minute TTL runs out, so "missing" covers
+  // both "never sent" and "expired".
+  const stored = await getDeliveryOtp(orderId);
+  if (!stored) {
     throw ApiError.badRequest("OTP expired or not yet sent — send a new delivery OTP.");
   }
 
-  if (otp.trim() !== order.otpCode) {
-    order.otpAttempts += 1;
-    if (order.otpAttempts >= MAX_DELIVERY_OTP_ATTEMPTS) {
-      order.otpCode = undefined;
-      order.otpGeneratedAt = undefined;
-      order.otpExpiresAt = undefined;
-      order.otpAttempts = 0;
-      await order.save();
+  if (otp.trim() !== stored.code) {
+    const attempts = await incrementDeliveryOtpAttempts(orderId);
+    if (attempts >= MAX_DELIVERY_OTP_ATTEMPTS) {
+      await deleteDeliveryOtp(orderId);
       throw ApiError.badRequest(
         "Too many incorrect attempts — this OTP has been invalidated. Send a new one."
       );
     }
-    await order.save();
     throw ApiError.badRequest(
-      `Incorrect OTP (${MAX_DELIVERY_OTP_ATTEMPTS - order.otpAttempts} attempt(s) remaining before it's invalidated)`
+      `Incorrect OTP (${MAX_DELIVERY_OTP_ATTEMPTS - attempts} attempt(s) remaining before it's invalidated)`
     );
   }
 
@@ -488,10 +488,7 @@ export async function verifyDeliveryOtp(
   order.deliveredAt = new Date();
   order.deliveredBy = new Types.ObjectId(agentId);
 
-  order.otpCode = undefined;
-  order.otpGeneratedAt = undefined;
-  order.otpExpiresAt = undefined;
-  order.otpAttempts = 0;
+  await deleteDeliveryOtp(orderId);
 
   if (proofImage) {
     const uploaded = await uploadInternalFile(proofImage, {
@@ -509,6 +506,17 @@ export async function verifyDeliveryOtp(
   return order;
 }
 
+/**
+ * The outstanding delivery OTP's public timing (never the code) plus, for the
+ * order's owner only, the code itself — read from Redis. Used by the order
+ * controller so responses keep exposing `otpGeneratedAt` / `otpExpiresAt` the
+ * same way they did when these lived on the Order document.
+ */
+export async function getDeliveryOtpView(orderId: string, status: OrderStatus) {
+  if (status !== "out_for_delivery") return null;
+  return getDeliveryOtp(orderId);
+}
+
 export async function markDeliveryFailed(orderId: string, agentId: string, failureReason: string, note?: string) {
   const order = await loadOrderAssignedTo(orderId, agentId);
   const actor: OrderActor = { id: agentId, role: "delivery_agent" };
@@ -521,10 +529,7 @@ export async function markDeliveryFailed(orderId: string, agentId: string, failu
   if (note) order.deliveryNotes = note;
   pushStatusHistory(order, "delivery_failed", actor, note);
   order.status = "delivery_failed";
-  order.otpCode = undefined;
-  order.otpGeneratedAt = undefined;
-  order.otpExpiresAt = undefined;
-  order.otpAttempts = 0;
+  await deleteDeliveryOtp(orderId);
 
   await order.save();
 

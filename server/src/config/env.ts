@@ -17,6 +17,10 @@ const envSchema = z.object({
     .string()
     .default("mongodb://127.0.0.1:27017/saudi_authentic_product"),
 
+  // Redis — holds short-lived registration OTPs (5-min TTL). Leave blank in
+  // tests / local dev without Redis and an in-process fallback is used.
+  REDIS_URL: z.string().optional().default(""),
+
   JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
   JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
@@ -103,6 +107,8 @@ export const isSmtpConfigured = Boolean(
 export const isGoogleConfigured = Boolean(env.GOOGLE_CLIENT_ID);
 
 export const isSmsConfigured = Boolean(env.SMS_API_URL && env.SMS_API_KEY && env.SMS_SENDER_ID);
+
+export const isRedisConfigured = Boolean(env.REDIS_URL) && env.NODE_ENV !== "test";
 
 export const isRevalidateConfigured = Boolean(env.REVALIDATE_SECRET);
 

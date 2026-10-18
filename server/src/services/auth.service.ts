@@ -22,9 +22,14 @@ import {
   MAX_FAILED_LOGIN_ATTEMPTS,
   INACTIVITY_ENFORCED_ROLES,
   STAFF_INACTIVITY_TIMEOUT_MS,
-  REGISTRATION_OTP_TTL_MINUTES,
   MAX_REGISTRATION_OTP_ATTEMPTS,
 } from "../constants/security";
+import {
+  saveRegistrationOtp,
+  getRegistrationOtp,
+  incrementRegistrationOtpAttempts,
+  deleteRegistrationOtp,
+} from "./registrationOtp.store";
 import type { LoginInput, RegisterInput } from "../validators/auth.validator";
 
 function issueTokens(user: IUser) {
@@ -69,9 +74,6 @@ export async function registerCustomer(input: RegisterInput) {
     phone: input.phone,
     role: "customer",
     isEmailVerified: false,
-    emailVerificationOtp: otp,
-    emailVerificationOtpExpires: new Date(Date.now() + REGISTRATION_OTP_TTL_MINUTES * 60 * 1000),
-    emailVerificationOtpAttempts: 0,
     addresses: input.address
       ? [
           {
@@ -86,6 +88,7 @@ export async function registerCustomer(input: RegisterInput) {
       : [],
   });
 
+  await saveRegistrationOtp(user.email, otp);
   void sendVerificationOtpEmail(user.email, user.name, otp);
 
   return { user };
@@ -102,7 +105,7 @@ export interface RegistrationOtpResult {
  * moment a freshly-registered account actually becomes signed-in.
  */
 export async function verifyRegistrationOtp(email: string, code: string): Promise<RegistrationOtpResult> {
-  const user = await UserModel.findOne({ email }).select("+emailVerificationOtp");
+  const user = await UserModel.findOne({ email });
   if (!user) {
     throw ApiError.badRequest("Incorrect or expired code");
   }
@@ -113,33 +116,26 @@ export async function verifyRegistrationOtp(email: string, code: string): Promis
     return { user, tokens: issueTokens(user) };
   }
 
-  if (
-    !user.emailVerificationOtp ||
-    !user.emailVerificationOtpExpires ||
-    user.emailVerificationOtpExpires.getTime() < Date.now()
-  ) {
+  // Redis drops the key once its 5-minute TTL runs out, so "missing" covers
+  // both "never issued" and "expired".
+  const stored = await getRegistrationOtp(user.email);
+  if (!stored) {
     throw ApiError.badRequest("This code has expired — request a new one.");
   }
 
-  if (code.trim() !== user.emailVerificationOtp) {
-    user.emailVerificationOtpAttempts += 1;
-    if (user.emailVerificationOtpAttempts >= MAX_REGISTRATION_OTP_ATTEMPTS) {
-      user.emailVerificationOtp = undefined;
-      user.emailVerificationOtpExpires = undefined;
-      user.emailVerificationOtpAttempts = 0;
-      await user.save();
+  if (code.trim() !== stored.code) {
+    const attempts = await incrementRegistrationOtpAttempts(user.email);
+    if (attempts >= MAX_REGISTRATION_OTP_ATTEMPTS) {
+      await deleteRegistrationOtp(user.email);
       throw ApiError.badRequest("Too many incorrect attempts — request a new code.");
     }
-    await user.save();
     throw ApiError.badRequest(
-      `Incorrect code (${MAX_REGISTRATION_OTP_ATTEMPTS - user.emailVerificationOtpAttempts} attempt(s) remaining)`
+      `Incorrect code (${MAX_REGISTRATION_OTP_ATTEMPTS - attempts} attempt(s) remaining)`
     );
   }
 
+  await deleteRegistrationOtp(user.email);
   user.isEmailVerified = true;
-  user.emailVerificationOtp = undefined;
-  user.emailVerificationOtpExpires = undefined;
-  user.emailVerificationOtpAttempts = 0;
   user.lastSeenAt = new Date();
   await user.save();
 
@@ -156,10 +152,7 @@ export async function resendRegistrationOtp(email: string): Promise<void> {
   if (!user || user.isEmailVerified) return;
 
   const otp = generateRegistrationOtp();
-  user.emailVerificationOtp = otp;
-  user.emailVerificationOtpExpires = new Date(Date.now() + REGISTRATION_OTP_TTL_MINUTES * 60 * 1000);
-  user.emailVerificationOtpAttempts = 0;
-  await user.save();
+  await saveRegistrationOtp(user.email, otp);
 
   void sendVerificationOtpEmail(user.email, user.name, otp);
 }

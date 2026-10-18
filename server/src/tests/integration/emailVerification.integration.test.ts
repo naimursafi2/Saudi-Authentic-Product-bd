@@ -4,6 +4,7 @@ import { createApp } from "../../app";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { createAuthedUser, authHeader } from "./helpers";
 import { UserModel } from "../../models/User.model";
+import { getRegistrationOtp, __clearMemoryRegistrationOtps } from "../../services/registrationOtp.store";
 import { CategoryModel } from "../../models/Category.model";
 import { ProductModel } from "../../models/Product.model";
 import { signEmailVerificationToken } from "../../utils/jwt";
@@ -31,6 +32,7 @@ describe("Email verification integration", () => {
 
   afterEach(async () => {
     await clearTestDb();
+    __clearMemoryRegistrationOtps();
   });
 
   afterAll(async () => {
@@ -66,8 +68,7 @@ describe("Email verification integration", () => {
     });
     expect(register.status).toBe(201);
 
-    const dbUser = await UserModel.findOne({ email: "jane.otp@example.com" }).select("+emailVerificationOtp");
-    const otp = dbUser!.emailVerificationOtp!;
+    const otp = (await getRegistrationOtp("jane.otp@example.com"))!.code;
     expect(otp).toMatch(/^\d{6}$/);
 
     const wrongCode = await request(app)
@@ -106,26 +107,44 @@ describe("Email verification integration", () => {
       expect(attempt.status).toBe(400);
     }
 
-    const afterLockout = await UserModel.findOne({ email: "jane.attempts@example.com" }).select(
-      "+emailVerificationOtp"
-    );
-    expect(afterLockout?.emailVerificationOtp).toBeUndefined();
+    expect(await getRegistrationOtp("jane.attempts@example.com")).toBeNull();
 
     const resend = await request(app)
       .post("/api/v1/auth/resend-registration-otp")
       .send({ email: "jane.attempts@example.com" });
     expect(resend.status).toBe(200);
 
-    const afterResend = await UserModel.findOne({ email: "jane.attempts@example.com" }).select(
-      "+emailVerificationOtp"
-    );
-    const freshOtp = afterResend!.emailVerificationOtp!;
+    const afterResend = await getRegistrationOtp("jane.attempts@example.com");
+    expect(afterResend?.attempts).toBe(0);
+    const freshOtp = afterResend!.code;
     expect(freshOtp).toMatch(/^\d{6}$/);
 
     const verified = await request(app)
       .post("/api/v1/auth/verify-registration-otp")
       .send({ email: "jane.attempts@example.com", code: freshOtp });
     expect(verified.status).toBe(200);
+  });
+
+  it("rejects the registration OTP once its 5-minute TTL has passed", async () => {
+    await request(app).post("/api/v1/auth/register").send({
+      name: "Jane Expiry",
+      email: "jane.expiry@example.com",
+      password: "Password123",
+      confirmPassword: "Password123",
+    });
+    const otp = (await getRegistrationOtp("jane.expiry@example.com"))!.code;
+
+    const realNow = Date.now;
+    Date.now = () => realNow() + 5 * 60 * 1000 + 1000;
+    try {
+      const expired = await request(app)
+        .post("/api/v1/auth/verify-registration-otp")
+        .send({ email: "jane.expiry@example.com", code: otp });
+      expect(expired.status).toBe(400);
+      expect(expired.body.message.toLowerCase()).toContain("expired");
+    } finally {
+      Date.now = realNow;
+    }
   });
 
   it("verifies with a valid token, then reports 'already-verified' on a second use", async () => {

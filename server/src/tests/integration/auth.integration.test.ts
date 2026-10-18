@@ -2,14 +2,14 @@ import request from "supertest";
 import { createApp } from "../../app";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { UserModel } from "../../models/User.model";
+import { getRegistrationOtp } from "../../services/registrationOtp.store";
 
-/** Registers, then completes the new OTP step directly against the DB
- * (mirrors how order.integration tests pull the delivery OTP) so the rest of
+/** Registers, then completes the OTP step by reading the code straight from
+ * the OTP store (Redis in prod, in-memory fallback under jest) so the rest of
  * a test can act as a fully signed-in customer. */
 async function registerAndVerify(app: ReturnType<typeof createApp>, payload: Record<string, string>) {
   await request(app).post("/api/v1/auth/register").send(payload);
-  const user = await UserModel.findOne({ email: payload.email }).select("+emailVerificationOtp");
-  const code = user!.emailVerificationOtp!;
+  const code = (await getRegistrationOtp(payload.email))!.code;
   return request(app).post("/api/v1/auth/verify-registration-otp").send({ email: payload.email, code });
 }
 

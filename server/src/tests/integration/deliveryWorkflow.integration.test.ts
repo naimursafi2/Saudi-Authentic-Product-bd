@@ -4,7 +4,7 @@ import { connectTestDb, clearTestDb, disconnectTestDb } from "./setup";
 import { createAuthedUser, authHeader } from "./helpers";
 import { CategoryModel } from "../../models/Category.model";
 import { ProductModel } from "../../models/Product.model";
-import { OrderModel } from "../../models/Order.model";
+import { getDeliveryOtp } from "../../services/deliveryOtp.store";
 
 /**
  * End-to-end verification of the delivery workflow as a whole, complementing
@@ -173,11 +173,11 @@ describe("Delivery workflow across the admin, delivery-agent and customer portal
     const withOtp = await customerSeesStatus();
     expect(withOtp.otp).toMatch(/^\d{4}$/);
 
-    const dbOrder = await OrderModel.findById(order._id).select("+otpCode");
+    const sentOtp = (await getDeliveryOtp(order._id.toString()))!.code;
     await request(app)
       .post(`/api/v1/orders/${order._id}/verify-otp`)
       .set(...authHeader(agentToken))
-      .send({ otp: dbOrder!.otpCode })
+      .send({ otp: sentOtp })
       .expect(200);
 
     const delivered = await customerSeesStatus();

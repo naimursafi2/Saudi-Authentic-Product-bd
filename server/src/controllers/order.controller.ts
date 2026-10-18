@@ -7,11 +7,26 @@ import * as orderService from "../services/order.service";
 import { ADMIN_PORTAL_ROLES } from "../constants/roles";
 import type { OrderStatus } from "../models/Order.model";
 
-/** Only surface the OTP to the order's owner, and only while it's actionable
- * (`out_for_delivery`) — never to staff/agents, who must obtain it verbally
- * from the customer. */
-function ownerVisibleOtp(order: { status: OrderStatus; otpCode?: string }, isOwner: boolean): string | undefined {
-  return isOwner && order.status === "out_for_delivery" ? order.otpCode : undefined;
+type OrderDoc = Awaited<ReturnType<typeof orderService.getOrderById>>;
+
+/**
+ * Builds the `{ order, otp }` payload. The live delivery OTP lives in Redis
+ * (not on the order), so its timing is merged back in as `otpGeneratedAt` /
+ * `otpExpiresAt` — the delivery UI uses those to decide between "Send OTP"
+ * and the code-entry form. The code itself is only surfaced to the order's
+ * owner, and only while it's actionable (`out_for_delivery`) — never to
+ * staff/agents, who must obtain it verbally from the customer.
+ */
+async function withDeliveryOtp(order: OrderDoc, isOwner: boolean) {
+  const stored = await orderService.getDeliveryOtpView(order._id.toString(), order.status);
+  return {
+    order: {
+      ...order.toJSON(),
+      otpGeneratedAt: stored?.generatedAt,
+      otpExpiresAt: stored?.expiresAt,
+    },
+    otp: isOwner && stored ? stored.code : undefined,
+  };
 }
 
 export const createOrder = catchAsync(async (req: Request, res: Response) => {
@@ -39,7 +54,7 @@ export const trackOrder = catchAsync(async (req: Request, res: Response) => {
   const { orderNumber, email } = req.query as unknown as { orderNumber: string; email: string };
   const order = await orderService.trackOrder(orderNumber, email);
   // trackOrder is inherently owner-scoped — it requires the checkout email to match.
-  sendSuccess(res, 200, "Order found", { order, otp: ownerVisibleOtp(order, true) });
+  sendSuccess(res, 200, "Order found", await withDeliveryOtp(order, true));
 });
 
 export const getOrder = catchAsync(async (req: Request, res: Response) => {
@@ -58,7 +73,7 @@ export const getOrder = catchAsync(async (req: Request, res: Response) => {
     throw ApiError.forbidden("You do not have permission to view this order");
   }
 
-  sendSuccess(res, 200, "Order fetched", { order, otp: ownerVisibleOtp(order, isOwner) });
+  sendSuccess(res, 200, "Order fetched", await withDeliveryOtp(order, isOwner));
 });
 
 export const updateOrderStatus = catchAsync(async (req: Request, res: Response) => {
@@ -97,7 +112,7 @@ export const updateDeliveryStatus = catchAsync(async (req: Request, res: Respons
 
 export const sendDeliveryOtp = catchAsync(async (req: Request, res: Response) => {
   const order = await orderService.sendDeliveryOtp(paramStr(req.params.id), req.user!.id);
-  sendSuccess(res, 200, "Delivery OTP sent to the customer", { order });
+  sendSuccess(res, 200, "Delivery OTP sent to the customer", await withDeliveryOtp(order, false));
 });
 
 export const verifyDeliveryOtp = catchAsync(async (req: Request, res: Response) => {

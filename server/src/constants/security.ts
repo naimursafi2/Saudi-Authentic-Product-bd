@@ -34,8 +34,8 @@ export const DELIVERY_OTP_TTL_MINUTES = 5;
 /** Incorrect delivery-OTP attempts tolerated before the code is invalidated and must be resent. */
 export const MAX_DELIVERY_OTP_ATTEMPTS = 5;
 
-/** How long a registration email-verification OTP stays valid before it must be resent. */
-export const REGISTRATION_OTP_TTL_MINUTES = 10;
+/** How long a registration email-verification OTP stays valid (Redis key TTL) before it must be resent. */
+export const REGISTRATION_OTP_TTL_MINUTES = 5;
 
 /** Incorrect registration-OTP attempts tolerated before the code is invalidated and must be resent. */
 export const MAX_REGISTRATION_OTP_ATTEMPTS = 5;
